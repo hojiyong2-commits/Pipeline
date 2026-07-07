@@ -3391,6 +3391,173 @@ class TestMT25OracleSummaryGateMismatch:
         assert result["ok"] is True
 
 
+# ─── MT-27 테스트 (IMP-20260703-B985 REJECT #20) ─────────────────────────────
+# REJECT #20:
+#   1. staged snapshot에 approval_message text + pending_comment body의 SHA256 포함
+#   2. codex_review_result.json에 approval_message_sha256/pending_comment_sha256 기록
+#   3. publish 직후 hard gate: codex == acceptance_request 3자 일치
+#   4/5. approval_request_message는 고정 양식만 (추가 문구 차단)
+
+
+def test_approval_message_no_extra_text():
+    """approval_request_message는 고정 양식만 출력해야 한다 (REJECT #20 Req 4/5).
+
+    SSoT는 _build_approval_request_output(pipeline_id, pr_url) -> dict["approval_request_message"].
+    고정 양식: 사용자 승인 요청\\n\\nPR: <링크>\\n\\n승인 코드:\\n<ACCEPT-...>\\n\\nCODEX 검토 필요
+    """
+    out = pipeline._build_approval_request_output(
+        "TEST-0000-XXXX",
+        "https://github.com/test/repo/pull/1",
+    )
+    msg = out["approval_request_message"]
+    # 금지 문구 확인 (추가 문구 차단)
+    assert "위 PR에" not in msg, f"금지 문구 '위 PR에' 포함됨: {msg!r}"
+    assert "Pipeline Manager" not in msg, f"금지 문구 'Pipeline Manager' 포함됨: {msg!r}"
+    assert "GitHub Actions 확인" not in msg, f"금지 문구 'GitHub Actions 확인' 포함됨: {msg!r}"
+    assert "단독 댓글" not in msg, f"금지 문구 '단독 댓글' 포함됨: {msg!r}"
+    assert "아래" not in msg, f"금지 문구 '아래' 포함됨: {msg!r}"
+    # 필수 요소 확인
+    assert msg.strip().startswith("사용자 승인 요청"), f"고정 양식 시작 불일치: {msg!r}"
+    assert "PR:" in msg, f"PR: 없음: {msg!r}"
+    assert "승인 코드:" in msg, f"승인 코드: 없음: {msg!r}"
+    assert "CODEX 검토 필요" in msg, f"CODEX 검토 필요 없음: {msg!r}"
+    # 승인 코드는 ACCEPT-<pid> 형식
+    assert "ACCEPT-TEST-0000-XXXX" in msg, f"승인 코드 표시 불일치: {msg!r}"
+    # 추가 줄 수 검사: 고정 양식은 비어있지 않은 줄 7줄 이하
+    lines = [l for l in msg.strip().split("\n") if l.strip()]
+    assert len(lines) <= 7, f"양식 외 추가 줄 존재 ({len(lines)}줄): {msg!r}"
+
+
+def test_approval_message_exact_fixed_format():
+    """고정 양식이 정확히 4요소(제목/PR/승인코드/CODEX)로 구성되는지 확인 (REJECT #20 Req 5)."""
+    out = pipeline._build_approval_request_output(
+        "IMP-20260703-B985",
+        "https://github.com/x/y/pull/9",
+    )
+    expected = (
+        "사용자 승인 요청\n\n"
+        "PR: https://github.com/x/y/pull/9\n\n"
+        "승인 코드:\nACCEPT-IMP-20260703-B985\n\n"
+        "CODEX 검토 필요"
+    )
+    assert out["approval_request_message"] == expected, (
+        f"고정 양식 불일치:\n실제={out['approval_request_message']!r}\n기대={expected!r}"
+    )
+
+
+def test_snapshot_records_approval_and_pending_sha256():
+    """staged snapshot에 approval_message/pending_comment SHA256이 포함된다 (REJECT #20 Req 1)."""
+    approval_text = "사용자 승인 요청\n\nPR: x\n\n승인 코드:\nACCEPT-Y\n\nCODEX 검토 필요"
+    pending_body = "## 승인 대기 중\n- 승인 코드: ACCEPT-Y\n"
+    staged = {
+        "packet_md_text": "packet",
+        "packet_json_text": "{}",
+        "pr_body_candidate_text": "body",
+        "approval_request_message_text": approval_text,
+        "pending_comment_body": pending_body,
+        "pr_head_sha": "abc",
+        "github_ci_run_id": "1",
+    }
+    import tempfile
+    import pipeline as pl
+
+    with tempfile.TemporaryDirectory() as td:
+        import unittest.mock as mock
+
+        with mock.patch.object(pl, "BASE_DIR", Path(td)):
+            snap = pl._create_acceptance_snapshot("IMP-TEST-MT27", staged)
+    assert snap["approval_message_sha256"] == pl._sha256_text(approval_text)
+    assert snap["pending_comment_sha256"] == pl._sha256_text(pending_body)
+    # 두 SHA는 서로 다른 값이어야 한다 (내용이 다르므로).
+    assert snap["approval_message_sha256"] != snap["pending_comment_sha256"]
+
+
+def test_check_approval_sha_invariants_pass_on_match():
+    """3자 approval/pending SHA가 일치하면 예외 없이 통과한다 (REJECT #20 Req 3)."""
+    approval_sha = "a" * 64
+    pending_sha = "b" * 64
+    snap = {
+        "approval_message_sha256": approval_sha,
+        "pending_comment_sha256": pending_sha,
+    }
+    req = dict(snap)
+    codex = dict(snap)
+    # 예외 없이 통과해야 함.
+    pipeline._check_approval_sha_invariants(snap, req, codex)
+
+
+def test_check_approval_sha_invariants_blocks_on_approval_mismatch():
+    """approval_message_sha256이 codex ↔ request 간 불일치면 fail-closed BLOCKED."""
+    snap = {
+        "approval_message_sha256": "a" * 64,
+        "pending_comment_sha256": "b" * 64,
+    }
+    req = {
+        "approval_message_sha256": "a" * 64,
+        "pending_comment_sha256": "b" * 64,
+    }
+    codex = {
+        "approval_message_sha256": "c" * 64,  # 불일치
+        "pending_comment_sha256": "b" * 64,
+    }
+    with pytest.raises(SystemExit):
+        pipeline._check_approval_sha_invariants(snap, req, codex)
+
+
+def test_check_approval_sha_invariants_blocks_on_pending_mismatch():
+    """pending_comment_sha256이 request ↔ codex 간 불일치면 fail-closed BLOCKED."""
+    snap = {
+        "approval_message_sha256": "a" * 64,
+        "pending_comment_sha256": "b" * 64,
+    }
+    req = {
+        "approval_message_sha256": "a" * 64,
+        "pending_comment_sha256": "d" * 64,  # request와 codex 불일치
+    }
+    codex = {
+        "approval_message_sha256": "a" * 64,
+        "pending_comment_sha256": "e" * 64,
+    }
+    with pytest.raises(SystemExit):
+        pipeline._check_approval_sha_invariants(snap, req, codex)
+
+
+def test_check_approval_sha_invariants_type_guards():
+    """None/비dict 인자는 TypeError로 차단 (암묵적 형변환 금지)."""
+    valid = {"approval_message_sha256": "a" * 64, "pending_comment_sha256": "b" * 64}
+    for bad in (None, "str", 123, ["list"]):
+        with pytest.raises(TypeError):
+            pipeline._check_approval_sha_invariants(bad, valid, valid)  # type: ignore[arg-type]
+        with pytest.raises(TypeError):
+            pipeline._check_approval_sha_invariants(valid, bad, valid)  # type: ignore[arg-type]
+        with pytest.raises(TypeError):
+            pipeline._check_approval_sha_invariants(valid, valid, bad)  # type: ignore[arg-type]
+
+
+def test_check_approval_sha_invariants_skips_empty_backward_compat():
+    """빈 문자열(미기록) 필드는 대조를 skip하여 하위 호환을 보존한다."""
+    snap = {"approval_message_sha256": "a" * 64, "pending_comment_sha256": "b" * 64}
+    # codex에 approval/pending sha가 없는 구 포맷 → skip, 예외 없이 통과.
+    codex_old = {}
+    req = dict(snap)
+    pipeline._check_approval_sha_invariants(snap, req, codex_old)
+
+
+def test_codex_result_records_approval_pending_sha_in_source():
+    """소스에 codex_review_result가 approval/pending sha256을 기록하는 배선이 있는지 확인 (REJECT #20 Req 2)."""
+    src = PIPELINE_PY.read_text(encoding="utf-8")
+    assert '_cx_sid["approval_message_sha256"] = _snap_approval_sha' in src, (
+        "codex_review_result.json에 approval_message_sha256을 기록하는 배선이 없음"
+    )
+    assert '_cx_sid["pending_comment_sha256"] = _snap_pending_sha' in src, (
+        "codex_review_result.json에 pending_comment_sha256을 기록하는 배선이 없음"
+    )
+    # publish 경로에서 _check_approval_sha_invariants 호출 확인 (REJECT #20 Req 3).
+    assert "_check_approval_sha_invariants(" in src, (
+        "publish 경로에 _check_approval_sha_invariants 호출이 없음"
+    )
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

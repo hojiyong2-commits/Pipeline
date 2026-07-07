@@ -19606,6 +19606,85 @@ def _validate_snapshot_invariants(
         )
 
 
+# [Purpose]: IMP-20260703-B985 MT-27 (REJECT #20) — publish 직후 approval_message_sha256과
+#            pending_comment_sha256이 acceptance_snapshot ↔ codex_review_result ↔ acceptance_request
+#            3자에서 모두 일치하는지 검증하는 hard gate. 승인 안내문/pending 댓글 본문이 발급 후
+#            변조되면 승인 코드가 노출되기 전에 fail-closed BLOCKED로 차단한다.
+# [Assumptions]: 세 dict 모두 request-accept publish 단계에서 approval/pending SHA를 기록했다.
+#            (snapshot: _create_acceptance_snapshot, codex: MT-27 codex 기록 블록,
+#             acceptance_request: req_candidate 전파). 값이 비어 있으면(구 포맷/미기록) 해당 항목만
+#            대조를 skip하여 하위 호환을 보존한다.
+# [Vulnerability & Risks]: 세 소스 중 하나가 값을 기록하지 못하면(빈 문자열) 그 항목 대조가
+#            skip되어 변조 탐지 커버리지가 낮아질 수 있다. 다만 snapshot이 두 값을 항상 기록하므로
+#            acceptance_request/codex 어느 한쪽이라도 값이 있으면 불일치는 반드시 검출된다.
+# [Improvement]: snapshot을 신뢰 루트로 강제(both-present가 아니라 snapshot-present 기준)하면
+#            미기록 소스도 차단할 수 있으나, 하위 호환을 위해 both-present 비교를 유지한다.
+def _check_approval_sha_invariants(
+    acceptance_snapshot: Dict[str, Any],
+    acceptance_request: Dict[str, Any],
+    codex_result: Dict[str, Any],
+) -> None:
+    """approval_message_sha256/pending_comment_sha256 3자 일치 hard gate (불일치 시 fail-closed).
+
+    IMP-20260703-B985 MT-27 (REJECT #20 Req 3): publish 직후 아래 불변식을 강제한다.
+      - codex_review_result.approval_message_sha256 == acceptance_request.approval_message_sha256
+      - codex_review_result.pending_comment_sha256  == acceptance_request.pending_comment_sha256
+    snapshot 값을 기준으로 codex/request 양쪽을 대조한다(both-present일 때만 비교, skip은 하위 호환).
+
+    Args:
+        acceptance_snapshot: _create_acceptance_snapshot이 생성한 frozen snapshot dict.
+        acceptance_request: publish된 acceptance_request dict.
+        codex_result: codex_review_result dict.
+    Raises:
+        TypeError: 인자 중 하나라도 None이거나 dict가 아닌 경우.
+        SystemExit: approval/pending SHA 불일치 시 fail-closed BLOCKED.
+    """
+    if acceptance_snapshot is None:
+        raise TypeError("acceptance_snapshot must not be None")
+    if not isinstance(acceptance_snapshot, dict):
+        raise TypeError(
+            f"acceptance_snapshot must be dict, got {type(acceptance_snapshot).__name__}"
+        )
+    if acceptance_request is None:
+        raise TypeError("acceptance_request must not be None")
+    if not isinstance(acceptance_request, dict):
+        raise TypeError(
+            f"acceptance_request must be dict, got {type(acceptance_request).__name__}"
+        )
+    if codex_result is None:
+        raise TypeError("codex_result must not be None")
+    if not isinstance(codex_result, dict):
+        raise TypeError(f"codex_result must be dict, got {type(codex_result).__name__}")
+
+    failures = []
+    for field in ("approval_message_sha256", "pending_comment_sha256"):
+        snap_val = str(acceptance_snapshot.get(field, "") or "")
+        req_val = str(acceptance_request.get(field, "") or "")
+        codex_val = str(codex_result.get(field, "") or "")
+        # both-present일 때만 비교(하위 호환): snapshot 기준으로 request/codex 각각 대조.
+        if snap_val and req_val and snap_val != req_val:
+            failures.append(
+                f"{field}: snapshot={snap_val[:8]} != acceptance_request={req_val[:8]}"
+            )
+        if snap_val and codex_val and snap_val != codex_val:
+            failures.append(
+                f"{field}: snapshot={snap_val[:8]} != codex_review_result={codex_val[:8]}"
+            )
+        # codex ↔ request 직접 대조(REJECT #20 Req 3 핵심 불변식).
+        if req_val and codex_val and req_val != codex_val:
+            failures.append(
+                f"{field}: acceptance_request={req_val[:8]} != codex_review_result={codex_val[:8]}"
+            )
+    if failures:
+        _die(
+            "[BLOCKED] failure_code=approval_sha_invariant_violation\n"
+            "  승인 안내문/pending 댓글 본문의 SHA256이 snapshot/acceptance_request/codex_review_result\n"
+            "  3자에서 일치하지 않습니다 — 발급 후 사용자 노출 산출물이 변조되었을 수 있습니다.\n"
+            "  " + "; ".join(failures) + "\n"
+            "  fail-closed — gates request-accept를 다시 실행하세요."
+        )
+
+
 # ---------------------------------------------------------------------------
 # IMP-20260610-8C3B MT-1: Acceptance Snapshot Materialization
 # ---------------------------------------------------------------------------
@@ -23033,8 +23112,17 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         req_candidate["_frozen_pending_comment_body"] = str(
             _consolidated_snapshot.get("pending_comment_body", "") or ""
         )
-        # snapshot_id를 codex_review_result.json에도 기록 (publish 불변식 대조용).
+        # snapshot_id + approval/pending sha256을 codex_review_result.json에도 기록 (publish 불변식 대조용).
+        # IMP-20260703-B985 MT-27 (REJECT #20): approval_message_sha256/pending_comment_sha256을
+        # codex_review_result.json에 기록하여, publish 직후 codex ↔ acceptance_request 하드 게이트
+        # (_check_approval_sha_invariants)가 동일 값을 대조할 수 있게 한다.
         # verdict/status/packet_sha256 등은 절대 변경하지 않는다(승인 판정 무결성 보존).
+        _snap_approval_sha = str(
+            _consolidated_snapshot.get("approval_message_sha256", "") or ""
+        )
+        _snap_pending_sha = str(
+            _consolidated_snapshot.get("pending_comment_sha256", "") or ""
+        )
         try:
             _cx_sid_path = _codex_review_result_path()
             if _cx_sid_path.exists():
@@ -23044,15 +23132,24 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 if (
                     isinstance(_cx_sid, dict)
                     and str(_cx_sid.get("pipeline_id", "") or "") == pipeline_id
-                    and str(_cx_sid.get("snapshot_id", "") or "") != _snapshot_id
                 ):
-                    _cx_sid["snapshot_id"] = _snapshot_id
-                    _cx_sid_path.write_text(
-                        json.dumps(_cx_sid, ensure_ascii=False, indent=2),
-                        encoding="utf-8",
-                    )
+                    _cx_dirty = False
+                    if str(_cx_sid.get("snapshot_id", "") or "") != _snapshot_id:
+                        _cx_sid["snapshot_id"] = _snapshot_id
+                        _cx_dirty = True
+                    if str(_cx_sid.get("approval_message_sha256", "") or "") != _snap_approval_sha:
+                        _cx_sid["approval_message_sha256"] = _snap_approval_sha
+                        _cx_dirty = True
+                    if str(_cx_sid.get("pending_comment_sha256", "") or "") != _snap_pending_sha:
+                        _cx_sid["pending_comment_sha256"] = _snap_pending_sha
+                        _cx_dirty = True
+                    if _cx_dirty:
+                        _cx_sid_path.write_text(
+                            json.dumps(_cx_sid, ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
         except (OSError, json.JSONDecodeError, ValueError, TypeError):
-            # snapshot_id 기록 실패는 non-fatal — publish 불변식 검증이 fail-closed로 판정한다.
+            # snapshot_id/sha 기록 실패는 non-fatal — publish 불변식 검증이 fail-closed로 판정한다.
             pass
 
         # ── IMP-20260703-B985 MT-33: codex → acceptance_request SHA 동기화 (REJECT #16) ──
@@ -23218,6 +23315,23 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         _mt24_published_req = _load_acceptance_request() or dict(req_candidate)
         _validate_snapshot_invariants(
             _mt24_snapshot, _mt24_cx_merged, _mt24_published_req
+        )
+        # IMP-20260703-B985 MT-27 (REJECT #20 Req 3): publish 직후 approval/pending SHA 3자 일치
+        # hard gate. codex_review_result에 방금 기록한 approval/pending sha256을 다시 로드하여
+        # snapshot ↔ acceptance_request ↔ codex 3자를 대조한다(불일치 시 fail-closed BLOCKED).
+        _mt27_cx_for_approval = dict(_mt24_cx_for_inv)
+        _mt27_cx_for_approval["approval_message_sha256"] = str(
+            _mt24_cx_for_inv.get("approval_message_sha256", "")
+            or _consolidated_snapshot.get("approval_message_sha256", "")
+            or ""
+        )
+        _mt27_cx_for_approval["pending_comment_sha256"] = str(
+            _mt24_cx_for_inv.get("pending_comment_sha256", "")
+            or _consolidated_snapshot.get("pending_comment_sha256", "")
+            or ""
+        )
+        _check_approval_sha_invariants(
+            _mt24_snapshot, _mt24_published_req, _mt27_cx_for_approval
         )
 
         # MT-11 수정 3: publish 후 staging 삭제 제거.
