@@ -3254,6 +3254,143 @@ class TestMT34MachineReadableZeroHumanApprovalBlock:
             assert isinstance(final_state, dict), "final_state는 dict여야 합니다"
 
 
+class TestMT25OracleSummaryGateMismatch:
+    """MT-25: oracle gate PASS인데 packet oracle FAIL 표시 -> readiness BLOCKED.
+
+    _check_approval_request_ready 검사 10 검증:
+    - oracle gate PASS + packet 'oracle: FAIL' -> oracle_summary_gate_mismatch BLOCKED
+    - oracle gate PASS + 통과N<전체M -> oracle_summary_gate_mismatch BLOCKED
+    - oracle gate PASS + packet oracle PASS -> ok=True (통과)
+    - oracle gate FAIL (not PASS) -> 검사 skip (ok=True, 다른 검사가 잡음)
+    - packet 파일 없음 -> graceful skip (ok=True)
+    """
+
+    def _setup_base(self, monkeypatch, tmp_path):
+        """기본 환경: codex APPROVED, acceptance_request PENDING, 파일 없음."""
+        import pipeline as pl
+
+        # codex_review_result.json: APPROVED
+        cr_path = tmp_path / "codex_review_result.json"
+        cr_path.write_text(json.dumps({"status": "APPROVED"}), encoding="utf-8")
+        monkeypatch.setattr(pl, "_codex_review_result_path", lambda: cr_path)
+
+        # acceptance_request: PENDING (없으면 skip이므로 None도 OK)
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: {"status": "PENDING"})
+
+        # packet.md/json SHA — 없으면 skip
+        no_path = tmp_path / "nonexistent.md"
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: no_path)
+        no_json = tmp_path / "nonexistent.json"
+        monkeypatch.setattr(pl, "_packet_json_output_path", lambda: no_json)
+
+        # PR body: acceptance FAIL 없음
+        monkeypatch.setattr(pl, "_get_pr_body_text", lambda: "정상 PR 본문")
+
+        # CI final-check: NOT_FOUND (skip)
+        monkeypatch.setattr(pl, "_get_ci_final_check_status", lambda: {"status": "NOT_FOUND"})
+
+        return tmp_path
+
+    def _make_state(self, oracle_status: str) -> dict:
+        return {
+            "external_gates": {
+                "oracle": {"status": oracle_status},
+                "github_ci": {"status": "PASS"},
+            }
+        }
+
+    def test_oracle_gate_pass_packet_oracle_fail_blocked(self, monkeypatch, tmp_path):
+        """oracle gate PASS + packet 'oracle: FAIL' -> BLOCKED oracle_summary_gate_mismatch."""
+        import pipeline as pl
+
+        self._setup_base(monkeypatch, tmp_path)
+
+        # packet.md에 'oracle: FAIL' 포함
+        pkt_path = tmp_path / "human_acceptance_packet.md"
+        pkt_path.write_text(
+            "## 검증 결과\noracle: FAIL\ngithub_ci: PASS\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: pkt_path)
+
+        # oracle gate PASS 상태
+        state = self._make_state("PASS")
+        monkeypatch.setattr(pl, "_load", lambda: state)
+
+        result = pl._check_approval_request_ready("정상 PR 본문")
+        assert result["ok"] is False
+        assert result["failure_code"] == "oracle_summary_gate_mismatch"
+
+    def test_oracle_gate_pass_oracle_count_mismatch_blocked(self, monkeypatch, tmp_path):
+        """oracle gate PASS + 통과 N < 전체 M -> BLOCKED oracle_summary_gate_mismatch."""
+        import pipeline as pl
+
+        self._setup_base(monkeypatch, tmp_path)
+
+        # packet.md에 'N passed, M cases' 패턴 (실제 구현 regex는 passed 기반)
+        pkt_path = tmp_path / "human_acceptance_packet.md"
+        pkt_path.write_text(
+            "oracle 결과: 3 passed / 5 cases\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: pkt_path)
+
+        state = self._make_state("PASS")
+        monkeypatch.setattr(pl, "_load", lambda: state)
+
+        result = pl._check_approval_request_ready("정상 PR 본문")
+        assert result["ok"] is False
+        assert result["failure_code"] == "oracle_summary_gate_mismatch"
+
+    def test_oracle_gate_pass_packet_oracle_pass_ok(self, monkeypatch, tmp_path):
+        """oracle gate PASS + packet oracle 정상 -> ok=True."""
+        import pipeline as pl
+
+        self._setup_base(monkeypatch, tmp_path)
+
+        # packet.md: oracle FAIL 없음, 통과 수 일치
+        pkt_path = tmp_path / "human_acceptance_packet.md"
+        pkt_path.write_text(
+            "oracle: PASS\n5개 통과, 5개 케이스\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: pkt_path)
+
+        state = self._make_state("PASS")
+        monkeypatch.setattr(pl, "_load", lambda: state)
+
+        result = pl._check_approval_request_ready("정상 PR 본문")
+        assert result["ok"] is True
+
+    def test_oracle_gate_not_pass_skip(self, monkeypatch, tmp_path):
+        """oracle gate FAIL이면 검사 10 skip -> ok=True (다른 gate가 처리)."""
+        import pipeline as pl
+
+        self._setup_base(monkeypatch, tmp_path)
+
+        pkt_path = tmp_path / "human_acceptance_packet.md"
+        pkt_path.write_text("oracle: FAIL\n", encoding="utf-8")
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: pkt_path)
+
+        # oracle gate FAIL — 검사 10은 skip해야 함
+        state = self._make_state("FAIL")
+        monkeypatch.setattr(pl, "_load", lambda: state)
+
+        result = pl._check_approval_request_ready("정상 PR 본문")
+        # 다른 검사가 차단하지 않으면 ok=True
+        assert result["ok"] is True
+
+    def test_oracle_gate_pass_packet_missing_skip(self, monkeypatch, tmp_path):
+        """oracle gate PASS이지만 packet 파일 없으면 graceful skip -> ok=True."""
+        import pipeline as pl
+
+        self._setup_base(monkeypatch, tmp_path)
+        # packet_output_path는 이미 nonexistent로 설정됨
+
+        state = self._make_state("PASS")
+        monkeypatch.setattr(pl, "_load", lambda: state)
+
+        result = pl._check_approval_request_ready("정상 PR 본문")
+        assert result["ok"] is True
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
