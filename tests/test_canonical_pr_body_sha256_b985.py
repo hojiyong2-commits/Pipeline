@@ -3200,6 +3200,43 @@ class TestMT33MachineReadableSuppressHumanPrint:
         assert data["status"] == "PENDING"
 
 
+class TestMT34MachineReadableZeroHumanApprovalBlock:
+    """MT-34: --machine-readable 모드에서 approval block이 stdout에 0회 출력되는지 검증"""
+
+    def test_machine_readable_suppresses_approval_block(self, tmp_path):
+        """--machine-readable 모드에서 stdout에 approval block이 0회 출력되는지 검증"""
+        import subprocess
+        import os
+        env = {**os.environ, "PIPELINE_STATE_PATH": str(tmp_path / "state.json")}
+        result = subprocess.run(
+            [
+                "python",
+                "pipeline.py",
+                "gates",
+                "request-accept",
+                "--machine-readable",
+                "--evidence",
+                "test",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            cwd=str(Path(__file__).parent.parent),
+        )
+        # 핵심 검증: stdout에 approval block 텍스트 0회 (BLOCKED여도 동일)
+        assert "사용자 승인 요청" not in result.stdout, (
+            f"[MT-34 FAIL] machine-readable stdout에 approval block 발견:\n{result.stdout[:300]}"
+        )
+        assert "CODEX 검토 필요" not in result.stdout, (
+            f"[MT-34 FAIL] machine-readable stdout에 CODEX 문구 발견:\n{result.stdout[:300]}"
+        )
+        assert "승인 코드:" not in result.stdout, (
+            f"[MT-34 FAIL] machine-readable stdout에 '승인 코드:' 발견:\n{result.stdout[:300]}"
+        )
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

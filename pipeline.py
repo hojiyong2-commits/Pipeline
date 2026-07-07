@@ -5671,6 +5671,7 @@ def _build_approval_request_output(pipeline_id: str, pr_url: str) -> Dict[str, A
     )
     return {
         "approval_request_message": approval_request_message,
+        "approval_display": approval_request_message,  # MT-34: main context가 파일에서 직접 읽는 표시용 필드
         "acceptance_code_display": acceptance_code_display,
         "pr_url": pr_url,
         "codex_required": True,
@@ -22089,9 +22090,10 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 )
         # 재사용 경로: 어떤 파일도 write하지 않고 기존 승인 코드를 그대로 재출력한다.
         # IMP-20260703-B985 MT-16: --machine-readable 시 human stdout 없이 JSON만 출력.
+        # IMP-20260703-B985 MT-34: _build_approval_request_output 재사용으로 SSoT 유지.
+        _reuse_approval_out = _build_approval_request_output(pipeline_id, pr_url or "")
         if getattr(args, "machine_readable", False):
-            _mr_out = _build_approval_request_output(pipeline_id, pr_url or "")
-            print(json.dumps(_mr_out, ensure_ascii=False))
+            print(json.dumps(_reuse_approval_out, ensure_ascii=False))
         else:
             print()
             print("사용자 승인 요청")
@@ -22472,11 +22474,14 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             + "\n  " + str(_ready.get("message", "승인 요청 사전 검증 실패."))
             + "\n  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed."
         )
+    # IMP-20260703-B985 MT-34: approval_display 필드를 req_candidate에 저장하여
+    # main context가 acceptance_request.json에서 직접 읽을 수 있도록 한다.
+    _approval_out = _build_approval_request_output(pipeline_id, pr_url or "")
+    req_candidate["approval_display"] = _approval_out["approval_request_message"]
     # IMP-20260624-069A MT-1: User Acceptance 최종 승인 요청문을 최소 고정 양식으로 통일.
     # IMP-20260703-B985 MT-16: --machine-readable 시 human stdout 없이 JSON만 출력.
     if getattr(args, "machine_readable", False):
-        _mr_out = _build_approval_request_output(pipeline_id, pr_url or "")
-        print(json.dumps(_mr_out, ensure_ascii=False))
+        print(json.dumps(_approval_out, ensure_ascii=False))
     else:
         print()
         print("사용자 승인 요청")
