@@ -1,0 +1,52 @@
+<handover>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <phase>dev</phase>
+  <agent_id>dev-agent</agent_id>
+  <run_id>dev-c5380c1c0580fac2</run_id>
+  <token>tok_bxWjqpG0yk3xuGGdmDOWw9WS19xKBxjf17pru1lNYBI</token>
+  <output_file>dev_handover_b985_r2.xml</output_file>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+    </files_to_modify>
+    <rationale>User REJECT 수리: pr_body_candidate_sha256 시맨틱 버그 수정 (두 함수) + TC-12/TC-13 시맨틱 테스트 추가</rationale>
+  </scope_declaration>
+  <impact_analysis>
+    <micro_task id="MT-BUG">
+      <target_function>_codex_snapshot_identity</target_function>
+      <target_function>_build_codex_review_bundle</target_function>
+      <change_summary>staged_packet_sha256(패킷 파일 SHA)를 pr_body_candidate_sha256에 대입하던 버그를 staged_packet_content 기반 canonical SHA 계산으로 교체</change_summary>
+      <blast_radius>TARGETED</blast_radius>
+    </micro_task>
+  </impact_analysis>
+  <summary>
+    User REJECT 수리: pr_body_candidate_sha256 시맨틱 버그 수정.
+    _codex_snapshot_identity(line 19864)와 _build_codex_review_bundle(line 6943)에서
+    staged_packet_sha256(패킷 파일 SHA)을 pr_body_candidate_sha256에 잘못 대입하던 버그를,
+    staged_packet_content로 PR body 블록을 교체한 최종 body의 canonical SHA로 올바르게 계산하도록 수정.
+    시맨틱 분리 테스트 TC-12, TC-13 추가.
+  </summary>
+  <evidence>
+    <changed_files>pipeline.py,tests/test_canonical_pr_body_sha256_b985.py</changed_files>
+    <scope_manifest>scope_manifest_r2.json</scope_manifest>
+    <execution_check>
+      py_compile: PYCOMPILE_OK
+      import pipeline: IMPORT_OK
+      pytest tests/test_canonical_pr_body_sha256_b985.py -x -q: 24 passed (TC-12, TC-13 포함)
+    </execution_check>
+  </evidence>
+  <affected_functions>
+    <function>_codex_snapshot_identity</function>
+    <function>_build_codex_review_bundle</function>
+    <function>test_tc12_pr_body_candidate_ne_packet_sha256</function>
+    <function>test_tc13_pr_body_candidate_equals_final_body_canonical_sha</function>
+  </affected_functions>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py,tests/test_canonical_pr_body_sha256_b985.py</git_diff_files>
+    <manifest_files>pipeline.py,tests/test_canonical_pr_body_sha256_b985.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
