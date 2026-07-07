@@ -14175,6 +14175,10 @@ def _build_final_packet_content(
 
     # IMP-20260614-509F MT-4: [최종 확인 안내] 사용자 표시 섹션을 SSoT display model
     # 기반 renderer로 위임하여 MD/PR body가 동일 계산값(acceptance_display 등)을 공유.
+    # IMP-20260703-B985 MT-32: 수정된 gate_status(acceptance=PENDING)를 evidence에 반영하여
+    # _display_model_from_evidence가 동일 gate_status를 사용하도록 보장.
+    evidence = dict(evidence)
+    evidence["gate_status"] = gate_status
     display_model = _display_model_from_evidence(evidence, _acceptance_display_status)
     for ln in _render_pr_body_final_packet(display_model).split("\n"):
         lines.append(ln)
