@@ -628,6 +628,11 @@ class TestTrueIdempotentReuseMT10:
             pl, "_find_existing_valid_acceptance_comment",
             lambda pr_url, pid, created_at: None,
         )
+        # MT-23: reuse_published 경로의 codex freshness hard gate를 PASS(None)로 스텁.
+        # None 반환 = 문제 없음(PASS). stale codex 케이스를 검증하는 별도 테스트는 무력화하지 않음.
+        monkeypatch.setattr(
+            pl, "_check_codex_review_freshness_for_reuse", lambda req, pid: None
+        )
 
     def _make_existing_req(self, pr_body, canonical_sha, packet_sha, candidate_sha):
         """재사용 조건을 만족하는 acceptance_request.json dict 생성."""
@@ -1200,6 +1205,11 @@ def _stub_reuse_preflight_mr(pl, tmp_path, monkeypatch, pr_body):
     monkeypatch.setattr(
         pl, "_find_existing_valid_acceptance_comment",
         lambda pr_url, pid, created_at: None,
+    )
+    # MT-23: reuse_published 경로의 codex freshness hard gate를 PASS(None)로 스텁.
+    # None 반환 = 문제 없음(PASS). stale codex 케이스를 검증하는 별도 테스트는 무력화하지 않음.
+    monkeypatch.setattr(
+        pl, "_check_codex_review_freshness_for_reuse", lambda req, pid: None
     )
 
 
