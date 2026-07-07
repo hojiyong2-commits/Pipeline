@@ -211,6 +211,14 @@ def bootstrap_pipeline(tmp_path: Path, env: Dict[str, str]) -> str:
     state_path = env["PIPELINE_STATE_PATH"]
     with open(state_path, encoding="utf-8") as fh:
         state = json.load(fh)
+    # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행
+    # 요구한다. 이 TC들은 그 이후의 PR body readiness 차단을 검증하므로 상위 게이트를
+    # PASS로 seed하여 흐름이 PR body 검사까지 도달하게 한다.
+    state.setdefault("external_gates", {})
+    for _g in ("technical", "oracle", "github_ci"):
+        state["external_gates"].setdefault(_g, {})["status"] = "PASS"
+    with open(state_path, "w", encoding="utf-8") as fh:
+        json.dump(state, fh, ensure_ascii=False, indent=2)
     return str(state.get("pipeline_id", ""))
 
 

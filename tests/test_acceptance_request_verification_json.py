@@ -161,7 +161,12 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
 
                 state: Dict[str, Any] = {
                     "pipeline_id": "IMP-20260605-58BF",
-                    "external_gates": {},
+                    # IMP-20260703-B985 MT-31: request-accept는 상위 게이트 PASS를 선행 요구한다.
+                    "external_gates": {
+                        "technical": {"status": "PASS"},
+                        "oracle": {"status": "PASS"},
+                        "github_ci": {"status": "PASS"},
+                    },
                 }
                 args = argparse.Namespace(
                     evidence=str(evidence_path),
@@ -216,7 +221,12 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
 
                 state: Dict[str, Any] = {
                     "pipeline_id": "IMP-20260605-58BF",
-                    "external_gates": {},
+                    # IMP-20260703-B985 MT-31: request-accept는 상위 게이트 PASS를 선행 요구한다.
+                    "external_gates": {
+                        "technical": {"status": "PASS"},
+                        "oracle": {"status": "PASS"},
+                        "github_ci": {"status": "PASS"},
+                    },
                 }
                 args = argparse.Namespace(
                     evidence=str(evidence_path),

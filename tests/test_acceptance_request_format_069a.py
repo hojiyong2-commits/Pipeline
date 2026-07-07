@@ -197,6 +197,10 @@ def bootstrap_pipeline_legacy(tmp_path: Path, env: Dict[str, str]) -> str:
     assert pid, "pipeline_id missing"
     final_state.setdefault("requirements_tracking", {})
     final_state["requirements_tracking"]["enabled"] = False
+    # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+    final_state.setdefault("external_gates", {})
+    for _g in ("technical", "oracle", "github_ci"):
+        final_state["external_gates"].setdefault(_g, {})["status"] = "PASS"
     with open(state_file, "w", encoding="utf-8") as f:
         json.dump(final_state, f, ensure_ascii=False, indent=2)
     return pid

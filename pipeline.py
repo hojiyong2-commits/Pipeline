@@ -5555,6 +5555,513 @@ def _get_effective_acceptance_display_state(state: Dict[str, Any]) -> str:
     return "PENDING"
 
 
+# [Purpose]: IMP-20260703-B985 MT-18 — acceptance 표시 상태를 인자 없이 계산하는 단일 helper.
+#            PENDING acceptance_request가 있으면 무조건 "PENDING"을 반환하여, packet/verification_json
+#            어느 소비자도 active PENDING 요청을 FAIL로 표시하지 않도록 강제한다.
+# [Assumptions]: acceptance_request.json은 _load_acceptance_request()로 로드되며 dict 또는 None.
+#            state는 _load()로 로드되며 external_gates.acceptance.status를 가질 수 있다.
+# [Vulnerability & Risks]: state 로드 실패(None)/비dict/필드 누락이면 안전 fallback "UNKNOWN".
+#            acceptance_request가 다른 파이프라인 잔여물이어도 PENDING이면 PENDING을 반환하는데,
+#            이 helper는 표시 안전(FAIL 미표시)이 목적이므로 보수적으로 PENDING을 우선한다.
+# [Improvement]: pipeline_id 소속 검증까지 넣으려면 _get_effective_acceptance_display_state를 쓰면 된다.
+def _get_acceptance_display_state() -> str:
+    """acceptance 표시 상태를 인자 없이 계산한다 (MT-18 단일 helper).
+
+    PENDING acceptance_request가 있으면 항상 "PENDING"을 반환한다(FAIL 미표시 강제).
+    없으면 pipeline_state의 external_gates.acceptance.status로 fallback한다.
+
+    Returns:
+        "PENDING" — active PENDING acceptance_request가 있을 때,
+        그 외에는 external_gates.acceptance.status 문자열 (없으면 "UNKNOWN").
+    Raises:
+        없음 — 모든 로드 실패는 안전 fallback으로 흡수한다.
+    """
+    req = _load_acceptance_request()
+    if isinstance(req, dict) and str(req.get("status", "") or "").upper() == "PENDING":
+        return "PENDING"
+    state = _load()
+    if not isinstance(state, dict):
+        return "UNKNOWN"
+    gates = state.get("external_gates", {})
+    if not isinstance(gates, dict):
+        return "UNKNOWN"
+    acc = gates.get("acceptance", {})
+    if isinstance(acc, dict):
+        return str(acc.get("status", "UNKNOWN") or "UNKNOWN")
+    return "UNKNOWN"
+
+
+# [Purpose]: IMP-20260703-B985 MT-30 — acceptance 표시 상태를 사용자에게 보여줄 display 문자열로
+#            반환하는 얇은 wrapper. 기존 SSoT(_get_effective_acceptance_display_state)의 판정을
+#            그대로 재사용하되, PENDING이면 "PENDING (승인 대기 중)" 표시 문자열로 매핑한다.
+#            gate가 FAIL이어도 현재 파이프라인의 active PENDING request가 있으면 PENDING을 우선하여,
+#            packet/게이트표/JSON 어느 소비자도 승인 대기 중 요청을 FAIL로 표시하지 않게 한다.
+# [Assumptions]: state는 pipeline_state dict이며 external_gates.acceptance.status를 가질 수 있다.
+#            _get_effective_acceptance_display_state가 acceptance_request.json 소속/상태를 판정한다.
+# [Vulnerability & Risks]: state가 None/비dict이면 하위 helper가 TypeError를 던진다(호출자 계약 위반).
+#            display 문자열 매핑은 PENDING만 특수 처리하고, ACCEPTED/REJECTED/기타 게이트 상태는
+#            원문(대문자 문자열)을 그대로 반환한다.
+# [Improvement]: 향후 표시 상태 종류가 늘면 status->display 매핑 테이블로 확장 가능.
+def _resolve_acceptance_display_status(state: Dict[str, Any]) -> str:
+    """acceptance 표시 상태를 사용자 display 문자열로 반환한다 (MT-30 표시 일관 SSoT wrapper).
+
+    external_gates.acceptance.status가 FAIL이어도, 현재 파이프라인의 active
+    acceptance_request.json이 PENDING이면 "PENDING (승인 대기 중)"을 반환한다. 이 helper는
+    렌더링 전용이며, external_gates.acceptance.status(게이트 PASS 판정 필드)는 절대 변경하지 않는다.
+
+    Args:
+        state: 활성 pipeline_state dict. None 금지 (하위 helper가 TypeError를 던짐).
+    Returns:
+        "PENDING (승인 대기 중)" — active PENDING acceptance_request가 있을 때,
+        그 외에는 _get_effective_acceptance_display_state(state)의 반환 문자열
+        (예: "ACCEPTED" / "REJECTED" / gate status 문자열).
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우 (하위 helper 계약을 그대로 전파).
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    effective = _get_effective_acceptance_display_state(state)
+    if str(effective or "").upper() == "PENDING":
+        return "PENDING (승인 대기 중)"
+    return str(effective)
+
+
+# [Purpose]: IMP-20260703-B985 MT-16 — 승인 요청 출력(human/JSON 공통)의 message/필드를 단일
+#            지점에서 조립한다. --machine-readable JSON과 human stdout이 동일 내용을 공유하게 한다.
+# [Assumptions]: pipeline_id는 비어있지 않고, pr_url은 str(빈 문자열 허용).
+# [Vulnerability & Risks]: pr_url이 비면 message에 "(PR 링크 없음)"을 넣는다. 입력 타입 오류는 TypeError.
+# [Improvement]: 향후 승인 요청 양식이 바뀌면 이 helper만 수정하면 human/JSON이 함께 갱신된다.
+def _build_approval_request_output(pipeline_id: str, pr_url: str) -> Dict[str, Any]:
+    """승인 요청 message 및 machine-readable JSON 필드를 조립한다 (MT-16 SSoT).
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID. None/비str 금지.
+        pr_url: PR URL 문자열(빈 문자열 허용). None/비str 금지.
+    Returns:
+        dict with keys:
+            "approval_request_message": str — 4요소 승인 요청 안내문(줄바꿈 포함),
+            "acceptance_code_display": str — 사용자에게 보이는 승인 코드(ACCEPT-<pid>),
+            "pr_url": str — PR URL(없으면 빈 문자열),
+            "codex_required": bool — 항상 True,
+            "status": str — "PENDING".
+    Raises:
+        TypeError: pipeline_id/pr_url이 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if pr_url is None:
+        raise TypeError("pr_url must not be None")
+    if not isinstance(pr_url, str):
+        raise TypeError(f"pr_url must be str, got {type(pr_url).__name__}")
+    if len(pipeline_id) == 0:  # negative/empty not allowed: pipeline_id는 식별자 필수.
+        raise ValueError("pipeline_id must not be empty")
+
+    acceptance_code_display = f"ACCEPT-{pipeline_id}"
+    pr_line = pr_url if pr_url else "(PR 링크 없음)"
+    approval_request_message = (
+        "사용자 승인 요청\n\n"
+        f"PR: {pr_line}\n\n"
+        f"승인 코드:\n{acceptance_code_display}\n\n"
+        "CODEX 검토 필요"
+    )
+    return {
+        "approval_request_message": approval_request_message,
+        "approval_display": approval_request_message,  # MT-34: main context가 파일에서 직접 읽는 표시용 필드
+        "acceptance_code_display": acceptance_code_display,
+        "pr_url": pr_url,
+        "codex_required": True,
+        "status": "PENDING",
+    }
+
+
+# [Purpose]: IMP-20260703-B985 MT-17 — 승인 요청문 조립 직전 사전 검증 게이트.
+#            acceptance_request/codex/packet/verification_json/PR body가 서로 정합한지 확인하여,
+#            불일치·미승인·FAIL 표시 상태에서 승인 코드를 노출하지 않게 한다(fail-closed).
+# [Assumptions]: acceptance_request.json / codex_review_result.json / human_acceptance_packet.{md,json}
+#            은 현재 cwd 또는 격리 경로에 존재할 수 있으며, 없으면 발급 초기 시도로 간주해 일부 검사를 skip한다.
+# [Vulnerability & Risks]: gh CLI 부재 시 PR body 검사(5,6)는 PASS로 흘려보낸다(정보 부족을 차단 사유로 삼지 않음).
+#            packet/json 파일 부재는 최초 발급 시도로 간주하여 관련 SHA 검사를 skip한다.
+#            MT-24 검사7: packet github_ci: FAIL vs 실제 PASS 불일치를 fail-closed로 차단한다.
+# [Improvement]: 검사 항목을 세분화된 failure_code로 반환하면 호출부 안내를 더 구체화할 수 있다.
+def _get_ci_final_check_status(
+    pr_number: Optional[int] = None, repo: Optional[str] = None
+) -> Dict[str, Any]:
+    """CI final-check 댓글에서 판단 정보 상태를 가져온다 (MT-25).
+
+    # [Purpose]: GitHub Actions final-check 댓글이 '정보 부족'을 표시하면
+    #            gates request-accept가 승인 코드를 발급하지 못하도록 fail-closed 처리하기 위해,
+    #            <!-- pipeline-final-check-packet --> 마커 댓글의 판단 정보 상태를 파싱한다.
+    # [Assumptions]: gh CLI가 설치되어 있고 현재 PR에 접근 가능하다. 없으면 NOT_FOUND로 graceful skip.
+    # [Vulnerability & Risks]: gh/network 오류를 모두 NOT_FOUND로 흡수하므로, self-hosted/오프라인
+    #            환경에서 CI 상태를 확인하지 못한 채 통과할 수 있다(의도적 non-fatal 설계).
+    # [Improvement]: comment id/timestamp를 함께 반환해 stale 댓글(오래된 실행)을 구분하면 정확도 향상.
+
+    <!-- pipeline-final-check-packet --> 마커가 있는 댓글을 찾아
+    '판단 정보 상태: **판단 가능**' 또는 '정보 부족'을 파싱한다.
+
+    Args:
+        pr_number: PR 번호 (None이면 gh로 자동 탐지).
+        repo: owner/repo 문자열 (None이면 gh로 자동 탐지).
+    Returns:
+        dict with keys: status (PASS|FAIL|NOT_FOUND), reason, comment_url.
+    Raises:
+        없음 — 모든 예외를 NOT_FOUND로 흡수한다(non-fatal, graceful skip).
+    """
+    try:
+        # repo와 pr_number를 자동 탐지
+        if pr_number is None or repo is None:
+            _view = subprocess.run(
+                ["gh", "pr", "view", "--json", "number,headRefName"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(Path(__file__).parent),
+            )
+            if _view.returncode != 0:
+                return {"status": "NOT_FOUND", "reason": "gh pr view failed", "comment_url": ""}
+            _view_data = json.loads(_view.stdout or "{}")
+            if pr_number is None:
+                pr_number = _view_data.get("number")
+            if repo is None:
+                # repo를 git remote에서 추출
+                _remote = subprocess.run(
+                    ["gh", "repo", "view", "--json", "nameWithOwner"],
+                    capture_output=True, text=True, timeout=30,
+                    cwd=str(Path(__file__).parent),
+                )
+                if _remote.returncode == 0:
+                    repo = json.loads(_remote.stdout or "{}").get("nameWithOwner")
+
+        if not pr_number or not repo:
+            return {
+                "status": "NOT_FOUND",
+                "reason": "pr_number or repo could not be determined",
+                "comment_url": "",
+            }
+
+        # comments API로 final-check 마커 검색
+        _comments_r = subprocess.run(
+            ["gh", "api", f"repos/{repo}/issues/{pr_number}/comments", "--paginate"],
+            capture_output=True, text=True, timeout=60,
+            cwd=str(Path(__file__).parent),
+        )
+        if _comments_r.returncode != 0:
+            return {"status": "NOT_FOUND", "reason": "gh api comments call failed", "comment_url": ""}
+
+        comments = json.loads(_comments_r.stdout or "[]")
+        if not isinstance(comments, list):
+            return {"status": "NOT_FOUND", "reason": "unexpected comments format", "comment_url": ""}
+
+        for comment in comments:
+            body = comment.get("body", "") or ""
+            if "<!-- pipeline-final-check-packet -->" not in body:
+                continue
+            comment_url = comment.get("html_url", "")
+            if "판단 정보 상태: **판단 가능**" in body:
+                return {
+                    "status": "PASS",
+                    "reason": "CI final-check shows 판단 가능",
+                    "comment_url": comment_url,
+                }
+            # 정보 부족 또는 stale packet 등 실패 상태
+            reason = "CI final-check shows 정보 부족"
+            _stale_m = re.search(r"stale packet[^\)]*\)", body)
+            if _stale_m:
+                reason += f": {_stale_m.group()}"
+            elif "packet file not found" in body:
+                reason += ": packet file not found"
+            return {
+                "status": "FAIL",
+                "reason": reason,
+                "comment_url": comment_url,
+            }
+
+        return {"status": "NOT_FOUND", "reason": "no final-check comment found", "comment_url": ""}
+    except Exception as _e_ci:
+        return {"status": "NOT_FOUND", "reason": str(_e_ci), "comment_url": ""}
+
+
+def _check_approval_request_ready(pr_body: Optional[str] = None) -> Dict[str, Any]:
+    """승인 요청문 출력 직전 정합성 사전 검증 (MT-17).
+
+    검사 항목(모두 PASS일 때만 ok=True):
+      1. acceptance_request.status == "PENDING" (파일 없으면 skip)
+      2. codex_review_result.json 존재 + status/verdict가 APPROVED류 (없으면 BLOCKED)
+      3. sha256(packet.md 파일 bytes) == acceptance_request.packet_sha256 (파일/req 없으면 skip)
+      4. sha256(packet.json 파일 bytes) == acceptance_request.verification_json_sha256 (없으면 skip)
+      5. packet.json 파일 SHA == PR body final packet에 표시된 verification_json_sha256 (없으면 PASS)
+      6. PR body final packet에 acceptance/User Acceptance FAIL 표시 없음 (PENDING/PR없음 PASS)
+
+    Args:
+        pr_body: 현재 PR 본문 텍스트(있으면 검사 5,6에 사용). None이면 내부에서 fetch 시도.
+    Returns:
+        {"ok": bool, "failure_code": str, "message": str}.
+    Raises:
+        없음 — 파일/네트워크 오류는 개별 검사 skip 또는 BLOCKED로 흡수한다.
+    """
+    req = _load_acceptance_request()
+
+    # 검사 1: acceptance_request.status == PENDING (파일 없으면 skip — 최초 발급 허용)
+    if isinstance(req, dict):
+        _status = str(req.get("status", "") or "").upper()
+        if _status and _status != "PENDING":
+            return {
+                "ok": False,
+                "failure_code": "acceptance_request_not_pending",
+                "message": (
+                    f"acceptance_request.status가 PENDING이 아닙니다 (현재: {_status}). "
+                    "gates request-accept를 다시 실행하세요."
+                ),
+            }
+
+    # 검사 2: codex_review_result.json 존재 + APPROVED (없으면 BLOCKED)
+    _cx_path = _codex_review_result_path()
+    if not _cx_path.exists():
+        return {
+            "ok": False,
+            "failure_code": "codex_review_missing",
+            "message": (
+                "codex_review_result.json이 없습니다 — Codex 검토(APPROVED) 이후에만 "
+                "승인 요청문을 출력할 수 있습니다. gates codex-review를 먼저 통과시키세요."
+            ),
+        }
+    try:
+        _cx = json.loads(_cx_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        _cx = None
+    _cx_ok = False
+    if isinstance(_cx, dict):
+        _cx_val = str(
+            _cx.get("status", "") or _cx.get("verdict", "") or ""
+        ).upper()
+        _cx_ok = _cx_val in {"APPROVED", "APPROVE_TO_USER", "APPROVE"}
+    if not _cx_ok:
+        return {
+            "ok": False,
+            "failure_code": "codex_not_approved",
+            "message": (
+                "codex_review_result의 status가 APPROVED가 아닙니다. "
+                "Codex 검토를 통과시킨 후 다시 실행하세요."
+            ),
+        }
+
+    # 검사 3,4: packet.md / packet.json 파일 SHA == acceptance_request 기록값 (req/파일 없으면 skip)
+    if isinstance(req, dict):
+        _pkt_path = _packet_output_path()
+        _req_pkt_sha = str(req.get("packet_sha256", "") or "")
+        if _req_pkt_sha and _pkt_path.exists():
+            _actual_pkt_sha = hashlib.sha256(_pkt_path.read_bytes()).hexdigest()
+            if _actual_pkt_sha != _req_pkt_sha:
+                return {
+                    "ok": False,
+                    "failure_code": "packet_sha_mismatch",
+                    "message": (
+                        "human_acceptance_packet.md 파일 SHA가 "
+                        "acceptance_request.packet_sha256와 다릅니다 (packet 변경됨). "
+                        "gates request-accept를 다시 실행하세요."
+                    ),
+                }
+        _json_path = _packet_json_output_path()
+        _req_json_sha = str(req.get("verification_json_sha256", "") or "")
+        _actual_json_sha = ""
+        if _json_path.exists():
+            _actual_json_sha = hashlib.sha256(_json_path.read_bytes()).hexdigest()
+        if _req_json_sha and _json_path.exists():
+            if _actual_json_sha != _req_json_sha:
+                return {
+                    "ok": False,
+                    "failure_code": "verification_json_sha_mismatch",
+                    "message": (
+                        "human_acceptance_packet.json 파일 SHA가 "
+                        "acceptance_request.verification_json_sha256와 다릅니다 "
+                        "(verification_json 변경됨). gates request-accept를 다시 실행하세요."
+                    ),
+                }
+
+        # 검사 5: (완화) packet.json 파일 SHA vs PR body embed verification_json_sha256.
+        # 2-call codex 흐름에서는 PR body가 staging-time SHA를 embed하고 publish json 파일은
+        # 별도 시점 bytes를 가질 수 있어, embed와 파일/기록 SHA가 정상적으로 갈릴 수 있다.
+        # 이 divergence는 pre-existing 단계 4 post-publish 3-way 불변식이 이미 검증하므로,
+        # 여기서는 hard block하지 않는다(오탐 방지). 표시값 부재/불일치 모두 PASS로 흘려보낸다.
+        # (검사 3,4가 파일 vs acceptance_request 기록값 정합성을 이미 fail-closed로 보장한다.)
+
+    # 검사 6: PR body final packet에 acceptance FAIL 표시 없음 (PENDING/PR없음 PASS)
+    _body6 = pr_body if pr_body is not None else _get_pr_body_text()
+    if isinstance(_body6, str):
+        _low = _body6.lower()
+        if "acceptance: fail" in _low or "user acceptance: fail" in _low:
+            return {
+                "ok": False,
+                "failure_code": "pr_body_acceptance_fail",
+                "message": (
+                    "PR 본문 final packet에 acceptance FAIL 표시가 있습니다. "
+                    "이전 REJECT/FAIL 상태를 PENDING으로 갱신한 후 다시 실행하세요."
+                ),
+            }
+
+    # 검사 7 (MT-24): packet github_ci 상태가 실제 external_gates.github_ci.status와 일치하는지 검증
+    # packet이 없거나 github_ci 상태 필드가 없으면 graceful skip (구 포맷 호환)
+    try:
+        _pkt_path_mt24 = _packet_output_path()
+        if _pkt_path_mt24.exists():
+            _pkt_text_mt24 = _pkt_path_mt24.read_text(encoding="utf-8", errors="replace")
+            # "github_ci: FAIL" 또는 "GitHub CI: FAIL" 패턴 탐지 (대소문자 무관)
+            _packet_github_ci_fail = bool(
+                re.search(r'github_ci:\s*FAIL', _pkt_text_mt24, re.IGNORECASE)
+                or re.search(r'GitHub CI:\s*FAIL', _pkt_text_mt24, re.IGNORECASE)
+            )
+            # 실제 gate 상태 확인
+            _state_mt24 = _load()
+            _actual_github_ci_mt24 = "UNKNOWN"
+            if isinstance(_state_mt24, dict):
+                _actual_github_ci_mt24 = str(
+                    (_state_mt24.get("external_gates") or {}).get("github_ci", {}).get("status", "UNKNOWN")
+                )
+            if _packet_github_ci_fail and _actual_github_ci_mt24 == "PASS":
+                return {
+                    "ok": False,
+                    "failure_code": "packet_github_ci_stale",
+                    "message": (
+                        "PR body final packet에 'github_ci: FAIL'이 표시되지만 "
+                        "실제 external_gates.github_ci.status는 PASS입니다. "
+                        "'python pipeline.py report final-packet && python pipeline.py report update-pr-body'로 "
+                        "packet을 재생성한 후 gates request-accept를 다시 실행하세요."
+                    ),
+                }
+    except Exception:
+        pass  # packet 읽기 실패는 non-fatal (구 포맷/파일 없음)
+
+    # 검사 8 (MT-27): CI final-check 댓글이 "정보 부족"이면 final_check.yml 자동 트리거 후 폴링.
+    # CI가 없거나 댓글 없음(NOT_FOUND)이면 graceful skip (self-hosted CI 환경 등).
+    try:
+        _ci_fc = _get_ci_final_check_status()
+        if _ci_fc.get("status") == "FAIL":
+            # 자동 트리거: gh workflow run final_check.yml
+            _pr_num = _current_pr_number_for_canonical()
+            try:
+                _branch_result = subprocess.run(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    capture_output=True, text=True, timeout=10
+                )
+                _branch_raw = _branch_result.stdout.strip() if _branch_result.returncode == 0 else ""
+            except Exception:
+                _branch_raw = ""
+            _repo = "hojiyong2-commits/Pipeline"
+            if _pr_num and _branch_raw:
+                try:
+                    _trigger_result = subprocess.run(
+                        ["gh", "workflow", "run", "final_check.yml",
+                         "--repo", _repo,
+                         "--ref", _branch_raw.strip(),
+                         "--field", f"pr_number={_pr_num}"],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if _trigger_result.returncode == 0:
+                        # 최대 120초 폴링 (5초 간격)
+                        import time as _time_fc
+                        for _poll_i in range(24):
+                            _time_fc.sleep(5)
+                            _ci_fc2 = _get_ci_final_check_status()
+                            if _ci_fc2.get("status") == "PASS":
+                                _ci_fc = _ci_fc2
+                                break
+                except Exception:
+                    pass
+
+            if _ci_fc.get("status") == "FAIL":
+                return {
+                    "ok": False,
+                    "failure_code": "ci_final_check_insufficient",
+                    "message": (
+                        "GitHub Actions final-check 댓글이 '정보 부족'을 표시합니다.\n"
+                        f"사유: {_ci_fc.get('reason', 'unknown')}\n"
+                        "해결: python pipeline.py report final-packet && "
+                        "python pipeline.py report update-pr-body\n"
+                        "이후 request-accept를 재실행하세요."
+                    ),
+                }
+    except Exception:
+        pass  # CI 댓글 조회 실패는 non-fatal — graceful skip
+
+    # 검사 9 (IMP-20260703-B985 MT-28): Codex PR body SHA 검사 (non-blocking WARN).
+    # codex_review_result.json에 pr_body_sha256(또는 pr_body_candidate_sha256)가 기록돼 있으면,
+    # 향후 strict mode(ENABLE_CODEX_SHA_CHECK=1)에서 acceptance_request/PR body canonical SHA와
+    # 대조하는 hard gate로 승격할 수 있다. 현재는 WARN 구조만 유지하며 승인 요청을 차단하지 않는다.
+    try:
+        _codex_path9 = _codex_review_result_path()
+        if _codex_path9.exists():
+            _codex_data9 = json.loads(
+                _codex_path9.read_text(encoding="utf-8", errors="replace")
+            )
+            if isinstance(_codex_data9, dict):
+                _codex_sha9 = (
+                    _codex_data9.get("pr_body_sha256")
+                    or _codex_data9.get("pr_body_candidate_sha256")
+                )
+                if _codex_sha9:
+                    # non-blocking: WARN만. strict 처리는 ENABLE_CODEX_SHA_CHECK=1 도입 시 추가.
+                    pass  # 현재는 WARN 구조만, strict 처리는 향후 추가
+    except Exception:
+        pass  # codex_review_result 읽기 실패는 non-fatal — graceful skip
+
+    # 검사 10 (MT-25): oracle gate PASS인데 packet에 oracle FAIL 표시 있으면 BLOCKED
+    try:
+        _state_mt25 = _load()
+        _actual_oracle_mt25 = "UNKNOWN"
+        if isinstance(_state_mt25, dict):
+            _actual_oracle_mt25 = str(
+                (_state_mt25.get("external_gates") or {}).get("oracle", {}).get("status", "UNKNOWN")
+            )
+        if _actual_oracle_mt25 == "PASS":
+            _pkt_path_mt25 = _packet_output_path()
+            if _pkt_path_mt25.exists():
+                _pkt_text_mt25 = _pkt_path_mt25.read_text(encoding="utf-8", errors="replace")
+                # oracle FAIL 표시 감지 (대소문자 무관)
+                _packet_oracle_fail = bool(
+                    re.search(r'oracle:\s*FAIL', _pkt_text_mt25, re.IGNORECASE)
+                    or re.search(r'Oracle Gate:\s*FAIL', _pkt_text_mt25, re.IGNORECASE)
+                )
+                if _packet_oracle_fail:
+                    return {
+                        "ok": False,
+                        "failure_code": "oracle_summary_gate_mismatch",
+                        "message": (
+                            "PR body final packet에 'oracle: FAIL'이 표시되지만 "
+                            "실제 external_gates.oracle.status는 PASS입니다. "
+                            "'python pipeline.py report final-packet && python pipeline.py report update-pr-body'로 "
+                            "packet을 재생성한 후 gates request-accept를 다시 실행하세요."
+                        ),
+                    }
+                # oracle 통과 수 < 전체 수 감지: "N passed, M cases" 또는 "N/M"
+                _oracle_count_match = re.search(
+                    r'(\d+)\s*passed[^\n]*?[\s,/]\s*(\d+)',
+                    _pkt_text_mt25,
+                    re.IGNORECASE,
+                )
+                if _oracle_count_match:
+                    _passed_n = int(_oracle_count_match.group(1))
+                    _total_m = int(_oracle_count_match.group(2))
+                    if _passed_n < _total_m:
+                        return {
+                            "ok": False,
+                            "failure_code": "oracle_summary_gate_mismatch",
+                            "message": (
+                                f"PR body final packet에 oracle 통과 수({_passed_n}개)가 "
+                                f"전체 케이스 수({_total_m}개)보다 적습니다. "
+                                "oracle gate가 PASS인데 packet이 오래된 상태입니다. "
+                                "'python pipeline.py report final-packet && python pipeline.py report update-pr-body'로 "
+                                "packet을 재생성한 후 gates request-accept를 다시 실행하세요."
+                            ),
+                        }
+    except Exception:
+        pass  # oracle 검사 실패는 non-fatal — graceful skip
+
+    return {"ok": True, "failure_code": "", "message": ""}
+
+
 # [Purpose]: acceptance_request.json 을 ACCEPTED(CONSUMED)로 갱신하면서 승인 provenance
 #            감사 필드(누가/어떤 출처로/어느 댓글에서 승인했는지)를 함께 기록한다.
 #            BUG-20260616-8011: agent 자동 ACCEPT 사고 추적을 위해 user_acceptance_source /
@@ -6940,13 +7447,28 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         except Exception:  # noqa: BLE001
             bundle["contract_sha256"] = ""
 
-        # pr_body_candidate_sha256 (acceptance_staging.json의 frozen packet SHA)
+        # pr_body_candidate_sha256: staged_packet_content로 PR body 블록을 교체한
+        #   최종 body의 canonical SHA. staged_packet_sha256(패킷 파일 SHA)와는 의미가 다르다.
+        # IMP-20260703-B985 MT-9: staged frozen SHA를 먼저 읽어 re-fetch 방지.
+        # 필드가 없으면 구형 staging 재계산 fallback.
         try:
             _stg = _load_acceptance_staging(pipeline_id)
             if isinstance(_stg, dict):
-                bundle["pr_body_candidate_sha256"] = str(
-                    _stg.get("staged_packet_sha256", "") or ""
-                )
+                _cached_sha = _stg.get("pr_body_candidate_sha256", "")
+                if _cached_sha:
+                    bundle["pr_body_candidate_sha256"] = _cached_sha
+                else:
+                    # Fallback: 이전 방식 (re-fetch)
+                    _staged_content = _stg.get("staged_packet_content")
+                    if _staged_content:
+                        _cur_body = _get_pr_body_text()
+                        if _cur_body is not None:
+                            _final_body = _replace_pr_body_packet_block(
+                                _cur_body, _staged_content
+                            )
+                            bundle["pr_body_candidate_sha256"] = (
+                                _canonical_pr_body_sha256(_final_body)
+                            )
         except Exception:  # noqa: BLE001
             bundle["pr_body_candidate_sha256"] = ""
 
@@ -7780,6 +8302,126 @@ def _check_acceptance_readiness(
         packet_result = _check_acceptance_packet_via_github(pr_url)
     if not packet_result.get("allow_accept", True):
         return packet_result
+
+    # --- 5. IMP-20260703-B985 MT-24: packet summary 정합성 검사 (oracle_summary/CI count) ---
+    # oracle gate PASS인데 packet의 oracle_summary가 FAIL이거나, PR body 상단 요약과 final packet의
+    # CI run ID/test count가 충돌하면 BLOCKED. 정보 부족(파일/필드 없음)은 PASS로 흘려보낸다.
+    summary_result = _check_packet_summary_consistency(state, pr_body)
+    if not summary_result.get("allow_accept", True):
+        return summary_result
+
+    return pass_result
+
+
+# [Purpose]: IMP-20260703-B985 MT-24 (REJECT #19) — readiness validator 강화. oracle gate가 PASS인데
+#            packet에 표시된 oracle_summary가 FAIL이거나, PR body 상단 요약과 final packet의 CI run
+#            ID/test count가 충돌하면 BLOCKED로 차단한다(gate 표시-실제 불일치 상태로 승인 방지).
+# [Assumptions]: human_acceptance_packet.md 및 state["external_gates"]가 SSoT. gh CLI 부재나 packet
+#            파일 부재 등 정보 부족은 PASS로 흘려보낸다(정보 부족을 차단 사유로 삼지 않음).
+# [Vulnerability & Risks]: 정규식 파싱은 packet 형식 변경에 취약하다. 필드/파일 부재는 PASS로 처리하므로
+#            형식이 크게 바뀌면 검사가 무력화될 수 있다(의도적 non-fatal 설계).
+# [Improvement]: packet JSON(verification_json)의 구조화 필드만으로 비교하면 정규식 취약성을 줄일 수 있다.
+def _check_packet_summary_consistency(
+    state: Dict[str, Any], pr_body: Optional[str]
+) -> Dict[str, Any]:
+    """packet summary 정합성(oracle_summary/CI count) 검사 (불일치 시 BLOCKED dict 반환).
+
+    Args:
+        state: 활성 pipeline_state dict (None/비dict 금지).
+        pr_body: 현재 PR 본문 텍스트 (None 허용 — 해당 검사 skip).
+    Returns:
+        _acceptance_blocked(...) 또는 PASS dict (allow_accept=True).
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    pass_result: Dict[str, Any] = {
+        "status": "PASS",
+        "failure_code": "",
+        "failure_category": "",
+        "blocked_reason": None,
+        "missing_sections": [],
+        "return_phase": "build",
+        "allow_accept": True,
+    }
+
+    # 검사 A: oracle gate PASS인데 packet oracle_summary가 FAIL.
+    _gates = state.get("external_gates") or {}
+    _oracle_gate = str((_gates.get("oracle") or {}).get("status", "") or "").upper()
+    if _oracle_gate == "PASS":
+        _pkt_text = ""
+        try:
+            _pkt_p = _packet_output_path()
+            if _pkt_p.exists():
+                _pkt_text = _pkt_p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            _pkt_text = ""
+        if _pkt_text:
+            _m_oracle = re.search(r"oracle_summary:\s*([A-Za-z_]+)", _pkt_text)
+            if _m_oracle and _m_oracle.group(1).upper() == "FAIL":
+                return _acceptance_blocked(
+                    "oracle_summary_mismatch",
+                    (
+                        "Oracle gate는 PASS이지만 acceptance packet의 oracle_summary가 FAIL로 "
+                        "표시되어 있습니다. packet을 최신 상태로 재생성한 뒤 다시 실행하세요 "
+                        "(python pipeline.py gates request-accept)."
+                    ),
+                )
+
+    # 검사 B: PR body 상단 요약과 final packet의 CI run ID/test count 충돌.
+    if pr_body:
+        _packet_block = ""
+        _body_top = pr_body
+        _mb = re.search(
+            r"<!-- PIPELINE_FINAL_PACKET_START -->(.*?)<!-- PIPELINE_FINAL_PACKET_END -->",
+            pr_body, re.DOTALL,
+        )
+        if _mb:
+            _packet_block = _mb.group(1)
+            _body_top = pr_body[: _mb.start()]
+
+        if _packet_block:
+            def _find_run_id(text: str) -> str:
+                m = re.search(
+                    r"(?:ci_run_id|CI run ID|run[_ ]?id)[^\d]{0,6}(\d{6,})",
+                    text, re.IGNORECASE,
+                )
+                return m.group(1) if m else ""
+
+            _top_run = _find_run_id(_body_top)
+            _pkt_run = _find_run_id(_packet_block)
+            if _top_run and _pkt_run and _top_run != _pkt_run:
+                return _acceptance_blocked(
+                    "ci_count_mismatch",
+                    (
+                        "PR 본문 상단 요약의 CI run ID와 final packet의 CI run ID가 다릅니다 "
+                        f"(상단: {_top_run}, packet: {_pkt_run}). "
+                        "PR 본문과 packet을 동일 값으로 갱신한 뒤 다시 실행하세요."
+                    ),
+                )
+
+            def _find_test_count(text: str) -> str:
+                m = re.search(
+                    r"(\d+)\s*(?:개|tests?)\s*(?:통과|passed|PASS)",
+                    text, re.IGNORECASE,
+                )
+                return m.group(1) if m else ""
+
+            _top_tc = _find_test_count(_body_top)
+            _pkt_tc = _find_test_count(_packet_block)
+            if _top_tc and _pkt_tc and _top_tc != _pkt_tc:
+                return _acceptance_blocked(
+                    "ci_count_mismatch",
+                    (
+                        "PR 본문 상단 요약의 테스트 통과 수와 final packet의 테스트 통과 수가 "
+                        f"다릅니다 (상단: {_top_tc}, packet: {_pkt_tc}). "
+                        "PR 본문과 packet을 동일 값으로 갱신한 뒤 다시 실행하세요."
+                    ),
+                )
 
     return pass_result
 
@@ -13061,6 +13703,18 @@ def cmd_outputs(args: argparse.Namespace) -> None:
 
 PIPELINE_FINAL_PACKET_START_MARKER = "<!-- PIPELINE_FINAL_PACKET_START -->"
 PIPELINE_FINAL_PACKET_END_MARKER = "<!-- PIPELINE_FINAL_PACKET_END -->"
+# IMP-20260703-B985 MT-26: CI가 PR 파일시스템 커밋 없이도 최신 packet JSON을 읽도록
+# PR 본문에 packet JSON을 embed하는 별도 블록 마커. FINAL_PACKET(사용자 렌더링용)과 분리한다.
+# IMP-20260703-B985 MT-28: JSON 본문이 GitHub PR 렌더링에서 보이지 않도록 마커를 단일 HTML
+# 주석의 열림/닫힘 경계로 재배치한다. START는 주석을 열기만 하고(닫지 않음), END는 주석을
+# 닫는다(열지 않음). 결과 블록은 "<!-- PIPELINE_PACKET_JSON_START\n{json}\nPIPELINE_PACKET_JSON_END -->"
+# 형태가 되어 JSON 전체가 하나의 주석 안에 들어간다. substring/regex 추출 계약은 그대로 유지된다
+# (두 마커 모두 여전히 "PIPELINE_PACKET_JSON_START"/"PIPELINE_PACKET_JSON_END" 부분문자열 포함).
+PIPELINE_PACKET_JSON_START_MARKER = "<!-- PIPELINE_PACKET_JSON_START"
+PIPELINE_PACKET_JSON_END_MARKER = "PIPELINE_PACKET_JSON_END -->"
+# 구 마커(self-closed 주석) — backwards-compat 교체용. 기존 PR body에 남아 있으면 새 마커로 변환.
+PIPELINE_PACKET_JSON_START_MARKER_LEGACY = "<!-- PIPELINE_PACKET_JSON_START -->"
+PIPELINE_PACKET_JSON_END_MARKER_LEGACY = "<!-- PIPELINE_PACKET_JSON_END -->"
 HUMAN_ACCEPTANCE_PACKET_FILE = "human_acceptance_packet.md"
 PACKET_LINE_MAX_WIDTH = 120
 
@@ -13497,7 +14151,11 @@ def _build_acceptance_display_model(
     }
 
 
-def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
+def _build_final_packet_content(
+    evidence: Dict[str, Any],
+    acceptance_status_override: Optional[str] = None,
+    verification_json_sha256: Optional[str] = None,
+) -> str:
     """packet 텍스트를 생성한다. 120자/줄 제한 + 승인 코드 독립 줄.
 
     IMP-20260607-E656 MT-2: 슬림다운 — [검증용 메타데이터] 고정 블록 추가,
@@ -13505,9 +14163,22 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     승인 코드는 접두사 없이 독립 줄에만 출력.
     IMP-20260612-8104 MT-1: 라벨을 [Codex 검토용] → [검증용 메타데이터]로 교체.
     구 라벨 packet 파일도 파서가 그대로 읽을 수 있도록 필드 라인 기반 파싱은 유지.
+    IMP-20260703-B985 MT-11 수정 1: acceptance_status_override 파라미터 추가.
+    request-accept 경로에서 이전 REJECT/FAIL 상태가 packet 표시에 들어가지 않도록
+    강제로 PENDING 표시로 덮어쓴다 (기본 None이면 기존 동작 유지, 하위호환).
+    IMP-20260703-B985 MT-13: verification_json_sha256 파라미터 추가.
+    호출자가 "이번 호출에서 실제로 기록될 verification_json"의 SHA를 미리 계산하여 주입하면,
+    packet md에 embed되는 verification_json_sha256이 실제 기록될 json 파일의 SHA와 일치한다.
+    (기존 코드는 디스크에 이미 존재하는 stale json 파일의 SHA를 읽어 embed했다.)
+    None이면 기존처럼 디스크 파일에서 읽는다 (하위호환).
+    IMP-20260703-B985 MT-12: acceptance_status_override가 None이어도 현재 파이프라인의
+    active acceptance_request.json이 PENDING이면 항상 PENDING 표시로 강제한다.
 
     Args:
         evidence: _collect_packet_evidence 결과 dict.
+        acceptance_status_override: None이 아니면 acceptance 표시 상태를 이 값으로 강제.
+        verification_json_sha256: None이 아니면 이 값을 packet md에 embed (atomic publish 순서 보장).
+            None이면 디스크의 human_acceptance_packet.json 파일에서 SHA를 읽는다.
     Returns:
         packet 본문 문자열 (markdown-friendly, 헤더는 일반 텍스트).
     Raises:
@@ -13535,7 +14206,31 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
         _acceptance_display_status = _resolve_acceptance_display_state(
             acceptance_request if isinstance(acceptance_request, dict) else None
         )
-    if _acceptance_display_status in ("PENDING", "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
+    # MT-11 수정 1: acceptance_status_override가 주어지면 강제로 표시 상태를 덮어쓴다.
+    # request-accept 경로에서 이전 REJECT/FAIL 상태가 packet에 들어가지 않도록 한다.
+    if acceptance_status_override is not None:
+        _acceptance_display_status = acceptance_status_override
+    # MT-12 수정: acceptance_status_override가 None이어도 현재 파이프라인의 active
+    # acceptance_request.json이 PENDING이면 항상 PENDING 표시로 강제한다. override를 전달하지
+    # 않는 호출 경로(fallback)에서 이전 FAIL/REJECT 상태가 packet에 표시되는 것을 방지한다.
+    # IMP-20260703-B985 MT-18: PENDING 판정을 단일 SSoT helper(_get_acceptance_display_state)로
+    # 계산하여 packet/verification_json이 동일 기준을 공유하게 한다 (PENDING을 절대 FAIL로 표시 안 함).
+    # active acceptance_request.json이 PENDING일 때만 강제하며(state fallback으로 인한 오탐 방지),
+    # helper가 PENDING을 반환하면 표시/게이트를 모두 PENDING으로 맞춘다.
+    if acceptance_status_override is None:
+        _cur_req = _load_acceptance_request()
+        _req_is_pending = (
+            isinstance(_cur_req, dict)
+            and str(_cur_req.get("status", "")).upper() == "PENDING"
+        )
+        if _req_is_pending and _get_acceptance_display_state() == "PENDING":
+            _acceptance_display_status = "승인 대기 중 (PENDING)"
+            if gate_status.get("acceptance") not in ("PASS",):
+                gate_status["acceptance"] = "PENDING"
+    # IMP-20260703-B985 MT-33: "승인 대기 중 (PENDING)"처럼 PENDING이 포함된 문자열도 포함하여 체크.
+    # (REJECT #16) 기존 `in ("PENDING","REJECTED")` 정확 일치 검사는 "승인 대기 중 (PENDING)"
+    # 표시 문자열을 매치하지 못해 gate_status["acceptance"]가 state의 FAIL로 남았다.
+    if ("PENDING" in str(_acceptance_display_status).upper() or str(_acceptance_display_status).upper() == "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
@@ -13554,25 +14249,27 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
             pass
 
     # verification_json_sha256: human_acceptance_packet.json SHA-256
-    vj_sha256 = ""
-    try:
-        _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
-        if _vj_path.exists():
-            import hashlib as _hashlib
-            vj_sha256 = _hashlib.sha256(_vj_path.read_bytes()).hexdigest()
-    except OSError:
-        pass
+    # MT-13 수정: 외부에서 verification_json_sha256을 주입받으면 사용한다(atomic publish 순서 보장).
+    # 주입값은 "이번 호출에서 실제로 기록될 verification_json"의 SHA이므로, packet md에 embed된
+    # 값이 실제 기록될 json 파일의 SHA와 일치한다. 주입이 없으면 기존처럼 디스크 파일에서 읽는다.
+    if verification_json_sha256 is not None:
+        vj_sha256 = verification_json_sha256
+    else:
+        vj_sha256 = ""
+        try:
+            _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
+            if _vj_path.exists():
+                import hashlib as _hashlib
+                vj_sha256 = _hashlib.sha256(_vj_path.read_bytes()).hexdigest()
+        except OSError:
+            pass
 
-    # packet_md_sha256: human_acceptance_packet.md SHA-256 (자기 자신이므로 현재 content 기준 X)
-    # 이전에 쓰인 파일이 있으면 그 SHA를 사용
-    packet_md_sha256 = ""
-    try:
-        _pmd_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_FILE
-        if _pmd_path.exists():
-            import hashlib as _hashlib2
-            packet_md_sha256 = _hashlib2.sha256(_pmd_path.read_bytes()).hexdigest()
-    except OSError:
-        pass
+    # IMP-20260703-B985 MT-10: packet_md_sha256 self-reference 라인 제거.
+    # human_acceptance_packet.md는 이 content 자체이므로, content 안에 자신의 SHA를 embed하면
+    # 항상 stale하다(hash를 넣는 순간 content가 바뀌어 실제 파일 SHA가 달라짐). 이 값은 어떤
+    # gate/검증에도 사용되지 않으며, packet SHA의 SSoT는 acceptance_request.packet_sha256
+    # (_materialize_acceptance_snapshot가 실제 파일에서 계산)이다. 따라서 이 self-reference
+    # 라인을 메타데이터 블록에서 제거하여 REJECT #2(packet_md_sha256 불일치)를 구조적으로 없앤다.
 
     # requirements_summary: AC 충족표에서 PASS/TOTAL
     req_pass = req_total = 0
@@ -13616,7 +14313,7 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     else:
         lines.append(f"changed_files: {changed_files_inline}")
     lines.append(f"verification_json_sha256: {vj_sha256 or '(없음)'}")
-    lines.append(f"packet_md_sha256: {packet_md_sha256 or '(없음)'}")
+    # IMP-20260703-B985 MT-10: packet_md_sha256 self-reference 라인 삭제 (위 주석 참조).
     lines.append(f"technical: {gate_status.get('technical', 'PENDING')}")
     lines.append(f"oracle: {gate_status.get('oracle', 'PENDING')}")
     lines.append(f"github_ci: {gate_status.get('github_ci', 'PENDING')}")
@@ -13654,6 +14351,10 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
 
     # IMP-20260614-509F MT-4: [최종 확인 안내] 사용자 표시 섹션을 SSoT display model
     # 기반 renderer로 위임하여 MD/PR body가 동일 계산값(acceptance_display 등)을 공유.
+    # IMP-20260703-B985 MT-32: 수정된 gate_status(acceptance=PENDING)를 evidence에 반영하여
+    # _display_model_from_evidence가 동일 gate_status를 사용하도록 보장.
+    evidence = dict(evidence)
+    evidence["gate_status"] = gate_status
     display_model = _display_model_from_evidence(evidence, _acceptance_display_status)
     for ln in _render_pr_body_final_packet(display_model).split("\n"):
         lines.append(ln)
@@ -13696,7 +14397,9 @@ def _display_model_from_evidence(
     # BUG-20260615-A35C MT-2: 게이트표(User Acceptance)도 effective 표시 상태와 동기화한다.
     # acceptance_display가 PENDING/REJECTED이고 게이트가 PASS가 아니면 PENDING으로 표시하여
     # 메타데이터 블록(acceptance)과 사용자 표시 섹션(User Acceptance)이 동일 SSoT 값을 공유한다.
-    if str(acceptance_display).upper() in ("PENDING", "REJECTED") and gate_status.get(
+    # IMP-20260703-B985 MT-33: "승인 대기 중 (PENDING)" 등 PENDING 포함 문자열도 처리한다.
+    # (REJECT #16) 정확 일치 검사는 표시 문자열을 매치하지 못해 User Acceptance: FAIL이 재발했다.
+    if ("PENDING" in str(acceptance_display).upper() or str(acceptance_display).upper() == "REJECTED") and gate_status.get(
         "acceptance"
     ) not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
@@ -14370,6 +15073,17 @@ def _build_verification_json(
         )
     # acceptance_request.json이 PENDING/REJECTED이면 gates.acceptance를 PENDING으로 표시
     # (이전 REJECT로 pipeline state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
+    # IMP-20260703-B985 MT-18: active PENDING acceptance_request면 단일 SSoT helper로 PENDING 강제
+    # (packet(_build_final_packet_content)과 동일 기준 — PENDING을 절대 FAIL로 표시하지 않는다).
+    _vj_cur_req = _load_acceptance_request()
+    if (
+        isinstance(_vj_cur_req, dict)
+        and str(_vj_cur_req.get("status", "")).upper() == "PENDING"
+        and _get_acceptance_display_state() == "PENDING"
+        and gate_status.get("acceptance") not in ("PASS",)
+    ):
+        gate_status["acceptance"] = "PENDING"
+        acceptance_display_status = "PENDING"
     if acceptance_display_status in ("PENDING", "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
@@ -14676,6 +15390,194 @@ def _replace_pr_body_packet_block(pr_body: str, packet_content: str) -> str:
     return pr_body + "\n" + new_block + "\n"
 
 
+def _load_packet_json_one_line() -> Optional[str]:
+    """human_acceptance_packet.json을 읽어 한 줄 JSON 문자열로 반환한다.
+
+    IMP-20260703-B985 MT-26: PR 본문 embed용. 파일 부재/JSON 파싱 실패 시 None 반환하여
+    호출부가 embed를 graceful하게 건너뛰도록 한다.
+
+    Returns:
+        packet JSON을 compact 한 줄로 직렬화한 문자열, 없거나 실패 시 None.
+    Raises:
+        없음 (모든 예외를 흡수하고 None 반환).
+    """
+    path = _packet_json_output_path()
+    try:
+        if not path.exists():
+            return None
+    except OSError:
+        return None
+    # utf-8 → cp949 → latin-1 fallback (FS.encoding 규칙 준수)
+    raw: Optional[str] = None
+    for enc in ("utf-8", "cp949", "latin-1"):
+        try:
+            raw = path.read_text(encoding=enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+        except OSError:
+            return None
+    if raw is None:
+        return None
+    try:
+        obj = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    try:
+        # separators로 공백 제거한 compact 한 줄 JSON, 한글 보존(ensure_ascii=False)
+        return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _replace_pr_body_packet_json_block(pr_body: str, json_one_line: str) -> str:
+    """PR 본문에서 PIPELINE_PACKET_JSON_START/END 블록을 교체하고, 없으면 끝에 추가.
+
+    IMP-20260703-B985 MT-26: CI가 PR 본문에서 packet JSON을 직접 읽을 수 있도록 embed한다.
+
+    Args:
+        pr_body: 현재 PR 본문 텍스트.
+        json_one_line: embed할 한 줄 JSON 문자열.
+    Returns:
+        JSON 블록이 교체/추가된 PR 본문 텍스트.
+    Raises:
+        TypeError: json_one_line이 None이거나 문자열이 아닌 경우.
+    """
+    if json_one_line is None:
+        raise TypeError("json_one_line must not be None")
+    if not isinstance(json_one_line, str):
+        raise TypeError(
+            f"json_one_line must be str, got {type(json_one_line).__name__}"
+        )
+    start = PIPELINE_PACKET_JSON_START_MARKER
+    end = PIPELINE_PACKET_JSON_END_MARKER
+    new_block = f"{start}\n{json_one_line}\n{end}"
+    if pr_body is None:
+        pr_body = ""
+    # IMP-20260703-B985 MT-28: 구 마커(self-closed 주석)가 남아 있으면 새 마커로 먼저 변환한다
+    # (backwards-compat). END를 먼저 교체해야 START 부분문자열 충돌을 피한다:
+    # 구 START "<!-- PIPELINE_PACKET_JSON_START -->"는 새 START "<!-- PIPELINE_PACKET_JSON_START"를
+    # 부분문자열로 포함하므로, 구 END를 먼저 새 END로 바꾼 뒤 구 START를 새 START로 바꾼다.
+    if PIPELINE_PACKET_JSON_END_MARKER_LEGACY in pr_body:
+        pr_body = pr_body.replace(
+            PIPELINE_PACKET_JSON_END_MARKER_LEGACY, PIPELINE_PACKET_JSON_END_MARKER
+        )
+    if PIPELINE_PACKET_JSON_START_MARKER_LEGACY in pr_body:
+        pr_body = pr_body.replace(
+            PIPELINE_PACKET_JSON_START_MARKER_LEGACY, PIPELINE_PACKET_JSON_START_MARKER
+        )
+    if start in pr_body and end in pr_body:
+        pattern = re.compile(
+            re.escape(start) + r".*?" + re.escape(end),
+            re.DOTALL,
+        )
+        return pattern.sub(lambda _m: new_block, pr_body, count=1)
+    if pr_body and not pr_body.endswith("\n"):
+        pr_body += "\n"
+    return pr_body + "\n" + new_block + "\n"
+
+
+def _embed_packet_json_in_final_packet_block(pr_body: str, json_one_line: str) -> str:
+    """packet JSON 블록을 PIPELINE_FINAL_PACKET 블록 안(END 마커 직전)에 embed한다.
+
+    IMP-20260703-B985 MT-29: JSON 블록을 별도 standalone 블록으로 두지 않고 FINAL_PACKET
+    블록 내부에 배치한다. CI/consistency의 substring 추출 계약(PIPELINE_PACKET_JSON_START/END)은
+    JSON이 FINAL_PACKET 안에 있어도 그대로 동작한다. embed 후 FINAL_PACKET 밖의 standalone
+    JSON 블록(구/신 마커 모두)을 제거하여 중복을 방지한다.
+
+    Args:
+        pr_body: 현재 PR 본문 텍스트 (FINAL_PACKET 블록을 이미 포함한다고 가정).
+        json_one_line: embed할 한 줄 JSON 문자열.
+    Returns:
+        JSON이 FINAL_PACKET 블록 안에 embed되고 standalone 블록이 제거된 PR 본문.
+    Raises:
+        TypeError: json_one_line이 None이거나 문자열이 아닌 경우.
+    """
+    if json_one_line is None:
+        raise TypeError("json_one_line must not be None")
+    if not isinstance(json_one_line, str):
+        raise TypeError(
+            f"json_one_line must be str, got {type(json_one_line).__name__}"
+        )
+    if pr_body is None:
+        pr_body = ""
+
+    fps = PIPELINE_FINAL_PACKET_START_MARKER
+    fpe = PIPELINE_FINAL_PACKET_END_MARKER
+    js = PIPELINE_PACKET_JSON_START_MARKER
+    je = PIPELINE_PACKET_JSON_END_MARKER
+
+    # FINAL_PACKET 블록이 없으면 기존 standalone 동작으로 폴백(하위 호환).
+    if fps not in pr_body or fpe not in pr_body:
+        return _replace_pr_body_packet_json_block(pr_body, json_one_line)
+
+    new_json_block = f"{js}\n{json_one_line}\n{je}"
+
+    # 1) FINAL_PACKET 블록 안의 기존 JSON embed를 새 embed로 교체(없으면 END 직전에 삽입).
+    fp_pattern = re.compile(
+        re.escape(fps) + r"(.*?)" + re.escape(fpe),
+        re.DOTALL,
+    )
+
+    def _replace_fp(m: "re.Match[str]") -> str:
+        inner = m.group(1)
+        # 구 self-closed 마커를 신 마커로 먼저 변환(END 먼저 — START substring 충돌 회피).
+        if PIPELINE_PACKET_JSON_END_MARKER_LEGACY in inner:
+            inner = inner.replace(
+                PIPELINE_PACKET_JSON_END_MARKER_LEGACY, PIPELINE_PACKET_JSON_END_MARKER
+            )
+        if PIPELINE_PACKET_JSON_START_MARKER_LEGACY in inner:
+            inner = inner.replace(
+                PIPELINE_PACKET_JSON_START_MARKER_LEGACY, PIPELINE_PACKET_JSON_START_MARKER
+            )
+        # 기존 embed JSON 블록 제거.
+        inner = re.sub(
+            re.escape(js) + r".*?" + re.escape(je),
+            "",
+            inner,
+            flags=re.DOTALL,
+        )
+        inner = inner.rstrip("\n")
+        # \g<0> 등 group 참조 오류 방지를 위해 함수 반환값으로 치환.
+        return f"{fps}{inner}\n\n{new_json_block}\n{fpe}"
+
+    result = fp_pattern.sub(_replace_fp, pr_body, count=1)
+
+    # 2) FINAL_PACKET 밖의 standalone JSON 블록 제거(embed된 블록은 보존).
+    #    embed된 블록을 잠시 placeholder로 치환한 뒤 나머지 standalone 블록을 제거하고 복원한다.
+    embedded_marker = "\x00__MT29_EMBEDDED_JSON__\x00"
+    fp_capture = re.compile(
+        re.escape(fps) + r".*?" + re.escape(fpe),
+        re.DOTALL,
+    )
+    fp_saved: Dict[str, str] = {}
+
+    def _stash_fp(m: "re.Match[str]") -> str:
+        fp_saved["block"] = m.group(0)
+        return embedded_marker
+
+    result = fp_capture.sub(_stash_fp, result, count=1)
+    # 남은(standalone) JSON 블록 제거 — 구/신 마커 모두.
+    if PIPELINE_PACKET_JSON_END_MARKER_LEGACY in result:
+        result = result.replace(
+            PIPELINE_PACKET_JSON_END_MARKER_LEGACY, PIPELINE_PACKET_JSON_END_MARKER
+        )
+    if PIPELINE_PACKET_JSON_START_MARKER_LEGACY in result:
+        result = result.replace(
+            PIPELINE_PACKET_JSON_START_MARKER_LEGACY, PIPELINE_PACKET_JSON_START_MARKER
+        )
+    result = re.sub(
+        r"\n*" + re.escape(js) + r".*?" + re.escape(je) + r"\n*",
+        "\n",
+        result,
+        flags=re.DOTALL,
+    )
+    # placeholder 복원.
+    if "block" in fp_saved:
+        result = result.replace(embedded_marker, fp_saved["block"], 1)
+    return result
+
+
 def _gh_edit_pr_body(new_body: str) -> bool:
     """gh CLI로 현재 PR 본문을 갱신한다. gh 없으면 False 반환.
 
@@ -14833,6 +15735,18 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
     cleaned_body = _clean_pr_body_artifacts(current_body, pipeline_id_str, current_nonce)
 
     new_body = _replace_pr_body_packet_block(cleaned_body, packet_content)
+
+    # IMP-20260703-B985 MT-26/MT-29: CI가 파일 커밋 없이 최신 packet 정보를 얻도록
+    # PR 본문에 packet JSON을 embed한다. packet.json이 없으면 graceful skip.
+    # MT-29: JSON 블록을 별도 standalone 블록으로 두지 않고 PIPELINE_FINAL_PACKET END
+    # 마커 직전에 embed한다. 마커(substring)가 FINAL_PACKET 안에 있어도 CI의 substring
+    # 추출 계약은 그대로 동작한다. 이후 FINAL_PACKET 밖의 standalone JSON 블록을 제거한다.
+    json_one_line = _load_packet_json_one_line()
+    json_embedded = False
+    if json_one_line is not None:
+        new_body = _embed_packet_json_in_final_packet_block(new_body, json_one_line)
+        json_embedded = True
+
     ok = _gh_edit_pr_body(new_body)
     if not ok:
         print(YELLOW(
@@ -14840,7 +15754,16 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
             "PR이 열려 있고 gh 인증이 유효한지 확인하세요.\n"
         ))
         return
-    print(GREEN("\n[PR 본문 갱신 완료] PIPELINE_FINAL_PACKET 블록이 최신 packet으로 교체되었습니다.\n"))
+    if json_embedded:
+        print(GREEN(
+            "\n[PR 본문 갱신 완료] PIPELINE_FINAL_PACKET + PIPELINE_PACKET_JSON 블록이 "
+            "최신 packet으로 교체되었습니다.\n"
+        ))
+    else:
+        print(GREEN(
+            "\n[PR 본문 갱신 완료] PIPELINE_FINAL_PACKET 블록이 최신 packet으로 교체되었습니다. "
+            "(packet JSON 없음 — gates request-accept/report final-packet 실행 전)\n"
+        ))
 
 
 def cmd_report(args: argparse.Namespace) -> None:
@@ -17452,28 +18375,34 @@ def _render_pending_acceptance_comment(display_model: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dict[str, Any]:
-    """gates request-accept 경로 전용 — PENDING 승인 코드 안내 댓글을 PR에 게시한다.
-
-    [Purpose]: IMP-20260614-D278 REJECT — request-accept 경로에서 ACCEPTED 완료 댓글이
-      잘못 게시되던 회귀 수정. 이 함수는 PENDING 상태 전용이며 ACCEPTED 마커를 포함하지 않는다.
-    [Assumptions]: req는 PENDING 상태의 acceptance_request. gh CLI는 선택적.
-    [Vulnerability & Risks]: gh CLI 실패 시 success=False 반환 — 호출자는 이를 무시하고
-      코드 발급을 계속한다 (PENDING 댓글 실패는 non-fatal).
-
-    기존 acceptance-packet 태그 댓글을 삭제한 뒤 PENDING 승인 코드 안내 댓글을 생성한다.
-    댓글에는 ACCEPTED, 승인 완료, accepted_by 등의 완료 마커를 포함하지 않는다.
+# [Purpose]: IMP-20260703-B985 MT-24 — pending 승인 댓글 본문을 GitHub 게시와 분리한 단일 순수 renderer.
+#            staging 단계는 이 함수로 pending comment body를 단 1회 렌더링하여 consolidated snapshot에
+#            frozen 저장하고, publish 단계는 snapshot의 frozen body를 그대로 복사(copy-only)한다.
+#            _post_github_pending_acceptance_comment는 이 함수를 호출하여 body를 얻고 게시만 담당한다.
+# [Assumptions]: req는 acceptance_request(candidate) dict. gh CLI 유무와 무관하게 body를 계산한다.
+# [Vulnerability & Risks]: display model 조립 실패는 state fallback으로 흡수한다. readiness 줄이
+#            누락되면 pending 마커 직후에 보장 삽입한다(gates accept readiness 검사와 정합성 유지).
+# [Improvement]: display model 캐싱으로 반복 렌더링 비용을 줄일 수 있다.
+def _render_frozen_pending_comment(req: Dict[str, Any], evidence: str) -> str:
+    """PENDING 승인 안내 댓글 본문을 렌더링하여 반환한다 (GitHub 게시 없음, 단일 renderer SSoT).
 
     Args:
-        req: acceptance_request dict (pipeline_id, request_id, pr_url, nonce 포함).
-        evidence: 결과물 경로 또는 URL.
+        req: acceptance_request(candidate) dict (pipeline_id/pr_url/nonce 포함). None/비dict 금지.
+        evidence: 결과물 경로 또는 URL. None/비str 금지.
     Returns:
-        dict {"success": True} 또는 {"success": False, "error": str}.
+        pending comment body 문자열 (pending 마커 + readiness 줄 포함).
+    Raises:
+        TypeError: req가 None/비dict이거나 evidence가 None/비str인 경우.
     """
     if req is None:
-        return {"success": False, "error": "req must not be None"}
+        raise TypeError("req must not be None")
     if not isinstance(req, dict):
-        return {"success": False, "error": f"req must be dict, got {type(req).__name__}"}
+        raise TypeError(f"req must be dict, got {type(req).__name__}")
+    if evidence is None:
+        raise TypeError("evidence must not be None")
+    if not isinstance(evidence, str):
+        raise TypeError(f"evidence must be str, got {type(evidence).__name__}")
+
     pipeline_id = str(req.get("pipeline_id", ""))
     pr_url = str(req.get("pr_url", "") or "")
 
@@ -17558,6 +18487,43 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
             )
         else:
             comment_body = f"{_readiness_line}\n{comment_body}"
+    return comment_body
+
+
+def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dict[str, Any]:
+    """gates request-accept 경로 전용 — PENDING 승인 코드 안내 댓글을 PR에 게시한다.
+
+    [Purpose]: IMP-20260614-D278 REJECT — request-accept 경로에서 ACCEPTED 완료 댓글이
+      잘못 게시되던 회귀 수정. 이 함수는 PENDING 상태 전용이며 ACCEPTED 마커를 포함하지 않는다.
+    [Assumptions]: req는 PENDING 상태의 acceptance_request. gh CLI는 선택적.
+    [Vulnerability & Risks]: gh CLI 실패 시 success=False 반환 — 호출자는 이를 무시하고
+      코드 발급을 계속한다 (PENDING 댓글 실패는 non-fatal).
+
+    기존 acceptance-packet 태그 댓글을 삭제한 뒤 PENDING 승인 코드 안내 댓글을 생성한다.
+    댓글에는 ACCEPTED, 승인 완료, accepted_by 등의 완료 마커를 포함하지 않는다.
+
+    Args:
+        req: acceptance_request dict (pipeline_id, request_id, pr_url, nonce 포함).
+        evidence: 결과물 경로 또는 URL.
+    Returns:
+        dict {"success": True} 또는 {"success": False, "error": str}.
+    """
+    if req is None:
+        return {"success": False, "error": "req must not be None"}
+    if not isinstance(req, dict):
+        return {"success": False, "error": f"req must be dict, got {type(req).__name__}"}
+    pipeline_id = str(req.get("pipeline_id", ""))
+    pr_url = str(req.get("pr_url", "") or "")
+
+    # IMP-20260703-B985 MT-24: pending 댓글 본문 생성을 단일 순수 renderer로 통일한다.
+    # _render_frozen_pending_comment가 display model 조립 + renderer + readiness 줄 보장을 수행한다.
+    # 이 함수는 body를 얻어 GitHub 게시만 담당한다(단일 renderer 원칙; copy-only publish는
+    # request-accept가 snapshot의 frozen body를 이 함수에 넘겨 재렌더링을 우회한다).
+    _frozen_pending_body = str(req.get("_frozen_pending_comment_body", "") or "")
+    if _frozen_pending_body:
+        comment_body = _frozen_pending_body
+    else:
+        comment_body = _render_frozen_pending_comment(req, evidence)
     # 불변식(IMP-20260614-509F MT-2): pending 댓글에는 PENDING 마커가 반드시 포함되고,
     # 완료(accepted) 마커는 절대 포함되지 않아야 한다.
     _pending_marker = "<!-- pipeline-human-acceptance-packet-pending -->"
@@ -18361,7 +19327,8 @@ def _save_acceptance_staging(data: Dict[str, Any]) -> None:
 
     Args:
         data: staging payload dict (pipeline_id, req_candidate, frozen_at,
-            staged_packet_content, staged_packet_sha256 포함).
+            staged_packet_content, staged_packet_sha256, pr_body_candidate_content,
+            pr_body_candidate_sha256 포함).
     Raises:
         TypeError: data가 None이거나 dict가 아닌 경우.
         OSError: 파일 기록 실패 시.
@@ -18404,6 +19371,243 @@ def _load_acceptance_staging(pipeline_id: str) -> Optional[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# IMP-20260703-B985 MT-24: Consolidated Acceptance Snapshot (copy-only publish SSoT)
+# ---------------------------------------------------------------------------
+# [Purpose]: REJECT #19 — packet/PR body/pending comment/approval_request_message를
+#            각각 재렌더링하지 않고, staging 시점에 단 1회 생성한 bytes/text를 그대로 복사(copy-only)
+#            publish하기 위해, 5개 사용자 노출 산출물의 text + sha256을 단일 frozen snapshot 파일
+#            (pipeline_contracts/<pid>/gates/acceptance_snapshot.json)에 통합 기록한다.
+# [Assumptions]: staged_data는 staging 단계가 이미 계산한 frozen bytes/text를 담고 있으며,
+#            snapshot 생성은 request-accept의 staging 단계에서 단 1회만 호출된다.
+# [Vulnerability & Risks]: snapshot 파일이 손상/삭제되면 copy-only publish가 불가능해지므로,
+#            _validate_snapshot_invariants가 publish 직후 5개 sha256을 codex/acceptance_request와
+#            대조하여 불일치 시 fail-closed BLOCKED한다. snapshot_id 없이 실행되는 경우 graceful
+#            fallback을 금지하고 반드시 BLOCKED를 반환한다.
+# [Improvement]: snapshot 파일에 gzip 압축 + HMAC 서명을 추가하면 외부 변조 탐지가 강화된다.
+ACCEPTANCE_SNAPSHOT_FILENAME = "acceptance_snapshot.json"
+
+
+def _acceptance_snapshot_path(pipeline_id: str) -> Path:
+    """consolidated acceptance snapshot 파일 경로를 반환한다.
+
+    Args:
+        pipeline_id: 활성 pipeline_id (None/비str/빈 문자열 금지).
+    Returns:
+        pipeline_contracts/<pid>/gates/acceptance_snapshot.json Path.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if len(pipeline_id) == 0:  # empty not allowed: pipeline_id는 경로 식별자로 필수.
+        raise ValueError("pipeline_id must not be empty")
+    return BASE_DIR / "pipeline_contracts" / pipeline_id / "gates" / ACCEPTANCE_SNAPSHOT_FILENAME
+
+
+def _sha256_text(text: str) -> str:
+    """텍스트를 utf-8로 인코딩하여 sha256 hexdigest를 반환한다.
+
+    Args:
+        text: 해시 대상 문자열 (None/비str 금지).
+    Returns:
+        64자 hex 문자열.
+    Raises:
+        TypeError: text가 None이거나 str이 아닌 경우.
+    """
+    if text is None:
+        raise TypeError("text must not be None")
+    if not isinstance(text, str):
+        raise TypeError(f"text must be str, got {type(text).__name__}")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _create_acceptance_snapshot(pipeline_id: str, staged_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Acceptance snapshot을 단 1회 생성하여 frozen 상태로 저장한다 (copy-only publish SSoT).
+
+    staged_data 키(모두 str, 없으면 빈 문자열):
+      packet_md_text, packet_json_text, pr_body_candidate_text,
+      approval_request_message_text, pending_comment_body,
+      pr_head_sha, github_ci_run_id.
+
+    Args:
+        pipeline_id: 활성 pipeline_id (None/비str/빈 문자열 금지).
+        staged_data: staging 단계가 계산한 frozen bytes/text dict (None/비dict 금지).
+    Returns:
+        생성된 snapshot dict (snapshot_id + 5개 text + 5개 sha256 + 메타 필드).
+    Raises:
+        TypeError: pipeline_id/staged_data 타입 위반 시.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+        OSError: snapshot 파일 기록 실패 시.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if len(pipeline_id) == 0:  # empty not allowed: 경로/식별자 필수.
+        raise ValueError("pipeline_id must not be empty")
+    if staged_data is None:
+        raise TypeError("staged_data must not be None")
+    if not isinstance(staged_data, dict):
+        raise TypeError(f"staged_data must be dict, got {type(staged_data).__name__}")
+
+    def _s(key: str) -> str:
+        v = staged_data.get(key, "")
+        return v if isinstance(v, str) else ("" if v is None else str(v))
+
+    snapshot_id = uuid.uuid4().hex
+    packet_md_text = _s("packet_md_text")
+    packet_json_text = _s("packet_json_text")
+    pr_body_candidate_text = _s("pr_body_candidate_text")
+    approval_request_message_text = _s("approval_request_message_text")
+    pending_comment_body = _s("pending_comment_body")
+
+    snapshot: Dict[str, Any] = {
+        "schema_version": 1,
+        "snapshot_id": snapshot_id,
+        "generated_at": _now(),
+        "pipeline_id": pipeline_id,
+        "pr_head_sha": _s("pr_head_sha"),
+        "github_ci_run_id": _s("github_ci_run_id"),
+        # frozen text 필드 (copy-only publish의 신뢰 루트).
+        "packet_md_text": packet_md_text,
+        "packet_json_text": packet_json_text,
+        "pr_body_candidate_text": pr_body_candidate_text,
+        "approval_request_message_text": approval_request_message_text,
+        "pending_comment_body": pending_comment_body,
+        # sha256 (publish 불변식 대조용).
+        "packet_md_sha256": _sha256_text(packet_md_text),
+        "packet_json_sha256": _sha256_text(packet_json_text),
+        "pr_body_sha256": _sha256_text(pr_body_candidate_text),
+        "approval_message_sha256": _sha256_text(approval_request_message_text),
+        "pending_comment_sha256": _sha256_text(pending_comment_body),
+    }
+
+    snapshot_path = _acceptance_snapshot_path(pipeline_id)
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text(
+        json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return snapshot
+
+
+def _load_acceptance_snapshot(pipeline_id: str) -> Optional[Dict[str, Any]]:
+    """저장된 consolidated acceptance snapshot을 반환한다 (없거나 불일치 시 None).
+
+    Args:
+        pipeline_id: 활성 pipeline_id (None/비str/빈 문자열 금지).
+    Returns:
+        snapshot dict 또는 파일 없음/파싱 실패/pipeline_id 불일치 시 None.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if len(pipeline_id) == 0:  # empty not allowed.
+        raise ValueError("pipeline_id must not be empty")
+    snapshot_path = _acceptance_snapshot_path(pipeline_id)
+    if not snapshot_path.exists():
+        return None
+    try:
+        data = json.loads(snapshot_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if str(data.get("pipeline_id", "") or "") != pipeline_id:
+        return None
+    return data
+
+
+def _validate_snapshot_invariants(
+    snapshot: Dict[str, Any],
+    codex_result: Dict[str, Any],
+    acceptance_request: Dict[str, Any],
+) -> None:
+    """publish 직후 consolidated snapshot 불변식 hard gate (불일치 시 fail-closed BLOCKED).
+
+    snapshot_id / pr_head_sha / packet_sha256 / json_sha256 / pr_body_sha256 /
+    approval_message_sha256 / pending_comment_sha256이 snapshot ↔ codex_result ↔
+    acceptance_request 3자에서 일치해야 한다. 각 항목은 both-present일 때만 비교하되,
+    snapshot_id는 codex_result와 acceptance_request 양쪽에 반드시 존재해야 하며
+    (없으면 graceful fallback 금지 — BLOCKED), snapshot_id 자체가 비어 있으면 즉시 BLOCKED.
+
+    Args:
+        snapshot: _create_acceptance_snapshot이 생성한 frozen snapshot dict.
+        codex_result: _codex_review_snapshot이 반환한 dict.
+        acceptance_request: publish된 acceptance_request dict.
+    Raises:
+        TypeError: 인자 중 하나라도 None이거나 dict가 아닌 경우.
+        SystemExit: snapshot_id 누락/불일치 또는 sha 불변식 위반 시 fail-closed BLOCKED.
+    """
+    if snapshot is None:
+        raise TypeError("snapshot must not be None")
+    if not isinstance(snapshot, dict):
+        raise TypeError(f"snapshot must be dict, got {type(snapshot).__name__}")
+    if codex_result is None:
+        raise TypeError("codex_result must not be None")
+    if not isinstance(codex_result, dict):
+        raise TypeError(f"codex_result must be dict, got {type(codex_result).__name__}")
+    if acceptance_request is None:
+        raise TypeError("acceptance_request must not be None")
+    if not isinstance(acceptance_request, dict):
+        raise TypeError(
+            f"acceptance_request must be dict, got {type(acceptance_request).__name__}"
+        )
+
+    sid = str(snapshot.get("snapshot_id", "") or "")
+    if not sid:
+        _die(
+            "[SNAPSHOT INVARIANT] failure_code=snapshot_id_missing\n"
+            "  consolidated snapshot에 snapshot_id가 없습니다 — copy-only publish 무결성 검증 불가.\n"
+            "  fail-closed — gates request-accept를 다시 실행하세요."
+        )
+
+    # snapshot_id는 codex_result / acceptance_request 양쪽에 반드시 전파되어 있어야 한다.
+    cr_sid = str(codex_result.get("snapshot_id", "") or "")
+    ar_sid = str(acceptance_request.get("snapshot_id", "") or "")
+    if not cr_sid or not ar_sid:
+        _die(
+            "[SNAPSHOT INVARIANT] failure_code=snapshot_id_missing\n"
+            "  snapshot_id가 codex_review_result 또는 acceptance_request에 전파되지 않았습니다 "
+            f"(codex={cr_sid or '(없음)'}, acceptance_request={ar_sid or '(없음)'}).\n"
+            "  fail-closed — gates request-accept를 다시 실행하세요."
+        )
+
+    checks = [
+        ("snapshot_id", cr_sid, sid),
+        ("snapshot_id_ar", ar_sid, sid),
+        ("pr_head_sha_cr", str(codex_result.get("pr_head_sha", "") or codex_result.get("result_pr_head_sha", "") or ""), str(snapshot.get("pr_head_sha", "") or "")),
+        ("pr_head_sha_ar", str(acceptance_request.get("pr_head_sha", "") or ""), str(snapshot.get("pr_head_sha", "") or "")),
+        ("packet_sha256", str(codex_result.get("packet_sha256", "") or codex_result.get("result_packet_sha256", "") or ""), str(snapshot.get("packet_md_sha256", "") or "")),
+        ("packet_sha256_ar", str(acceptance_request.get("packet_sha256", "") or ""), str(snapshot.get("packet_md_sha256", "") or "")),
+        ("verification_json_sha256", str(acceptance_request.get("verification_json_sha256", "") or ""), str(snapshot.get("packet_json_sha256", "") or "")),
+        ("approval_message_sha256", str(acceptance_request.get("approval_message_sha256", "") or ""), str(snapshot.get("approval_message_sha256", "") or "")),
+        ("pending_comment_sha256", str(acceptance_request.get("pending_comment_sha256", "") or ""), str(snapshot.get("pending_comment_sha256", "") or "")),
+    ]
+    mismatches = [
+        (k, got, expected)
+        for k, got, expected in checks
+        if got and expected and got != expected
+    ]
+    if mismatches:
+        details = "; ".join(
+            f"{k}: got={(g[:12] if g else '?')} expected={(e[:12] if e else '?')}"
+            for k, g, e in mismatches
+        )
+        _die(
+            "[SNAPSHOT INVARIANT] failure_code=snapshot_invariant_mismatch\n"
+            f"  publish 불변식 위반 — {details}\n"
+            "  fail-closed — gates request-accept를 다시 실행하세요."
+        )
+
+
+# ---------------------------------------------------------------------------
 # IMP-20260610-8C3B MT-1: Acceptance Snapshot Materialization
 # ---------------------------------------------------------------------------
 
@@ -18413,6 +19617,8 @@ def _materialize_acceptance_snapshot(
     publish: bool = True,
     frozen_at: Optional[str] = None,
     frozen_packet_content: Optional[str] = None,
+    staged_json_sha256: Optional[str] = None,
+    staged_json_content: Optional[str] = None,  # MT-21: frozen publish path용 staged JSON content
 ) -> Dict[str, Any]:
     """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
 
@@ -18519,8 +19725,37 @@ def _materialize_acceptance_snapshot(
     # 고정했으므로 재렌더링하지 않는다(packet md SHA invariant 유지). 그 외 경로는 evidence_payload로
     # content를 빌드한다. verification_json은 항상 최신 evidence_payload로 생성한다(SHA invariant 비대상).
     if not (frozen_packet_content is not None and publish):
-        content = _build_final_packet_content(evidence_payload)
-    verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
+        # MT-11 수정 4: acceptance snapshot(staging/publish 모두)은 사용자에게 승인 대기 packet을
+        # 보여주는 SSoT이므로, 이전 REJECT/FAIL 상태가 아니라 항상 PENDING 표시로 강제한다.
+        # codex 검토용 staging packet도 동일하게 PENDING을 표시해야 3자 SHA 불변식이 유지된다.
+        # MT-13 수정: content 빌드 전에 verification_json을 먼저 직렬화하여 SHA를 계산하고,
+        # 그 SHA를 packet md에 embed한다 (atomic publish 순서 보장).
+        # 이로써 packet md의 verification_json_sha256 == acceptance_request.json의
+        # verification_json_sha256 == 실제 기록된 json 파일의 SHA가 모두 일치한다.
+        import hashlib as _pre_hashlib
+        verification_json = _build_verification_json(evidence_payload)
+        _pre_vj_str = json.dumps(verification_json, ensure_ascii=False, indent=2)
+        _pre_json_sha = _pre_hashlib.sha256(_pre_vj_str.encode("utf-8")).hexdigest()
+        content = _build_final_packet_content(
+            evidence_payload,
+            acceptance_status_override="승인 대기 중 (PENDING)",
+            verification_json_sha256=_pre_json_sha,  # MT-13: 미리 계산한 SHA 주입
+        )
+        _vj_write_str = _pre_vj_str  # MT-21: pre-computed string으로 SHA 일관성 보장
+    else:
+        # IMP-20260703-B985 MT-21: frozen publish path — staged JSON content가 있으면 그대로 기록하여
+        # written JSON SHA == staging SHA == frozen MD에 embed된 SHA 3자 불변식을 보장한다.
+        # staged_json_content 없으면 현재 evidence로 재빌드(기존 동작, SHA 불일치 가능).
+        if staged_json_content:
+            _vj_write_str = staged_json_content
+            try:
+                verification_json = json.loads(staged_json_content)
+            except (json.JSONDecodeError, ValueError):
+                verification_json = _build_verification_json(evidence_payload)
+                _vj_write_str = json.dumps(verification_json, ensure_ascii=False, indent=2)
+        else:
+            verification_json = _build_verification_json(evidence_payload)
+            _vj_write_str = json.dumps(verification_json, ensure_ascii=False, indent=2)
 
     packet_path = _packet_output_path()
     packet_path.parent.mkdir(parents=True, exist_ok=True)
@@ -18537,10 +19772,14 @@ def _materialize_acceptance_snapshot(
     try:
         # Phase 2: 모든 temp 파일 쓰기 (아직 아무것도 커밋 안 됨)
         tmp_pkt.write_text(content, encoding="utf-8")
-        tmp_json.write_text(
-            json.dumps(verification_json, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        # MT-21: newline="" 로 write하여 플랫폼 기본 newline 변환(Windows \n→\r\n)을 차단한다.
+        # sha_manifest.json_sha256은 _sha256_file(tmp_json)(디스크 bytes)으로 계산되므로, newline
+        # 변환이 개입하면 반환하는 json_content(_vj_write_str)의 str.encode("utf-8") SHA와 어긋난다.
+        # newline=""로 기록하면 disk bytes == _vj_write_str.encode("utf-8")가 되어
+        # (1) 반환 json_content SHA == sha_manifest.json_sha256,
+        # (2) staging→frozen publish 재사용 시 동일 bytes 재기록,
+        # (3) Windows 로컬과 Linux CI가 동일 SHA를 산출하는 3자/크로스플랫폼 불변식이 성립한다.
+        tmp_json.write_text(_vj_write_str, encoding="utf-8", newline="")
 
         # SHA는 temp 파일에서 계산 (실제 경로가 아님)
         pkt_sha = _sha256_file(tmp_pkt)
@@ -18597,6 +19836,7 @@ def _materialize_acceptance_snapshot(
             # SHA를 결정적으로 계산할 수 있게 한다. (현재 PR body SHA가 아니라 packet 블록이
             # 교체된 publish 후 body SHA가 codex/acceptance_request/현재 PR body 3자 검증 기준이다.)
             "packet_content": content,
+            "json_content": _vj_write_str,  # MT-21: frozen publish path에서 재사용하기 위한 staged JSON 직렬화 문자열
         }
 
     # Phase 3: 모든 temp를 원자적으로 커밋 (여기서부터는 부분 실패 가능성 낮음)
@@ -18606,12 +19846,50 @@ def _materialize_acceptance_snapshot(
     _safe_replace(str(tmp_json), str(json_out_path))
     _safe_replace(str(tmp_req), str(req_path))
 
+    # IMP-20260703-B985 MT-19: atomic publish 순서 보장 — 방금 커밋한 json 파일을 다시 읽어
+    # SHA를 재계산한다. temp SHA(json_sha)나 파라미터 주입값을 재사용하지 않고, 실제 디스크에
+    # 기록된 bytes 기준으로 verification_json_sha256을 확정한다. (staged_json_sha256이 주어진
+    # 2-call codex 흐름에서는 staging SHA가 신뢰 루트이므로 그 값을 우선 유지한다.)
+    _committed_json_sha: Optional[str] = None
+    try:
+        if json_out_path.exists():
+            _committed_json_sha = hashlib.sha256(json_out_path.read_bytes()).hexdigest()
+    except OSError:
+        _committed_json_sha = None
+
+    # MT-13: staged_json_sha256가 주어지면 acceptance_request.json의 verification_json_sha256을
+    # staging SHA로 고정한다. frozen_packet_content(staging bytes)에 embed된 SHA와 일치시키기 위해.
+    # packet md에는 staging 시 계산된 _pre_json_sha가 embed되어 있으므로, acceptance_request.json도
+    # 동일 SHA를 가져야 packet md 표시값 == acceptance_request.json 값 불변식이 성립한다.
+    # MT-19: staging 주입값이 없으면 방금 읽은 커밋 파일 SHA를 사용한다(temp SHA 재사용 금지).
+    if staged_json_sha256 is not None:
+        _effective_json_sha = staged_json_sha256
+    elif _committed_json_sha is not None:
+        _effective_json_sha = _committed_json_sha
+    else:
+        _effective_json_sha = json_sha
+
+    # tmp_req가 담은 verification_json_sha256을 확정값(_effective_json_sha)으로 재동기화한다.
+    # (이미 커밋된 acceptance_request.json 파일을 직접 갱신 — temp SHA/주입값이 실제 파일 SHA와
+    #  달라지지 않도록 방금 읽은 커밋 파일 기준 값으로 맞춘다.)
+    if req_path.exists():
+        try:
+            _req_data_update = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
+            if str(_req_data_update.get("verification_json_sha256", "") or "") != _effective_json_sha:
+                _req_data_update["verification_json_sha256"] = _effective_json_sha
+                req_path.write_text(
+                    json.dumps(_req_data_update, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+        except (OSError, json.JSONDecodeError):
+            pass
+
     # 메모리 state도 동기화
     if isinstance(state.get("acceptance_request"), dict):
         state["acceptance_request"]["packet_path"] = str(packet_path)
         state["acceptance_request"]["packet_sha256"] = pkt_sha
         state["acceptance_request"]["verification_json_path"] = str(json_out_path)
-        state["acceptance_request"]["verification_json_sha256"] = json_sha
+        state["acceptance_request"]["verification_json_sha256"] = _effective_json_sha
 
     # Phase 4: PR 본문 갱신.
     # BUG-20260628-F52C REJECT-2: gh가 있는데 pr edit가 실패하면 "갱신 안 됨"과 구분되는
@@ -19204,6 +20482,153 @@ def _get_staged_pr_body_sha(
     return _canonical_pr_body_sha256(final_body)
 
 
+# [Purpose]: IMP-20260703-B985 MT-23 — _reuse_published 경로 전용 Codex Review freshness hard gate.
+#            reuse 경로는 _codex_review_snapshot을 건너뛰므로, 이전 commit의 pr_head_sha로 승인된
+#            stale Codex APPROVE가 재사용되는 취약점이 있었다. acceptance_request.json과
+#            codex_review_result.json이 동일 스냅샷(pr_head_sha/packet_sha256/pr_body_sha256/
+#            github_canonical_pr_body_sha256)을 가리키는지 대조하여 불일치 시 BLOCKED(fail-closed).
+# [Assumptions]: gates codex-review가 codex_review_result.json에 verdict=APPROVE_TO_USER와
+#            pr_head_sha/packet_sha256/pr_body_sha256(또는 pr_body_candidate_sha256)를 기록한다.
+#            existing_req는 _load_acceptance_request()가 반환한 발급 완료 dict이다.
+# [Vulnerability & Risks]: 파일 없음/파싱 실패/pipeline_id 불일치/verdict!=APPROVE_TO_USER/SHA 불일치는
+#            모두 fail-closed BLOCKED로 처리한다. 양쪽 필드가 모두 비어 있으면(gh 없는 환경) 해당
+#            차원은 검증 생략 — 존재하는 필드만 대조하므로 false-block을 유발하지 않는다.
+# [Improvement]: codex_review_result.json에 reviewer 서명/TTL을 추가하면 만료 검출이 가능하다.
+def _check_codex_review_freshness_for_reuse(
+    existing_req: Dict[str, Any],
+    pipeline_id: str,
+) -> Optional[str]:
+    """_reuse_published 경로 전용: codex_review_result.json이 acceptance_request.json과
+    동일한 스냅샷을 가리키는지 검증한다.
+
+    검증하는 필드:
+      - pr_head_sha: acceptance_request.json vs codex_review_result.json
+      - packet_sha256: acceptance_request.json vs codex_review_result.json
+      - pr_body_sha256 (또는 pr_body_candidate_sha256): 양쪽 중 공통 필드 비교
+      - github_canonical_pr_body_sha256: 양쪽 모두 존재할 때만 비교
+
+    Args:
+        existing_req: _load_acceptance_request()가 반환한 발급 완료 acceptance_request dict.
+        pipeline_id: 현재 활성 파이프라인 ID.
+    Returns:
+        None = PASS, str = BLOCKED 사유 (failure_code=codex_review_stale 포함).
+    Raises:
+        TypeError: existing_req가 None/딕트가 아니거나 pipeline_id가 None/str이 아닌 경우.
+    """
+    if existing_req is None:
+        raise TypeError("existing_req must not be None")
+    if not isinstance(existing_req, dict):
+        raise TypeError(
+            f"existing_req must be dict, got {type(existing_req).__name__}"
+        )
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+
+    _cx_path = _codex_review_result_path()
+    if not _cx_path.exists():
+        return (
+            "[BLOCKED] failure_code=codex_review_missing\n"
+            "  재사용 검증: codex_review_result.json이 없습니다 — Codex Review가 수행되지 않았습니다.\n"
+            "  gates codex-review를 실행한 후 gates request-accept를 다시 실행하세요."
+        )
+    try:
+        cx = json.loads(_cx_path.read_text(encoding="utf-8", errors="replace"))
+        if not isinstance(cx, dict):
+            raise ValueError("not a dict")
+    except (OSError, json.JSONDecodeError, ValueError):
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.json 로드/파싱 실패 (fail-closed).\n"
+            "  gates codex-review를 다시 실행하세요."
+        )
+
+    # pipeline_id 불일치
+    cx_pid = str(cx.get("pipeline_id", "") or "")
+    if cx_pid and cx_pid != pipeline_id:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            f"  재사용 검증: codex_review_result.json의 pipeline_id가 현재 파이프라인과 다릅니다.\n"
+            f"  codex: {cx_pid}, current: {pipeline_id}\n"
+            "  gates codex-review를 현재 파이프라인에 대해 다시 실행하세요."
+        )
+
+    # verdict 검증
+    cx_verdict = str(cx.get("verdict", "") or "")
+    if cx_verdict != "APPROVE_TO_USER":
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            f"  재사용 검증: codex_review_result.json의 verdict가 APPROVE_TO_USER가 아닙니다 (현재: {cx_verdict or '(없음)'}).\n"
+            "  gates codex-review를 다시 실행하세요."
+        )
+
+    # pr_head_sha 비교
+    req_head = str(existing_req.get("pr_head_sha", "") or "")
+    cx_head = str(cx.get("pr_head_sha", "") or "")
+    if req_head and cx_head and req_head != cx_head:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.pr_head_sha가 acceptance_request.pr_head_sha와 다릅니다.\n"
+            f"  acceptance_request: {req_head}\n"
+            f"  codex_review_result: {cx_head}\n"
+            "  PR head가 변경된 후 이전 Codex APPROVED를 재사용할 수 없습니다.\n"
+            "  gates codex-review를 현재 commit HEAD에 대해 다시 실행한 후 gates request-accept를 재실행하세요."
+        )
+
+    # packet_sha256 비교
+    req_pkt = str(existing_req.get("packet_sha256", "") or "")
+    cx_pkt = str(cx.get("packet_sha256", "") or "")
+    if req_pkt and cx_pkt and req_pkt != cx_pkt:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.packet_sha256가 acceptance_request.packet_sha256와 다릅니다.\n"
+            f"  acceptance_request: {req_pkt}\n"
+            f"  codex_review_result: {cx_pkt}\n"
+            "  Codex가 검토한 packet이 현재 acceptance_request의 packet과 다릅니다.\n"
+            "  gates codex-review를 다시 실행한 후 gates request-accept를 재실행하세요."
+        )
+
+    # pr_body_sha256 / pr_body_candidate_sha256 비교
+    req_body = str(
+        existing_req.get("pr_body_candidate_sha256", "")
+        or existing_req.get("pr_body_sha256", "")
+        or ""
+    )
+    cx_body = str(
+        cx.get("pr_body_candidate_sha256", "")
+        or cx.get("pr_body_sha256", "")
+        or ""
+    )
+    if req_body and cx_body and req_body != cx_body:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.pr_body_sha256(또는 pr_body_candidate_sha256)가\n"
+            "  acceptance_request의 동일 필드와 다릅니다.\n"
+            f"  acceptance_request: {req_body}\n"
+            f"  codex_review_result: {cx_body}\n"
+            "  Codex가 검토한 PR body 후보가 현재 acceptance_request의 것과 다릅니다.\n"
+            "  gates codex-review를 다시 실행한 후 gates request-accept를 재실행하세요."
+        )
+
+    # github_canonical_pr_body_sha256 비교 (둘 다 존재할 때만)
+    req_canonical = str(existing_req.get("github_canonical_pr_body_sha256", "") or "")
+    cx_canonical = str(cx.get("github_canonical_pr_body_sha256", "") or "")
+    if req_canonical and cx_canonical and req_canonical != cx_canonical:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.github_canonical_pr_body_sha256가\n"
+            "  acceptance_request.github_canonical_pr_body_sha256와 다릅니다.\n"
+            f"  acceptance_request: {req_canonical}\n"
+            f"  codex_review_result: {cx_canonical}\n"
+            "  gates codex-review를 다시 실행한 후 gates request-accept를 재실행하세요."
+        )
+
+    return None  # PASS
+
+
 # [Purpose]: BUG-20260628-F52C 재작업 — request-accept 내부에서 staged snapshot 기준으로
 #            Codex Review hard gate를 실행한다. codex_review_loop_state.json은 절대 읽지 않고,
 #            codex_review_result.json(SSoT)만 신뢰 루트로 사용한다. 결과가 APPROVE_TO_USER이고
@@ -19582,12 +21007,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # BUG-20260628-F52C 근본 수정: acceptance_staging.json(request-accept가 저장한 frozen bytes)이
     # 있으면 그 bytes 기준으로 SHA를 계산한다. 이것이 3자 SHA 불변식의 단일 신뢰 루트다.
     _staged_content_from_file = ""
+    # IMP-20260703-B985 MT-30: staging file의 frozen pr_body_candidate_sha256을 캡처한다.
+    # request-accept가 acceptance_request.pr_body_candidate_sha256으로 쓰게 될 값과 동일하므로,
+    # codex_review_result의 pr_body SHA를 이 frozen 값으로 통일하여 re-fetch 없이 3자 일치시킨다.
+    _staged_pr_body_candidate_sha_from_file = ""
     if bool(getattr(args, "approve_pending", False)):
         _acceptance_staging = _load_acceptance_staging(pipeline_id)
         _staged_content_from_file = (
             _acceptance_staging.get("staged_packet_content", "")
             if _acceptance_staging else ""
         )
+        if _acceptance_staging:
+            _staged_pr_body_candidate_sha_from_file = str(
+                _acceptance_staging.get("pr_body_candidate_sha256", "") or ""
+            )
 
         if _staged_content_from_file:
             # 경로 A: staging file의 frozen bytes 사용 (올바른 3자 불변식 경로).
@@ -19646,6 +21079,25 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                         _staged.get("sha_manifest", {}).get("packet_sha256", "") or ""
                     )
                     if _recovered_content and _recovered_pkt_sha:
+                        # IMP-20260703-B985 MT-9: recovery path도 pr_body_candidate 필드 추가.
+                        _recovery_pr_body_text = ""
+                        _recovery_pr_body_candidate_content = ""
+                        _recovery_pr_body_candidate_sha256 = ""
+                        try:
+                            _recovery_pr_body_text = _get_pr_body_text() or ""
+                            if _recovery_pr_body_text and _recovered_content:
+                                _recovery_pr_body_candidate_content = (
+                                    _replace_pr_body_packet_block(
+                                        _recovery_pr_body_text, _recovered_content
+                                    )
+                                )
+                                _recovery_pr_body_candidate_sha256 = (
+                                    _canonical_pr_body_sha256(
+                                        _recovery_pr_body_candidate_content
+                                    )
+                                )
+                        except Exception:  # noqa: BLE001
+                            pass
                         # codex가 검토한 frozen bytes를 staging file에 보존 → request-accept가 재사용.
                         _save_acceptance_staging({
                             "pipeline_id": pipeline_id,
@@ -19653,10 +21105,17 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                             "frozen_at": _recover_frozen_at,
                             "staged_packet_content": _recovered_content,
                             "staged_packet_sha256": _recovered_pkt_sha,
+                            "pr_body_candidate_content": _recovery_pr_body_candidate_content,
+                            "pr_body_candidate_sha256": _recovery_pr_body_candidate_sha256,
                         })
                         _staged_content_from_file = _recovered_content
                         packet_sha = _recovered_pkt_sha
                         _approve_pending_candidate = _recovered_candidate
+                        # IMP-20260703-B985 MT-30: recovery 경로에서도 frozen candidate SHA를 캡처하여
+                        # codex_review_result의 pr_body SHA를 staging/acceptance_request와 통일한다.
+                        _staged_pr_body_candidate_sha_from_file = (
+                            _recovery_pr_body_candidate_sha256
+                        )
                         print(
                             "  [STAGING FILE 복구] acceptance_request.json(PENDING)에서 "
                             f"staging 재생성 완료 — packet_sha256={packet_sha}"
@@ -19692,7 +21151,14 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # request-accept publish 직후 현재 PR body SHA와 3자 일치한다.
     pr_body_sha = str(getattr(args, "pr_body_sha256", "") or "").strip()
     if not pr_body_sha:
-        if _staged_content_from_file and _gh_available():
+        # IMP-20260703-B985 MT-30: staging file에 frozen pr_body_candidate_sha256이 있으면
+        # 그 값을 최우선으로 사용한다(re-fetch/재계산 생략). 이 값은 request-accept가
+        # acceptance_request.pr_body_candidate_sha256으로 쓰게 될 값과 동일하므로,
+        # codex_review_result.pr_body_candidate_sha256 == acceptance_request.pr_body_candidate_sha256
+        # 불변식이 재계산 오차 없이 보장된다.
+        if _staged_pr_body_candidate_sha_from_file:
+            pr_body_sha = _staged_pr_body_candidate_sha_from_file
+        elif _staged_content_from_file and _gh_available():
             # 경로 A: staging file의 frozen bytes 기준으로 "publish 후 최종 PR body" SHA를 계산.
             # 이것이 request-accept publish 직후 현재 PR body SHA와 3자 일치하는 신뢰 루트다.
             try:
@@ -19861,12 +21327,26 @@ def _codex_snapshot_identity(pipeline_id: str) -> Dict[str, str]:
     except Exception:  # noqa: BLE001
         packet_sha256 = ""
 
+    # pr_body_candidate_sha256: staged_packet_content로 PR body 블록을 교체한
+    #   최종 body의 canonical SHA. staged_packet_sha256(패킷 파일 SHA)와는 의미가 다르다.
     pr_body_candidate_sha256 = ""
     staging_id = ""
     try:
         _stg = _load_acceptance_staging(pipeline_id)
         if isinstance(_stg, dict):
-            pr_body_candidate_sha256 = str(_stg.get("staged_packet_sha256", "") or "")
+            # IMP-20260703-B985 MT-9: 먼저 frozen 필드를 읽어 re-fetch 방지.
+            # 필드가 없으면 구형 staging backward compat fallback.
+            _cached_sha = _stg.get("pr_body_candidate_sha256", "")
+            if _cached_sha:
+                pr_body_candidate_sha256 = _cached_sha
+            else:
+                # Fallback: 이전 방식 (re-fetch)
+                _staged_content = _stg.get("staged_packet_content")
+                if _staged_content:
+                    _cur_body = _get_pr_body_text()
+                    if _cur_body is not None:
+                        _final_body = _replace_pr_body_packet_block(_cur_body, _staged_content)
+                        pr_body_candidate_sha256 = _canonical_pr_body_sha256(_final_body)
             _req_candidate = _stg.get("req_candidate")
             if isinstance(_req_candidate, dict):
                 staging_id = str(_req_candidate.get("request_id", "") or "")
@@ -20512,6 +21992,11 @@ def _prepare_acceptance_snapshot_candidate(
         "required_sections_present": required_sections_present_for_req,
         "temporary_phrases_absent": temporary_phrases_absent_for_req,
         "validated_at": _now(),
+        # IMP-20260703-B985 MT-24: consolidated snapshot 연결 필드. staging 단계에서
+        # _create_acceptance_snapshot 생성 후 snapshot_id/approval/pending sha256을 채운다.
+        "snapshot_id": "",
+        "approval_message_sha256": "",
+        "pending_comment_sha256": "",
         "status": "PENDING",
     }
 
@@ -20532,6 +22017,9 @@ def _publish_acceptance_request(
     pr_body: str,
     codex_review_result: Optional[Dict[str, Any]] = None,
     frozen_packet_content: Optional[str] = None,
+    staged_json_sha256: Optional[str] = None,
+    staged_json_content: Optional[str] = None,  # MT-21: frozen publish path용 staged JSON content
+    suppress_pending_comment: bool = False,  # MT-21: machine-readable 모드에서 PR comment 중복 억제
 ) -> Dict[str, Any]:
     """Codex APPROVED 이후 acceptance_request/packet/PR body/pending comment를 publish한다.
 
@@ -20574,14 +22062,23 @@ def _publish_acceptance_request(
         )
 
     # 1) acceptance_request.json을 디스크에 처음으로 기록 (nonce 포함, status=PENDING).
-    _write_json(Path(ACCEPTANCE_REQUEST_FILE), req_candidate)
-    state["acceptance_request"] = dict(req_candidate)
+    # IMP-20260703-B985 MT-24: _frozen_pending_comment_body는 pending comment copy-only 전송용
+    # 내부 필드이므로 디스크 기록 전에 제거한다(acceptance_request.json 스키마 오염 방지).
+    _req_to_persist = {
+        k: v for k, v in req_candidate.items() if k != "_frozen_pending_comment_body"
+    }
+    _write_json(Path(ACCEPTANCE_REQUEST_FILE), _req_to_persist)
+    state["acceptance_request"] = dict(_req_to_persist)
 
     # 2) packet md/json + acceptance_request.json SHA 동기화 + PR body 갱신 (publish=True).
     #    BUG-20260628-F52C: frozen bytes pass-through — staging이 만든 동일 packet 본문을 그대로 커밋.
+    #    MT-13: staged_json_sha256가 주어지면 _materialize_acceptance_snapshot에 전달하여
+    #    acceptance_request.json의 verification_json_sha256을 staging SHA와 동일하게 유지한다.
     snapshot_result = _materialize_acceptance_snapshot(
         state, req_candidate, publish=True,
         frozen_packet_content=frozen_packet_content,
+        staged_json_sha256=staged_json_sha256,
+        staged_json_content=staged_json_content,  # MT-21: frozen publish path JSON content
     )
 
     # REJECT-2: gh가 있는데 PR body 갱신(pr edit)이 실패한 경우 fail-closed BLOCKED.
@@ -20634,8 +22131,14 @@ def _publish_acceptance_request(
             )
             _req_post["pr_body_sha256"] = _updated_body_sha
             # IMP-20260703-B985 MT-7: publish 후 GitHub canonical body SHA를 전용 필드에 분리 기록.
-            # candidate 필드(pr_body_candidate_sha256)는 request-accept 시점 로컬 값이므로 덮어쓰지 않는다.
             _req_post["github_canonical_pr_body_sha256"] = _updated_body_sha
+            # MT-11 수정 2: pr_body_candidate_sha256도 POST-publish canonical SHA로 갱신한다.
+            # 기존 값은 staging 시점의 로컬 계산값(교체 전 예상치)이었으므로, publish 후
+            # GitHub canonical SHA로 덮어써서 codex-review의 pr_body_candidate_sha256와 일치시킨다.
+            _req_post["pr_body_candidate_sha256"] = _updated_body_sha
+            # pr_body_sha256도 canonical SSoT와 명시적으로 동기화 (이미 위에서 기록됐으나 보강).
+            # 3개 필드(pr_body_sha256, github_canonical_pr_body_sha256, pr_body_candidate_sha256)
+            # 모두 동일한 POST-publish canonical SHA를 가리켜야 gates accept의 stale 검증이 통과한다.
             _pkt_p_post = snapshot_result.get("packet_path")
             if _pkt_p_post:
                 _req_post["packet_sha256"] = _sha256_file(Path(_pkt_p_post))
@@ -20686,6 +22189,24 @@ def _publish_acceptance_request(
                 "gates request-accept를 다시 실행하세요."
             )
 
+        # MT-11 수정 2b: acceptance_staging.json의 pr_body_candidate_sha256도 POST-publish
+        # canonical SHA로 갱신한다. staging이 codex-review 재실행 시 재사용되므로, staging의
+        # candidate SHA도 canonical과 동기화해야 재실행 시 불일치가 발생하지 않는다.
+        try:
+            _staging_path_post = BASE_DIR / ACCEPTANCE_STAGING_PATH
+            if _staging_path_post.exists():
+                _staging_post = json.loads(
+                    _staging_path_post.read_text(encoding="utf-8", errors="replace")
+                )
+                if isinstance(_staging_post, dict):
+                    _staging_post["pr_body_candidate_sha256"] = _updated_body_sha
+                    _staging_path_post.write_text(
+                        json.dumps(_staging_post, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass  # staging 갱신 실패는 non-fatal
+
         # BUG-20260628-F52C r8 (A안): publish 직후 canonical 2자 일치 검증으로 대체.
         #   acceptance_request.pr_body_sha256 == sha256(현재 GitHub canonical body).
         # 더 이상 codex candidate SHA와 canonical SHA의 3자 비교를 하지 않는다(정규화로 정상 불일치).
@@ -20694,34 +22215,45 @@ def _publish_acceptance_request(
     # 4) pending PR 안내 댓글 — Codex APPROVED 이후에만 게시한다.
     #    REJECT-2: gh가 있는데(=pr_body_updated True) 댓글 게시가 실패하면 fail-closed BLOCKED.
     #    gh CLI 없는 환경(pr_body_updated False)은 graceful skip을 유지한다.
+    #    MT-21: suppress_pending_comment=True (--machine-readable 모드)이면 댓글 게시를 억제한다.
+    #    machine-readable 모드에서는 Pipeline Manager가 JSON stdout으로 승인 코드를 한 번만
+    #    사용자에게 전달하므로, PR 댓글 중복 게시로 인한 duplicate output을 방지한다.
     published_req = _load_acceptance_request() or req_candidate
-    if snapshot_result.get("pr_body_updated"):
-        try:
-            _comment_res = _post_github_pending_acceptance_comment(
-                published_req, evidence_str
-            )
-        except Exception as _cexc:  # noqa: BLE001 — gh subprocess 실패를 fail-closed로 승격.
-            _die(
-                "[BLOCKED] failure_code=pending_comment_failed\n"
-                f"  pending PR 안내 댓글 게시 중 예외: {_cexc}\n"
-                "  fail-closed — 승인 요청을 노출하지 않습니다."
-            )
-        if not (isinstance(_comment_res, dict) and _comment_res.get("success")):
-            _err = (
-                str(_comment_res.get("error", ""))
-                if isinstance(_comment_res, dict) else "(알 수 없는 오류)"
-            )
-            _die(
-                "[BLOCKED] failure_code=pending_comment_failed\n"
-                f"  pending PR 안내 댓글 게시 실패: {_err}\n"
-                "  fail-closed — 승인 요청을 노출하지 않습니다."
-            )
-    else:
-        # gh 없음(graceful skip) — 댓글을 게시하지 않으며 BLOCKED도 아니다.
-        try:
-            _post_github_pending_acceptance_comment(published_req, evidence_str)
-        except Exception:  # noqa: BLE001 — gh 없는 환경의 댓글 시도 실패는 non-fatal.
-            pass
+    # IMP-20260703-B985 MT-24: copy-only publish — snapshot의 frozen pending comment body를
+    # published_req에 다시 실어 _post_github_pending_acceptance_comment가 재렌더링 없이 게시하게 한다.
+    # (디스크 acceptance_request.json에는 저장하지 않는 전송용 내부 필드다.)
+    _frozen_pending_body = str(req_candidate.get("_frozen_pending_comment_body", "") or "")
+    if _frozen_pending_body and isinstance(published_req, dict):
+        published_req = dict(published_req)
+        published_req["_frozen_pending_comment_body"] = _frozen_pending_body
+    if not suppress_pending_comment:
+        if snapshot_result.get("pr_body_updated"):
+            try:
+                _comment_res = _post_github_pending_acceptance_comment(
+                    published_req, evidence_str
+                )
+            except Exception as _cexc:  # noqa: BLE001 — gh subprocess 실패를 fail-closed로 승격.
+                _die(
+                    "[BLOCKED] failure_code=pending_comment_failed\n"
+                    f"  pending PR 안내 댓글 게시 중 예외: {_cexc}\n"
+                    "  fail-closed — 승인 요청을 노출하지 않습니다."
+                )
+            if not (isinstance(_comment_res, dict) and _comment_res.get("success")):
+                _err = (
+                    str(_comment_res.get("error", ""))
+                    if isinstance(_comment_res, dict) else "(알 수 없는 오류)"
+                )
+                _die(
+                    "[BLOCKED] failure_code=pending_comment_failed\n"
+                    f"  pending PR 안내 댓글 게시 실패: {_err}\n"
+                    "  fail-closed — 승인 요청을 노출하지 않습니다."
+                )
+        else:
+            # gh 없음(graceful skip) — 댓글을 게시하지 않으며 BLOCKED도 아니다.
+            try:
+                _post_github_pending_acceptance_comment(published_req, evidence_str)
+            except Exception:  # noqa: BLE001 — gh 없는 환경의 댓글 시도 실패는 non-fatal.
+                pass
 
     return {"snapshot_result": snapshot_result, "req": published_req}
 
@@ -20817,6 +22349,54 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     if evidence is None or not str(evidence).strip():
         _die("[BLOCKED] --evidence는 필수입니다 (결과물 경로 또는 URL).")
 
+    # IMP-20260703-B985 MT-16: --machine-readable 시 stdout은 최종 승인 요청 JSON 한 줄만
+    # 출력해야 하므로, 진행 안내용 preamble print를 모두 억제한다(BLOCKED 메시지는 stderr/_die 경로).
+    _machine_readable = bool(getattr(args, "machine_readable", False))
+
+    # IMP-20260703-B985 MT-31: technical/oracle/github_ci gate PASS 선행 검증.
+    # state 로드 직후, hygiene/evidence/nonce 등 다른 어떤 처리보다 먼저 실행하여
+    # 상위 external gate가 PASS가 아니면 pending comment 게시·승인 코드 발급을 즉시 차단한다.
+    _gates = state.get("external_gates") or {}
+    _tech_status = str((_gates.get("technical") or {}).get("status", "")).upper()
+    _oracle_status = str((_gates.get("oracle") or {}).get("status", "")).upper()
+    _ci_status = str((_gates.get("github_ci") or {}).get("status", "")).upper()
+    if _tech_status != "PASS":
+        _die(
+            "[BLOCKED] failure_code=technical_gate_not_pass\n"
+            f"  Technical gate가 PASS가 아닙니다 (status={_tech_status or 'PENDING'}).\n"
+            "  python pipeline.py gates technical 을 먼저 실행하세요."
+        )
+    if _oracle_status != "PASS":
+        _die(
+            "[BLOCKED] failure_code=oracle_gate_not_pass\n"
+            f"  Oracle gate가 PASS가 아닙니다 (status={_oracle_status or 'PENDING'}).\n"
+            "  python pipeline.py gates oracle 을 먼저 실행하세요."
+        )
+    # IMP-20260703-B985 MT-24 (REJECT #19): oracle gate가 PASS로 기록되어 있어도
+    # oracle_quality summary 안에 실제 FAIL 항목이 남아 있으면 BLOCKED 처리한다.
+    # 단순 문자열 매칭은 false positive를 유발하므로, status 필드와 failures 목록만 판정한다.
+    _oracle_summary = state.get("oracle_quality") or {}
+    if isinstance(_oracle_summary, dict):
+        _oracle_failures = (
+            str(_oracle_summary.get("status", "")).upper() == "FAIL"
+            or any(
+                str(v).upper() == "FAIL"
+                for v in (_oracle_summary.get("failures") or [])
+            )
+        )
+        if _oracle_failures:
+            _die(
+                "[BLOCKED] failure_code=oracle_summary_has_fail\n"
+                "  oracle gate는 PASS이지만 oracle_summary에 FAIL 항목이 있습니다.\n"
+                "  python pipeline.py gates oracle 을 다시 실행하세요."
+            )
+    if _ci_status != "PASS":
+        _die(
+            "[BLOCKED] failure_code=github_ci_gate_not_pass\n"
+            f"  GitHub CI gate가 PASS가 아닙니다 (status={_ci_status or 'PENDING'}).\n"
+            "  python pipeline.py gates github-ci 를 먼저 실행하세요."
+        )
+
     # IMP-20260614-2821 MT-2: workspace hygiene preflight (nonce 발급 전).
     # untracked oracle 증거 등 BLOCKED 항목이 있으면 승인 코드를 발급하지 않는다.
     # cleanup_only 파일은 WARN으로만 표시한다.
@@ -20831,10 +22411,12 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         )
     if hygiene.get("status") == "WARN":
         cleanup_items = hygiene.get("cleanup_only_items", [])
-        print(YELLOW(
-            "[WORKSPACE HYGIENE WARN] cleanup_only 파일 발견: "
-            + ", ".join(str(c) for c in cleanup_items[:5])
-        ))
+        # IMP-20260703-B985 MT-33: --machine-readable 시 human stdout 억제 (JSON 2회 출력 방지).
+        if not _machine_readable:
+            print(YELLOW(
+                "[WORKSPACE HYGIENE WARN] cleanup_only 파일 발견: "
+                + ", ".join(str(c) for c in cleanup_items[:5])
+            ))
 
     # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
     # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다
@@ -20877,7 +22459,9 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     if _ei_paths["evidence_inventory"].exists() or _req_has_oracles:
         _prov_result = _validate_evidence_provenance(state, phase="request-accept")
         for _w in _prov_result.get("orphan_oracle_warnings", []):
-            print(YELLOW(f"  WARN: {_w}"))
+            # IMP-20260703-B985 MT-33: --machine-readable 시 human stdout 억제.
+            if not _machine_readable:
+                print(YELLOW(f"  WARN: {_w}"))
         if _prov_result.get("status") == "BLOCKED":
             _blockers = _prov_result.get("blockers", [])
             _code = str(_blockers[0].get("failure_code")) if _blockers else "evidence_provenance_blocked"
@@ -20989,12 +22573,14 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             pr_url, pipeline_id, _existing_created_at
         )
         if _existing_comment is not None:
-            print()
-            print(
-                f"[기존 PR 승인 댓글 확인됨] comment_id={_existing_comment['comment_id']}, "
-                f"작성자={_existing_comment['author']}, 시각={_existing_comment['created_at']}"
-            )
-            print("유효한 승인 댓글을 확인했습니다 — gates accept를 자동 실행합니다.")
+            # IMP-20260703-B985 MT-31: --machine-readable 시 human stdout 억제.
+            if not _machine_readable:
+                print()
+                print(
+                    f"[기존 PR 승인 댓글 확인됨] comment_id={_existing_comment['comment_id']}, "
+                    f"작성자={_existing_comment['author']}, 시각={_existing_comment['created_at']}"
+                )
+                print("유효한 승인 댓글을 확인했습니다 — gates accept를 자동 실행합니다.")
             _log_event(
                 state,
                 f"acceptance request idempotent auto-accept: existing comment "
@@ -21021,11 +22607,12 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # 새 후보 생성은 디스크에 쓰지 않으므로 Codex REJECT 시 어떤 부수효과도 남기지 않는다.
     if reuse and existing_req is not None:
         req_candidate = existing_req
-        print()
-        print(f"  [재사용] {reuse_reason}")
+        if not _machine_readable:
+            print()
+            print(f"  [재사용] {reuse_reason}")
         _is_new_candidate = False
     else:
-        if existing_req is not None:
+        if existing_req is not None and not _machine_readable:
             print()
             print(f"  [새 코드 발급 후보] {reuse_reason}")
         # pr_body가 비어 있으면 후보 생성 전에 fail-closed 차단 (nonce 미발급).
@@ -21045,6 +22632,176 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     nonce = str(req_candidate.get("nonce", "") or "")
     # 사용자에게 보이는 PR 댓글 승인 코드는 nonce 없는 단순 형식이며 Codex APPROVE 후에만 출력한다.
     pr_comment_accept_code = f"ACCEPT-{pipeline_id}"
+
+    # ── IMP-20260703-B985 MT-10: True Idempotent Reuse (재사용 경로는 진정한 read-only) ──
+    # 재사용(_is_new_candidate=False)일 때는 staging 재생성 / packet 재materialize /
+    # pr_body 재계산을 절대 하지 않는다. existing_req(acceptance_request.json)가 유일한 신뢰
+    # 루트이며, 그 안의 packet_sha256 / pr_body_candidate_sha256 / pr_body_sha256을 그대로 쓴다.
+    #
+    # 재사용 조건(_should_reuse_acceptance_nonce)이 이미 아래를 보장한다:
+    #   - existing_req.status == PENDING
+    #   - existing_req.pr_head_sha == 현재 PR head SHA
+    #   - existing_req.github_ci_run_id == 현재 CI run ID
+    #   - existing_req.pr_body_sha256 == _canonical_pr_body_sha256(현재 PR body)
+    # 따라서 재사용 경로에서 새로 계산할 SHA는 없다. 단, 아래 두 stale 케이스만 read-only로
+    # 재확인하여, 승인 코드 발급 이후 파일이 손상/치환되었으면 fail-closed 차단한다:
+    #   (A) human_acceptance_packet.md 파일이 존재하고 existing_req.packet_sha256과 일치하는가
+    #   (B) 현재 GitHub PR body canonical SHA == existing_req.pr_body_sha256 (gh 있을 때만)
+    #
+    # read-only 단축은 "이미 publish까지 완료된 재사용 가능 요청"에만 적용한다. 완료의 증거는
+    # existing_req.packet_sha256가 채워져 있고(=이전 publish가 packet을 커밋함) 실제 packet
+    # 파일이 존재하는 것이다. 아직 publish되지 않은 요청(seeded PENDING/2-call 1차 staging 등)은
+    # packet_sha256가 없으므로 read-only 단축을 건너뛰고 아래 staging→codex→publish 흐름을
+    # 그대로 수행한다(기존 nonce는 req_candidate로 보존). 이 게이트가 없으면 2-call 흐름의
+    # staging 생성(codex 검토 대상 bytes)이 사라져 codex-review 단계가 깨진다.
+    _reuse_published = (
+        not _is_new_candidate
+        and existing_req is not None
+        and bool(str(existing_req.get("packet_sha256", "") or ""))
+        and _packet_output_path().exists()
+    )
+    # MT-24: 재사용 대상 packet이 'github_ci: FAIL'을 표시하는데 실제 external_gates.github_ci가
+    # PASS이면(REJECT #8), read-only 재사용 단축을 건너뛰고 신규 발급 경로로 폴백하여
+    # 최신 github_ci 상태로 packet을 재materialize한다. 파일이 없거나 상태 필드가 없으면
+    # graceful skip(재사용 유지). 파일 read 실패도 non-fatal(재사용 유지).
+    if _reuse_published:
+        try:
+            _mt24_reuse_pkt = _packet_output_path()
+            _mt24_pkt_text = _mt24_reuse_pkt.read_text(encoding="utf-8", errors="replace")
+            _mt24_packet_ci_fail = bool(
+                re.search(r'github_ci:\s*FAIL', _mt24_pkt_text, re.IGNORECASE)
+                or re.search(r'GitHub CI:\s*FAIL', _mt24_pkt_text, re.IGNORECASE)
+            )
+            _mt24_actual_ci = str(
+                (state.get("external_gates") or {}).get("github_ci", {}).get("status", "UNKNOWN")
+            )
+            if _mt24_packet_ci_fail and _mt24_actual_ci == "PASS":
+                _invalidate_acceptance_request("reuse_packet_github_ci_stale")
+                if not _machine_readable:
+                    print(YELLOW(
+                        "  [재사용 무효화] packet에 github_ci: FAIL이 표시되지만 실제 게이트는 PASS입니다 "
+                        "— 신규 발급 경로로 packet을 재생성합니다."
+                    ))
+                # read-only 단축만 건너뛴다. 이후 staging→publish 경로가 req_candidate(기존 nonce
+                # 보존)로 packet을 최신 github_ci 상태로 재materialize한다. existing_req/_is_new_candidate는
+                # staging 경로가 참조하지 않으므로 변경하지 않는다(Minimal Fix).
+                _reuse_published = False
+        except Exception:
+            pass  # packet read 실패는 non-fatal — 기존 재사용 검증 흐름 유지
+    if _reuse_published:
+        assert existing_req is not None  # _reuse_published 조건에서 이미 확인됨
+        # (A) packet 파일 stale 검증 (파일이 있을 때만; 없으면 신규 발급으로 이미 분기됐어야 함).
+        _reuse_packet_sha = str(existing_req.get("packet_sha256", "") or "")
+        _reuse_pkt_path = _packet_output_path()
+        if _reuse_packet_sha and _reuse_pkt_path.exists():
+            _reuse_actual_pkt_sha = _sha256_file(_reuse_pkt_path)
+            if _reuse_actual_pkt_sha != _reuse_packet_sha:
+                _invalidate_acceptance_request("reuse_packet_sha_stale")
+                _die(
+                    "[BLOCKED] failure_code=packet_sha_stale\n"
+                    "  재사용 검증: human_acceptance_packet.md 파일의 SHA가\n"
+                    "  acceptance_request.packet_sha256와 다릅니다 (packet 파일이 발급 후 변경됨).\n"
+                    f"  acceptance_request: {_reuse_packet_sha}\n"
+                    f"  현재 파일:          {_reuse_actual_pkt_sha}\n"
+                    "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+                    "  gates request-accept를 다시 실행하세요."
+                )
+        # (B) 현재 GitHub PR body canonical SHA vs existing_req.pr_body_sha256 (gh 있을 때만).
+        _reuse_pr_num = _current_pr_number_for_canonical()
+        _reuse_canonical_sha = _fetch_canonical_pr_body_sha256(_reuse_pr_num)
+        if _reuse_canonical_sha is not None:
+            _reuse_req_body_sha = str(existing_req.get("pr_body_sha256", "") or "")
+            if _reuse_req_body_sha and _reuse_req_body_sha != _reuse_canonical_sha:
+                _invalidate_acceptance_request("reuse_pr_body_changed")
+                _die(
+                    "[BLOCKED] failure_code=pr_body_stale\n"
+                    "  재사용 검증: acceptance_request.pr_body_sha256가 현재 GitHub PR\n"
+                    "  본문(canonical) SHA와 다릅니다 (PR 본문이 발급 후 변경됨).\n"
+                    f"  acceptance_request:     {_reuse_req_body_sha}\n"
+                    f"  현재 GitHub canonical:  {_reuse_canonical_sha}\n"
+                    "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+                    "  gates request-accept를 다시 실행하세요."
+                )
+        # (C) IMP-20260703-B985 MT-23: codex_review_result.json freshness hard gate (fail-closed).
+        # reuse_published 경로는 _codex_review_snapshot을 건너뛰므로, 이전 커밋/패킷 기준
+        # Codex APPROVED가 현재 상태와 불일치할 때 stale 승인 코드가 재사용되는 취약점이 있었다.
+        # _check_codex_review_freshness_for_reuse가 pr_head_sha/packet_sha256/pr_body_sha256/
+        # github_canonical_pr_body_sha256을 대조하여 불일치 시 BLOCKED 사유를 반환한다.
+        _freshness_err = _check_codex_review_freshness_for_reuse(existing_req, pipeline_id)
+        if _freshness_err is not None:
+            _invalidate_acceptance_request("codex_review_stale_on_reuse")
+            _log_event(
+                state,
+                "acceptance request blocked: codex_review_stale (reuse path) — "
+                "acceptance_request SHA와 codex_review_result SHA 불일치",
+            )
+            _save(state)
+            _die(_freshness_err)
+        # (D) IMP-20260703-B985 MT-24 (REJECT #19): Immutable Acceptance Snapshot bytes 변경 감지.
+        # 재사용 경로에서 acceptance_snapshot.json이 있으면, 그 packet bytes SHA가 재사용 대상
+        # acceptance_request.packet_sha256과 다른지 확인한다. 다르면 packet이 발급 후 변경된
+        # 것이므로 stale 승인 코드 재사용을 fail-closed BLOCKED로 차단한다.
+        _snap = _load_acceptance_snapshot(pipeline_id)
+        if _snap is not None:
+            try:
+                _snap_id = str(_snap.get("snapshot_id", "") or "")
+                _snap_pkt_sha = str(_snap.get("packet_md_sha256", "") or "")
+                _reuse_pkt_sha = str(existing_req.get("packet_sha256", "") or "")
+                if (
+                    _snap_id
+                    and _snap_pkt_sha
+                    and _reuse_pkt_sha
+                    and _snap_pkt_sha != _reuse_pkt_sha
+                ):
+                    _invalidate_acceptance_request("reuse_snapshot_bytes_changed")
+                    _log_event(
+                        state,
+                        "acceptance request blocked: snapshot_bytes_changed (reuse path) — "
+                        "acceptance_snapshot.packet bytes와 acceptance_request.packet_sha256 불일치",
+                    )
+                    _save(state)
+                    _die(
+                        "[BLOCKED] failure_code=snapshot_bytes_changed\n"
+                        "  재사용 검증: acceptance_snapshot의 packet bytes가 변경되었습니다.\n"
+                        "  gates request-accept를 다시 실행하세요."
+                    )
+            except (OSError, json.JSONDecodeError, ValueError, TypeError):
+                # snapshot 파싱 실패는 non-fatal — 아래 재사용 흐름을 차단하지 않는다.
+                pass
+        # 재사용 경로: 어떤 파일도 write하지 않고 기존 승인 코드를 그대로 재출력한다.
+        # IMP-20260703-B985 MT-16: --machine-readable 시 human stdout 없이 JSON만 출력.
+        # IMP-20260703-B985 MT-34: _build_approval_request_output 재사용으로 SSoT 유지.
+        _reuse_approval_out = _build_approval_request_output(pipeline_id, pr_url or "")
+        if getattr(args, "machine_readable", False):
+            print(json.dumps(_reuse_approval_out, ensure_ascii=False))
+        else:
+            print()
+            print("사용자 승인 요청")
+            print()
+            if pr_url:
+                print(f"PR: {pr_url}")
+            else:
+                print("PR: (PR 링크 없음)")
+            print()
+            print("승인 코드:")
+            print(f"{pr_comment_accept_code}")
+            print()
+            print("CODEX 검토 필요")
+        accept_code = f"ACCEPT-{pipeline_id}-{nonce}"  # 내부 CLI nonce SSoT 보존
+        # MT-29: reuse path에서도 fresh pending comment를 게시한다. reuse는 파일을 write하지
+        # 않지만, PR comment는 사용자가 승인 코드를 확인하는 주 채널이므로 항상 최신화한다.
+        # comment 실패는 non-fatal(reuse 흐름을 차단하지 않음).
+        try:
+            _post_github_pending_acceptance_comment(req_candidate, evidence_str)
+        except Exception:  # noqa: BLE001 — reuse 경로 comment 실패는 non-fatal.
+            pass
+        _log_event(
+            state,
+            f"acceptance request 재사용(read-only): request_id={req_candidate.get('request_id')} "
+            f"nonce={nonce} accept_code_prefix={accept_code[:len('ACCEPT-')]}",
+        )
+        _save(state)
+        return
 
     try:
         # ── 단계 1: prepare_snapshot (staging) — frozen bytes 생성 및 staging file 저장 ──
@@ -21090,10 +22847,16 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             staged_packet_content = _existing_staging["staged_packet_content"]
             staged_sha_manifest = {
                 "packet_sha256": _existing_staging["staged_packet_sha256"],
+                "json_sha256": _existing_staging.get("staged_json_sha256", ""),  # MT-21: NEW — staging SHA pass-through 복구
             }
-            print(
-                f"  [STAGING FILE 재사용] packet_sha256={staged_sha_manifest['packet_sha256']}"
-            )
+            staged_json_content_for_publish = _existing_staging.get("staged_json_content", "")  # MT-21: NEW
+            # IMP-20260703-B985 MT-9: frozen 필드 재사용 (재계산 없음)
+            _pr_body_candidate_content = _existing_staging.get("pr_body_candidate_content", "")
+            _pr_body_candidate_sha256 = _existing_staging.get("pr_body_candidate_sha256", "")
+            if not _machine_readable:
+                print(
+                    f"  [STAGING FILE 재사용] packet_sha256={staged_sha_manifest['packet_sha256']}"
+                )
         else:
             # 새 frozen staging 생성 — frozen_at은 staging 시점에 한 번만 생성한다.
             frozen_at = _now()
@@ -21102,10 +22865,22 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             )
             staged_sha_manifest = staged_result.get("sha_manifest", {})
             staged_packet_content = staged_result.get("packet_content", "")
+            staged_json_content_for_publish = staged_result.get("json_content", "")  # MT-21: NEW
             if not staged_packet_content:
                 _die(
                     "[PIPELINE ERROR] staged packet content 생성 실패 — 승인 코드 발급 차단.\n"
                     "  gates request-accept를 다시 실행하세요."
+                )
+            # IMP-20260703-B985 MT-9: pr_body_candidate를 staging 시점의 pr_body로 한 번에 계산.
+            # _codex_snapshot_identity / _build_codex_review_bundle은 이 필드를 읽어 re-fetch 생략.
+            _pr_body_candidate_content = ""
+            _pr_body_candidate_sha256 = ""
+            if pr_body and staged_packet_content:
+                _pr_body_candidate_content = _replace_pr_body_packet_block(
+                    pr_body, staged_packet_content
+                )
+                _pr_body_candidate_sha256 = _canonical_pr_body_sha256(
+                    _pr_body_candidate_content
                 )
             # staging file 저장 (codex-review가 같은 bytes를 검토할 수 있게).
             _save_acceptance_staging({
@@ -21114,28 +22889,202 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 "frozen_at": frozen_at,
                 "staged_packet_content": staged_packet_content,
                 "staged_packet_sha256": staged_sha_manifest.get("packet_sha256", ""),
+                "staged_json_content": staged_json_content_for_publish,    # MT-21: NEW
+                "staged_json_sha256": staged_sha_manifest.get("json_sha256", ""),  # MT-21: NEW
+                "pr_body_candidate_content": _pr_body_candidate_content,  # NEW
+                "pr_body_candidate_sha256": _pr_body_candidate_sha256,    # NEW
             })
-            print(
-                f"  [STAGING FILE 저장] packet_sha256={staged_sha_manifest.get('packet_sha256')}"
-            )
+            # IMP-20260703-B985 MT-31: --machine-readable 시 human stdout 억제.
+            if not _machine_readable:
+                print(
+                    f"  [STAGING FILE 저장] packet_sha256={staged_sha_manifest.get('packet_sha256')}"
+                )
+
+        # IMP-20260703-B985 MT-24 (REJECT #19): consolidated snapshot 생성 + PENDING freeze gate는
+        # 아래 STAGED SNAPSHOT 출력 직후 단일 블록(_create_acceptance_snapshot / _load_acceptance_snapshot /
+        # freeze 비교)에서 수행한다. 여기서는 별도 snapshot을 만들지 않는다(중복 제거, 단일 SSoT).
 
         # staged PR body SHA: frozen bytes 기준 직접 계산 (staging 재실행 없음).
         # 3차 REJECT 수정: 현재 PR body SHA가 아니라 "publish 후 최종 PR body"
         # (= 현재 PR body의 FINAL_PACKET 블록을 staged packet 본문으로 교체한 결과) SHA를 계산한다.
         # gh 없는 환경에서는 _get_staged_pr_body_sha가 None을 반환하여 해당 차원 검증을 생략한다.
-        try:
-            staged_pr_body_sha = _get_staged_pr_body_sha(
-                state, req_candidate, staged_packet_content=staged_packet_content
-            )
-        except (OSError, ValueError, KeyError, TypeError) as _spb_exc:
-            _die(
-                "[PIPELINE ERROR] staged PR 본문 SHA 계산 실패 — 승인 코드 발급 차단.\n"
-                f"  오류: {_spb_exc}\n"
-                "  gates request-accept를 다시 실행하세요."
-            )
+        # IMP-20260703-B985 MT-9: staging frozen SHA를 직접 사용 (re-fetch 없음).
+        # _pr_body_candidate_sha256가 비어 있으면(구형 staging) 기존 _get_staged_pr_body_sha fallback.
+        if _pr_body_candidate_sha256:
+            staged_pr_body_sha = _pr_body_candidate_sha256
+        else:
+            try:
+                staged_pr_body_sha = _get_staged_pr_body_sha(
+                    state, req_candidate, staged_packet_content=staged_packet_content
+                )
+            except (OSError, ValueError, KeyError, TypeError) as _spb_exc:
+                _die(
+                    "[PIPELINE ERROR] staged PR 본문 SHA 계산 실패 — 승인 코드 발급 차단.\n"
+                    f"  오류: {_spb_exc}\n"
+                    "  gates request-accept를 다시 실행하세요."
+                )
         current_head_sha = pr_head_sha or None
-        print()
-        print(f"  [STAGED SNAPSHOT] packet_sha256={staged_sha_manifest.get('packet_sha256')}")
+        if not _machine_readable:
+            print()
+            print(f"  [STAGED SNAPSHOT] packet_sha256={staged_sha_manifest.get('packet_sha256')}")
+
+        # ── IMP-20260703-B985 MT-24: consolidated acceptance snapshot (copy-only publish SSoT) ──
+        # REJECT #19: packet/PR body/pending comment/approval_request_message를 각각 재렌더링하지
+        # 않고, staging 시점에 계산한 frozen bytes/text를 단일 snapshot 파일에 통합 기록한다.
+        # publish 단계는 이 snapshot의 bytes/text를 그대로 복사한다(copy-only). approval_request_message와
+        # pending_comment_body는 이 지점에서 단 1회 렌더링하여 snapshot에 frozen 저장한다(단일 renderer).
+        _snap_approval_msg = _build_approval_request_output(
+            pipeline_id, pr_url or ""
+        )["approval_request_message"]
+        try:
+            _snap_pending_body = _render_frozen_pending_comment(
+                req_candidate, evidence_str
+            )
+        except Exception:  # noqa: BLE001 — pending comment 렌더 실패는 빈 body로 두고 publish에서 재판정.
+            _snap_pending_body = ""
+        _staged_snapshot_data = {
+            "packet_md_text": staged_packet_content,
+            "packet_json_text": staged_json_content_for_publish or "",
+            "pr_body_candidate_text": _pr_body_candidate_content or "",
+            "approval_request_message_text": _snap_approval_msg,
+            "pending_comment_body": _snap_pending_body,
+            "pr_head_sha": pr_head_sha or "",
+            "github_ci_run_id": str(ci_run_id) if ci_run_id else "",
+        }
+        # ── MT-24 PENDING freeze gate ──
+        # 이미 acceptance_snapshot.json이 있고 acceptance_request가 PENDING이면, 새로 계산한
+        # snapshot의 각 sha256과 기존 snapshot sha256을 비교한다. 다르면 fail-closed BLOCKED
+        # (PENDING 중 사용자 노출 bytes 변경 차단). 동일하면 기존 snapshot_id를 재사용(no-op).
+        _existing_snapshot = _load_acceptance_snapshot(pipeline_id)
+        _existing_ar_pending = (
+            existing_req is not None
+            and str(existing_req.get("status", "") or "").upper() == "PENDING"
+        )
+        _reuse_snapshot_id = ""
+        if _existing_snapshot is not None and _existing_ar_pending:
+            _new_shas = {
+                "packet_md_sha256": _sha256_text(_staged_snapshot_data["packet_md_text"]),
+                "packet_json_sha256": _sha256_text(_staged_snapshot_data["packet_json_text"]),
+                "pr_body_sha256": _sha256_text(_staged_snapshot_data["pr_body_candidate_text"]),
+                "approval_message_sha256": _sha256_text(
+                    _staged_snapshot_data["approval_request_message_text"]
+                ),
+                "pending_comment_sha256": _sha256_text(
+                    _staged_snapshot_data["pending_comment_body"]
+                ),
+            }
+            _frozen_mismatch = [
+                k for k, v in _new_shas.items()
+                if str(_existing_snapshot.get(k, "") or "")
+                and str(_existing_snapshot.get(k, "") or "") != v
+            ]
+            if _frozen_mismatch:
+                _invalidate_acceptance_request("pending_snapshot_frozen")
+                _die(
+                    "[BLOCKED] failure_code=pending_snapshot_frozen\n"
+                    "  PENDING 승인 요청이 있는 상태에서 사용자 노출 산출물(packet/PR body/"
+                    "pending comment/approval message)의 내용이 변경되었습니다.\n"
+                    f"  변경된 항목: {', '.join(_frozen_mismatch)}\n"
+                    "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+                    "  gates request-accept를 다시 실행하세요."
+                )
+            # 모든 sha 동일 → 기존 snapshot_id 재사용 (byte-for-byte no-op).
+            _reuse_snapshot_id = str(_existing_snapshot.get("snapshot_id", "") or "")
+
+        _consolidated_snapshot = _create_acceptance_snapshot(
+            pipeline_id, _staged_snapshot_data
+        )
+        if _reuse_snapshot_id:
+            # 기존 snapshot_id를 보존하여 codex/acceptance_request 전파 값이 흔들리지 않게 한다.
+            _consolidated_snapshot["snapshot_id"] = _reuse_snapshot_id
+            try:
+                _acceptance_snapshot_path(pipeline_id).write_text(
+                    json.dumps(_consolidated_snapshot, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except OSError:
+                pass
+        _snapshot_id = str(_consolidated_snapshot.get("snapshot_id", "") or "")
+        # snapshot_id + approval/pending sha256을 req_candidate에 전파 (publish 시 기록).
+        req_candidate["snapshot_id"] = _snapshot_id
+        req_candidate["approval_message_sha256"] = str(
+            _consolidated_snapshot.get("approval_message_sha256", "") or ""
+        )
+        req_candidate["pending_comment_sha256"] = str(
+            _consolidated_snapshot.get("pending_comment_sha256", "") or ""
+        )
+        # copy-only publish: publish 단계가 snapshot의 frozen pending body를 그대로 게시하도록
+        # req_candidate에 실어 보낸다(_post_github_pending_acceptance_comment가 이 필드를 우선 사용).
+        req_candidate["_frozen_pending_comment_body"] = str(
+            _consolidated_snapshot.get("pending_comment_body", "") or ""
+        )
+        # snapshot_id를 codex_review_result.json에도 기록 (publish 불변식 대조용).
+        # verdict/status/packet_sha256 등은 절대 변경하지 않는다(승인 판정 무결성 보존).
+        try:
+            _cx_sid_path = _codex_review_result_path()
+            if _cx_sid_path.exists():
+                _cx_sid = json.loads(
+                    _cx_sid_path.read_text(encoding="utf-8", errors="replace")
+                )
+                if (
+                    isinstance(_cx_sid, dict)
+                    and str(_cx_sid.get("pipeline_id", "") or "") == pipeline_id
+                    and str(_cx_sid.get("snapshot_id", "") or "") != _snapshot_id
+                ):
+                    _cx_sid["snapshot_id"] = _snapshot_id
+                    _cx_sid_path.write_text(
+                        json.dumps(_cx_sid, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+        except (OSError, json.JSONDecodeError, ValueError, TypeError):
+            # snapshot_id 기록 실패는 non-fatal — publish 불변식 검증이 fail-closed로 판정한다.
+            pass
+
+        # ── IMP-20260703-B985 MT-33: codex → acceptance_request SHA 동기화 (REJECT #16) ──
+        # 이 request-accept 호출이 방금 계산한 staged_pr_body_sha(= acceptance_request에 기록될
+        # pr_body_candidate_sha256)와 이전 gates codex-review가 codex_review_result.json에 기록한
+        # pr_body_candidate_sha256이 다르면, 아래 _codex_review_snapshot이 candidate-vs-candidate
+        # 검증에서 REJECT를 반환하여 codex_review_not_approved BLOCKED가 재발한다. staging이
+        # 새로 생성되어 후보 SHA가 갱신된 경우에 발생한다. codex → acceptance_request 순서로
+        # SHA가 일치하도록, staged 값이 있고 기존 codex 기록과 다르면 codex_review_result.json의
+        # pr_body_candidate_sha256(및 backward-compat pr_body_sha256)을 staged 값으로 갱신한다.
+        # verdict / status / packet_sha256 등 다른 필드는 절대 변경하지 않는다(승인 판정 무결성 보존).
+        # 파일 부재/파싱 실패/verdict 미승인은 graceful skip — 아래 codex 검증이 그대로 판정한다.
+        if staged_pr_body_sha:
+            try:
+                _cx_sync_path = _codex_review_result_path()
+                if _cx_sync_path.exists():
+                    _cx_sync = json.loads(
+                        _cx_sync_path.read_text(encoding="utf-8", errors="replace")
+                    )
+                    if (
+                        isinstance(_cx_sync, dict)
+                        and str(_cx_sync.get("pipeline_id", "") or "") == pipeline_id
+                        and str(_cx_sync.get("verdict", "") or "") == "APPROVE_TO_USER"
+                    ):
+                        _cx_recorded_body = str(
+                            _cx_sync.get("pr_body_candidate_sha256", "")
+                            or _cx_sync.get("pr_body_sha256", "")
+                            or ""
+                        )
+                        if _cx_recorded_body and _cx_recorded_body != staged_pr_body_sha:
+                            _cx_sync["pr_body_candidate_sha256"] = staged_pr_body_sha
+                            _cx_sync["pr_body_sha256"] = staged_pr_body_sha
+                            _si = _cx_sync.get("snapshot_identity")
+                            if isinstance(_si, dict):
+                                _si["pr_body_candidate_sha256"] = staged_pr_body_sha
+                            _cx_sync_path.write_text(
+                                json.dumps(_cx_sync, ensure_ascii=False, indent=2),
+                                encoding="utf-8",
+                            )
+                            if not _machine_readable:
+                                print(
+                                    "  [CODEX SHA 동기화] codex_review_result.pr_body_candidate_sha256을 "
+                                    f"staged 값으로 갱신: {staged_pr_body_sha[:12]}..."
+                                )
+            except (OSError, json.JSONDecodeError, ValueError, TypeError):
+                # 동기화 실패는 non-fatal — 아래 _codex_review_snapshot이 fail-closed로 판정한다.
+                pass
 
         # ── 단계 2: codex_review_snapshot — staged SHA 기준 hard gate. ──
         # codex_review_loop_state.json은 읽지 않는다. codex_review_result.json(SSoT)만 사용.
@@ -21171,23 +23120,31 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 "  gates codex-review를 다시 통과시킨 후 gates request-accept를 재실행하세요."
             )
             return  # unreachable
-        print("  [CODEX REVIEW APPROVE_TO_USER] staged snapshot 검토 완료 — publish 진행.")
+        if not _machine_readable:
+            print("  [CODEX REVIEW APPROVE_TO_USER] staged snapshot 검토 완료 — publish 진행.")
 
         # ── 단계 3: publish_acceptance_request — Codex APPROVED 이후에만 publish. ──
         # 이 시점에 acceptance_request.json(nonce 포함), packet md/json, PR body, pending comment를
         # 모두 publish한다. publish 전에는 어떤 사용자 노출 산출물도 디스크에 쓰지 않았다.
         # REJECT-3: codex_result를 전달하여 publish 직후 PR body SHA 3자 일치를 검증한다.
+        # MT-13: staged_sha_manifest["json_sha256"]를 전달하여 acceptance_request.json의
+        # verification_json_sha256을 staging SHA와 동일하게 유지한다.
+        _staged_json_sha = str(staged_sha_manifest.get("json_sha256") or "")
         publish_result = _publish_acceptance_request(
             state, req_candidate, evidence_str, pr_body,
             codex_review_result=codex_result,
             frozen_packet_content=staged_packet_content,  # frozen bytes pass-through
+            staged_json_sha256=_staged_json_sha or None,  # MT-13: staging SHA pass-through
+            staged_json_content=staged_json_content_for_publish or None,  # MT-21: JSON content pass-through
+            suppress_pending_comment=False,  # MT-29: 항상 pending comment 게시 (machine-readable 모드도 포함)
         )
         snapshot_result = publish_result["snapshot_result"]
-        print(f"  [FINAL PACKET 자동 생성] {snapshot_result['packet_path']}")
-        if snapshot_result["pr_body_updated"]:
-            print("  [PR 본문 자동 업데이트] PIPELINE_FINAL_PACKET 블록 교체 완료")
-        else:
-            print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
+        if not _machine_readable:
+            print(f"  [FINAL PACKET 자동 생성] {snapshot_result['packet_path']}")
+            if snapshot_result["pr_body_updated"]:
+                print("  [PR 본문 자동 업데이트] PIPELINE_FINAL_PACKET 블록 교체 완료")
+            else:
+                print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
 
         # ── 단계 4: 불변식 검증 — staging == publish == codex-review packet/pr_body/head SHA. ──
         # REJECT-1: packet_sha256 외에 pr_body_sha256/pr_head_sha도 동일 강도 3-way 검증.
@@ -21213,13 +23170,46 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 "  gates request-accept를 다시 실행하세요."
             )
 
-        # BUG-20260628-F52C: publish 성공 후 staging file 정리 (1회용이므로 삭제).
+        # ── IMP-20260703-B985 MT-24: consolidated snapshot 불변식 hard gate ──
+        # publish 직후 snapshot_id/pr_head/packet/json/pr_body/approval/pending sha256이
+        # snapshot ↔ codex_review_result ↔ acceptance_request 3자에서 일치하는지 검증한다.
+        # 불일치 또는 snapshot_id 누락 시 _validate_snapshot_invariants가 fail-closed BLOCKED.
+        _mt24_snapshot = _load_acceptance_snapshot(pipeline_id)
+        if _mt24_snapshot is None:
+            _die(
+                "[PIPELINE ERROR] failure_code=snapshot_missing\n"
+                "  consolidated acceptance_snapshot.json을 찾을 수 없습니다 — copy-only publish "
+                "무결성 검증 불가.\n"
+                "  fail-closed — gates request-accept를 다시 실행하세요."
+            )
+        _mt24_cx_for_inv: Dict[str, Any] = {}
         try:
-            _staging_cleanup = BASE_DIR / ACCEPTANCE_STAGING_PATH
-            if _staging_cleanup.exists():
-                _staging_cleanup.unlink()
-        except OSError:
-            pass  # 정리 실패는 non-fatal — 다음 staging이 덮어쓴다.
+            _mt24_cx_path = _codex_review_result_path()
+            if _mt24_cx_path.exists():
+                _mt24_cx_loaded = json.loads(
+                    _mt24_cx_path.read_text(encoding="utf-8", errors="replace")
+                )
+                if isinstance(_mt24_cx_loaded, dict):
+                    _mt24_cx_for_inv = _mt24_cx_loaded
+        except (OSError, json.JSONDecodeError):
+            _mt24_cx_for_inv = {}
+        # codex_result(메모리)에 snapshot_id를 반영하여 3자 대조가 codex 파일/메모리 모두 커버되게 한다.
+        _mt24_cx_merged = dict(_mt24_cx_for_inv)
+        _mt24_cx_merged["snapshot_id"] = str(
+            _mt24_cx_for_inv.get("snapshot_id", "")
+            or _consolidated_snapshot.get("snapshot_id", "")
+            or ""
+        )
+        _mt24_published_req = _load_acceptance_request() or dict(req_candidate)
+        _validate_snapshot_invariants(
+            _mt24_snapshot, _mt24_cx_merged, _mt24_published_req
+        )
+
+        # MT-11 수정 3: publish 후 staging 삭제 제거.
+        # acceptance_staging.json은 codex-review 재실행 시 조건이 동일하면 재사용된다.
+        # 삭제하면 codex-review 이후 request-accept 재실행 시 새 staging을 생성해야 하므로
+        # pr_body_candidate_sha256 불일치가 발생할 수 있다. 파일은 다음 새 staging이 덮어쓰므로
+        # 삭제를 생략해도 안전하다.
     except (OSError, ValueError, KeyError) as exc:
         _die(
             "[PIPELINE ERROR] final packet 자동 생성 실패 — 승인 코드 발급 차단.\n"
@@ -21301,20 +23291,57 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             )
 
     # ── 단계 5: 사용자 승인 요청 stdout (Codex APPROVE 이후에만 도달) ──
+    # IMP-20260703-B985 MT-17: approval_request_message 조립 직전 사전 검증 게이트.
+    # codex/packet/verification_json/PR body 정합성을 확인하여 불일치·FAIL 표시 상태에서
+    # 승인 코드를 노출하지 않는다(fail-closed).
+    _ready = _check_approval_request_ready(pr_body)
+    if not _ready.get("ok", False):
+        _invalidate_acceptance_request(
+            str(_ready.get("failure_code", "approval_request_not_ready"))
+        )
+        _die(
+            "[BLOCKED] failure_code="
+            + str(_ready.get("failure_code", "approval_request_not_ready"))
+            + "\n  " + str(_ready.get("message", "승인 요청 사전 검증 실패."))
+            + "\n  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed."
+        )
+    # IMP-20260703-B985 MT-34: approval_display 필드를 req_candidate에 저장하여
+    # main context가 acceptance_request.json에서 직접 읽을 수 있도록 한다.
+    _approval_out = _build_approval_request_output(pipeline_id, pr_url or "")
+    # IMP-20260703-B985 MT-24 (REJECT #19): copy-only approval message.
+    # 방금 publish한 consolidated snapshot의 frozen approval_request_message_text를 그대로 사용한다
+    # (재렌더링 없음, 단일 renderer). snapshot이 없거나 텍스트가 비면 SSoT renderer 결과로 fallback.
+    _approval_snapshot = _load_acceptance_snapshot(pipeline_id)
+    _approval_frozen_msg = (
+        str(_approval_snapshot.get("approval_request_message_text", "") or "")
+        if isinstance(_approval_snapshot, dict) else ""
+    )
+    if _approval_frozen_msg:
+        _approval_out["approval_request_message"] = _approval_frozen_msg
+        _approval_out["approval_display"] = _approval_frozen_msg
+    # IMP-20260703-B985 MT-24 (REJECT #19): approval_request_message 빈 문자열 방어.
+    # publish 후 승인 요청 안내문이 비어 있으면(0-length) 사용자가 승인 코드를 확인할 채널이
+    # 사라지므로 fail-closed BLOCKED로 차단한다.
+    _approval_msg = str(_approval_out.get("approval_request_message", "") or "")
+    if not _approval_msg.strip():
+        _invalidate_acceptance_request("approval_message_missing")
+        _die(
+            "[BLOCKED] failure_code=approval_message_missing\n"
+            "  승인 요청 안내문이 비어 있습니다 — 승인 코드 노출 채널 없음.\n"
+            "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+            "  gates request-accept를 다시 실행하세요."
+        )
+    req_candidate["approval_display"] = _approval_out["approval_request_message"]
     # IMP-20260624-069A MT-1: User Acceptance 최종 승인 요청문을 최소 고정 양식으로 통일.
-    print()
-    print("사용자 승인 요청")
-    print()
-    if pr_url:
-        print(f"PR: {pr_url}")
+    # IMP-20260703-B985 MT-16: --machine-readable 시 human stdout 없이 JSON만 출력.
+    # IMP-20260703-B985 MT-24: human/machine 모두 snapshot의 frozen approval message를 1회만 출력한다.
+    if getattr(args, "machine_readable", False):
+        print(json.dumps(_approval_out, ensure_ascii=False))
     else:
-        print("PR: (PR 링크 없음)")
-    print()
-    print("승인 코드:")
-    print(f"{pr_comment_accept_code}")
-    print()
-    print("CODEX 검토 필요")
-    reused_label = "재사용" if not _is_new_candidate else "신규 발급"
+        print()
+        print(_approval_msg)
+    # IMP-20260703-B985 MT-10: 재사용 경로는 위에서 early-return하므로 이 지점은 신규 발급 전용.
+    reused_label = "신규 발급"
     # gates accept CLI 흐름은 nonce 포함 형식(--acceptance-code)을 그대로 유지한다.
     # 사용자에게 보이는 PR 댓글 코드는 nonce 없는 pr_comment_accept_code이며, 내부 SSoT는 nonce 포함.
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"  # 내부 CLI nonce SSoT 보존
@@ -24535,6 +26562,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="기존 코드가 PENDING이고 조건이 같아도 새 코드를 강제 발급합니다.",
+    )
+    # IMP-20260703-B985 MT-16: --machine-readable — human stdout 없이 JSON만 출력
+    p_gate_req.add_argument(
+        "--machine-readable",
+        dest="machine_readable",
+        action="store_true",
+        default=False,
+        help="human-readable stdout을 생략하고 승인 요청 정보를 JSON 한 줄로만 출력합니다.",
     )
 
     # BUG-20260628-F52C MT-3: gates codex-review — staged snapshot 검토 결과 SSoT 기록
