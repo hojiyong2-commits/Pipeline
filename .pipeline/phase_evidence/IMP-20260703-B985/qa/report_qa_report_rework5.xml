@@ -1,0 +1,26 @@
+<qa_report>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <mt_id>MT-33</mt_id>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+  <test_results>122 passed, 0 failed</test_results>
+  <acceptance_pending_check>PASS - acceptance PENDING 표시 수정 확인</acceptance_pending_check>
+  <machine_readable_check>PASS - human stdout 억제 확인</machine_readable_check>
+  <codex_sha_check>PASS - codex SHA 동기화 확인</codex_sha_check>
+  <failure_signature>none</failure_signature>
+  <round>5</round>
+  <micro_task_boundary>
+    <mt_id>MT-33</mt_id>
+    <verdict>PASS</verdict>
+    <blast_radius>IN_SCOPE</blast_radius>
+    <files_checked>pipeline.py,tests/test_canonical_pr_body_sha256_b985.py</files_checked>
+    <extra_files_found>none</extra_files_found>
+  </micro_task_boundary>
+  <scope_declaration>
+    <files_to_modify>pipeline.py,tests/test_canonical_pr_body_sha256_b985.py</files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_build_final_packet_content,_display_model_from_evidence,cmd_gates_request_accept</target_function>
+    <change_summary>acceptance PENDING 표시 수정, machine-readable 억제, codex SHA 동기화</change_summary>
+  </impact_analysis>
+</qa_report>
