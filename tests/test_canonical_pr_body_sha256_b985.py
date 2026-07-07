@@ -3205,6 +3205,7 @@ class TestMT34MachineReadableZeroHumanApprovalBlock:
 
     def test_machine_readable_suppresses_approval_block(self, tmp_path):
         """--machine-readable 모드에서 stdout에 approval block이 0회 출력되는지 검증"""
+        # CLI_EVIDENCE_ALLOW_READ_ONLY: BLOCKED 경로에서 stdout 억제 검증 — 상태 변경 없음
         import subprocess
         import os
         env = {**os.environ, "PIPELINE_STATE_PATH": str(tmp_path / "state.json")}
