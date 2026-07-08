@@ -26,11 +26,15 @@ CODEX 검토 필요"""
 
 
 def run_validator(content: str) -> tuple:
-    """파일에 content를 쓰고 validate-user-approval-message CLI를 실행한다."""
+    """파일에 content를 쓰고 validate-user-approval-message CLI를 실행한다.
+
+    MT-31: BOM 없이 LF 강제 저장 (binary 모드).
+    """
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", encoding="utf-8", delete=False
+        mode="wb", suffix=".txt", delete=False
     ) as f:
-        f.write(content)
+        # BOM 없이 LF 강제: Windows tempfile의 text 모드 CRLF 변환 방지
+        f.write(content.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8"))
         fname = f.name
     try:
         result = subprocess.run(
@@ -137,3 +141,127 @@ def test_pipeline_manager_forbidden_suffix_fails():
     assert code == 1, f"Expected exit 1, got {code}: {data}"
     assert data["status"] == "FAIL"
     assert any("금지 문구" in e for e in data["errors"])
+
+
+def _run_validator_path(file_path: str):
+    """파일 경로를 받아 validator 실행 (MT-31 헬퍼)."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            PIPELINE_PY,
+            "gates",
+            "validate-user-approval-message",
+            "--file",
+            file_path,
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    try:
+        data = json.loads(result.stdout.strip())
+    except Exception:
+        data = {"status": "PARSE_ERROR", "raw": result.stdout}
+    return result.returncode, data
+
+
+def test_bom_causes_fail(tmp_path):
+    """BOM 있으면 FAIL"""
+    bom_msg = b"\xef\xbb\xbf" + VALID_MSG.encode("utf-8")
+    p = tmp_path / "bom_msg.txt"
+    p.write_bytes(bom_msg)
+    code, data = _run_validator_path(str(p))
+    assert code == 1
+    assert data["status"] == "FAIL"
+    assert any("BOM" in e for e in data["errors"])
+
+
+def test_ui_task_notification_phrase_forbidden(tmp_path):
+    """'위 태스크 알림' 포함 → FAIL"""
+    msg = VALID_MSG + "\n\n위 태스크 알림에 표시된 내용을 확인하세요"
+    p = tmp_path / "msg.txt"
+    p.write_text(msg, encoding="utf-8")
+    code, data = _run_validator_path(str(p))
+    assert code == 1
+    assert data["status"] == "FAIL"
+    assert any("위 태스크 알림" in e for e in data["errors"])
+
+
+def test_accept_reject_input_phrase_forbidden(tmp_path):
+    """'ACCEPT 또는 REJECT를 입력' 포함 → FAIL"""
+    msg = VALID_MSG + "\n\nACCEPT 또는 REJECT를 입력해 주세요"
+    p = tmp_path / "msg.txt"
+    p.write_text(msg, encoding="utf-8")
+    code, data = _run_validator_path(str(p))
+    assert code == 1
+    assert data["status"] == "FAIL"
+
+
+def test_scratch_not_root():
+    """root에 final_user_message.txt 없어야 함"""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root_file = os.path.join(root, "final_user_message.txt")
+    assert not os.path.exists(root_file), (
+        f"root에 final_user_message.txt가 있으면 안 됩니다: {root_file}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# MT-31 신규 테스트 (REJECT #24 재발 방지)
+# ---------------------------------------------------------------------------
+
+def _run_validator_path(file_path: str) -> tuple:
+    """파일 경로를 직접 받아 validate-user-approval-message CLI를 실행한다."""
+    result = subprocess.run(
+        [sys.executable, PIPELINE_PY, "gates", "validate-user-approval-message", "--file", file_path],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    try:
+        data = json.loads(result.stdout.strip())
+    except Exception:
+        data = {"status": "PARSE_ERROR", "raw": result.stdout}
+    return result.returncode, data
+
+
+def test_bom_causes_fail(tmp_path):
+    """BOM 있으면 FAIL"""
+    bom_msg = b"\xef\xbb\xbf" + VALID_MSG.encode("utf-8")
+    p = tmp_path / "bom_msg.txt"
+    p.write_bytes(bom_msg)
+    code, data = _run_validator_path(str(p))
+    assert code == 1, f"Expected exit 1, got {code}: {data}"
+    assert data["status"] == "FAIL"
+    assert any("BOM" in e for e in data.get("errors", [])), f"BOM 오류 없음: {data}"
+
+
+def test_ui_task_notification_phrase_forbidden(tmp_path):
+    """'위 태스크 알림' 포함 → FAIL"""
+    msg = VALID_MSG + "\n\n위 태스크 알림에 표시된 내용을 확인하세요"
+    p = tmp_path / "msg.txt"
+    p.write_text(msg, encoding="utf-8")
+    code, data = _run_validator_path(str(p))
+    assert code == 1, f"Expected exit 1, got {code}: {data}"
+    assert data["status"] == "FAIL"
+    assert any("위 태스크 알림" in e for e in data.get("errors", [])), f"금지 문구 오류 없음: {data}"
+
+
+def test_accept_reject_input_phrase_forbidden(tmp_path):
+    """'ACCEPT 또는 REJECT를 입력' 포함 → FAIL"""
+    msg = VALID_MSG + "\n\nACCEPT 또는 REJECT를 입력해 주세요"
+    p = tmp_path / "msg.txt"
+    p.write_text(msg, encoding="utf-8")
+    code, data = _run_validator_path(str(p))
+    assert code == 1, f"Expected exit 1, got {code}: {data}"
+    assert data["status"] == "FAIL"
+    assert any("금지 문구" in e for e in data.get("errors", [])), f"금지 문구 오류 없음: {data}"
+
+
+def test_scratch_not_root():
+    """repo root에 final_user_message.txt가 없어야 함 (scratch에만 있어야 함)"""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root_file = os.path.join(root, "final_user_message.txt")
+    assert not os.path.exists(root_file), (
+        f"repo root에 final_user_message.txt가 있으면 안 됩니다: {root_file}"
+    )

@@ -335,25 +335,36 @@ Pipeline Manager는 `gates request-accept` 실행 시 반드시 `--machine-reada
 - Pipeline Manager가 승인 요청문(사용자 승인 요청 / 승인 코드: / CODEX 검토 필요 블록)을 직접 조립하거나 재작성하는 것은 금지다.
 - `request-accept` human stdout을 그대로 복붙하는 것도 금지다.
 
-## request-accept 중계 프로토콜 (이중 출력 완전 차단 — IMP-20260703-B985 MT-30)
+## request-accept 중계 프로토콜 v2 (MT-31 — 이중 출력 완전 차단)
 
-REJECT #23 근본 원인 차단: task result에 approval 블록 포함 시 task-notification + 오케스트레이터 relay = 2회 출력.
+**실행 순서:**
 
-`gates request-accept --machine-readable` 실행 후 반드시 아래 프로토콜을 따른다:
+1. `python pipeline.py gates request-accept --machine-readable --evidence <결과물-경로>` 실행
+   - pipeline.py가 자동으로 `.pipeline/runs/{pipeline_id}/scratch/final_user_message.txt`에 approval_request_message를 저장 (BOM 없이, LF, UTF-8)
+2. JSON stdout에서 `"message_file"` 필드 경로 확인
+3. `python pipeline.py gates validate-user-approval-message --file .pipeline/runs/{pipeline_id}/scratch/final_user_message.txt` 실행
+4. PASS이면: **아래 JSON만 task result로 반환** (approval 블록 절대 포함 금지)
 
-1. JSON stdout에서 `approval_request_message` 필드 추출
-2. `final_user_message.txt` 파일에 approval_request_message만 기록 (prefix/suffix 없이 원문 그대로)
-3. `python pipeline.py gates validate-user-approval-message --file final_user_message.txt` 실행
-4. **PASS이면**: task result를 아래 기계 가독 JSON으로만 반환 — approval 블록 포함 절대 금지
-   `{"request_accept": "PASS", "validated": true, "message_file": "final_user_message.txt"}`
-5. **FAIL이면**: task result를 BLOCKED 상태 JSON으로 반환 후 오류 수정
+```json
+{"request_accept": "PASS", "validated": true, "message_file": ".pipeline/runs/{pipeline_id}/scratch/final_user_message.txt"}
+```
 
-**task result에 절대 포함 금지:**
-- approval 블록 전체 (사용자 승인 요청 ... CODEX 검토 필요)
-- "gates request-accept가 성공했습니다" 등 설명 문구
-- "승인 요청 메시지:" prefix
-- "JSON stdout에서 approval_request_message를 추출" 등 프로세스 설명
-- "아래를 사용자에게 전달해 주세요" 안내
+5. FAIL이면: BLOCKED 상태 JSON 반환
 
-**오케스트레이터 역할:**
-오케스트레이터는 Pipeline Manager task result에서 기계 가독 JSON을 받은 뒤, `final_user_message.txt`를 Read 도구로 읽어 내용을 사용자에게 1회만 출력한다. task-notification(PM result)에는 JSON만 표시되고, 오케스트레이터 응답에서만 approval 블록이 1회 표시된다.
+**task result에 절대 포함 금지 (이 외 다른 텍스트 없음):**
+- "사용자 승인 요청" 블록 전체
+- "PR:" 링크
+- "승인 코드:" 줄
+- "CODEX 검토 필요"
+- "gates request-accept가 성공했습니다"
+- "승인 요청 메시지:"
+- "validate-user-approval-message PASS"
+- "CI run ... 통과"
+- "위 태스크 알림"
+- "ACCEPT 또는 REJECT를 입력"
+- 설명 문구 일체
+
+**오케스트레이터(Claude)의 역할:**
+- task result JSON에서 `message_file` 경로를 읽음
+- 해당 파일 내용을 Read 도구로 읽어 byte-for-byte 출력 (설명 없이)
+- 오케스트레이터도 설명 추가 절대 금지

@@ -5687,6 +5687,29 @@ def _validate_approval_request_message(msg: str) -> None:
         )
 
 
+# [Purpose]: IMP-20260703-B985 MT-31 — scratch 경로 헬퍼.
+#            pipeline.py 내 각 커맨드가 파이프라인 전용 임시 디렉토리를 단일 경로로 사용한다.
+# [Assumptions]: pipeline_id는 비어있지 않은 str이어야 한다.
+# [Vulnerability & Risks]: 디렉토리 생성 실패 시 OSError가 상위로 전파된다.
+# [Improvement]: 향후 hygiene archive 대상에 이 경로를 추가한다.
+_SCRATCH_DIR_TEMPLATE = ".pipeline/runs/{pipeline_id}/scratch"
+
+
+def _get_scratch_dir(pipeline_id: str) -> str:
+    """파이프라인 전용 scratch 디렉토리 경로를 반환하고 디렉토리를 생성한다 (MT-31 SSoT).
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID. 비어있으면 안 된다.
+    Returns:
+        생성된 scratch 디렉토리의 상대 경로 문자열.
+    Raises:
+        OSError: 디렉토리 생성에 실패한 경우.
+    """
+    p = _SCRATCH_DIR_TEMPLATE.format(pipeline_id=pipeline_id)
+    os.makedirs(p, exist_ok=True)
+    return p
+
+
 # [Purpose]: IMP-20260703-B985 MT-30 — final_user_message.txt 고정 양식 검증 게이트.
 #            Pipeline Manager가 approval_request_message를 파일에 쓴 뒤 이 CLI로 검증한다.
 #            이중 출력 구조 차단: task result에 approval 블록 포함 금지를 강제하는 하드 게이트.
@@ -5711,6 +5734,13 @@ _APPROVAL_MSG_FORBIDDEN_FINAL: list = [
     "댓글에 입력해 주세요",
     "이번 응답에서 중계",
     "기타 approval_request_message 앞뒤 설명",
+    # MT-31: REJECT #24 재발 방지 — 오케스트레이터 설명 문구 차단
+    "위 태스크 알림",
+    "ACCEPT 또는 REJECT를 입력",
+    "validate-user-approval-message PASS",
+    "CI run",
+    "통과",
+    "확인하시고",
 ]
 
 
@@ -5731,13 +5761,28 @@ def _cmd_gates_validate_user_approval_message(args: "argparse.Namespace") -> Non
         print(json.dumps({"status": "FAIL", "errors": ["--file 인자가 필요합니다."]}, ensure_ascii=False))
         sys.exit(1)
     try:
-        with open(file_path, encoding="utf-8") as f:
-            msg = f.read()
+        with open(file_path, "rb") as f:
+            raw = f.read()
     except FileNotFoundError:
         print(json.dumps({"status": "FAIL", "errors": [f"파일을 찾을 수 없습니다: {file_path}"]}, ensure_ascii=False))
         sys.exit(1)
 
+    # MT-31: BOM 감지 — UTF-8 BOM 없이 저장해야 합니다
+    if raw.startswith(b"\xef\xbb\xbf"):
+        print(json.dumps({"status": "FAIL", "errors": ["BOM 감지됨 — UTF-8 BOM 없이 저장해야 합니다"], "file": file_path}, ensure_ascii=False))
+        sys.exit(1)
+
     errors: list = []
+
+    # MT-31: CRLF 감지
+    if b"\r\n" in raw:
+        errors.append("CRLF 줄바꿈 감지됨 — LF만 사용해야 합니다")
+
+    try:
+        msg = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        print(json.dumps({"status": "FAIL", "errors": [f"UTF-8 디코드 실패: {exc}"], "file": file_path}, ensure_ascii=False))
+        sys.exit(1)
 
     # count 검증
     for phrase, expected in _APPROVAL_MSG_REQUIRED_COUNTS.items():
@@ -5762,6 +5807,24 @@ def _cmd_gates_validate_user_approval_message(args: "argparse.Namespace") -> Non
     else:
         print(json.dumps({"status": "PASS", "file": file_path}, ensure_ascii=False))
         sys.exit(0)
+
+
+# [Purpose]: IMP-20260703-B985 MT-31 — machine-readable request-accept 시 approval message를
+#            repo root가 아닌 scratch 디렉토리에 자동 저장한다.
+_SCRATCH_DIR_TEMPLATE = ".pipeline/runs/{pipeline_id}/scratch"
+
+
+def _get_scratch_dir(pipeline_id: str) -> str:
+    """pipeline_id에 해당하는 scratch 디렉토리 경로를 반환하고 존재하지 않으면 생성한다.
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID.
+    Returns:
+        scratch 디렉토리 절대 경로 문자열.
+    """
+    p = _SCRATCH_DIR_TEMPLATE.format(pipeline_id=pipeline_id)
+    os.makedirs(p, exist_ok=True)
+    return p
 
 
 # [Purpose]: IMP-20260703-B985 MT-16 — 승인 요청 출력(human/JSON 공통)의 message/필드를 단일
@@ -23036,7 +23099,18 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         _reuse_approval_out = _build_approval_request_output(pipeline_id, pr_url or "")
         # IMP-20260703-B985 MT-28: 재사용 경로 human 출력도 SSoT message를 그대로 사용한다
         # (인라인 재조립 제거 → machine/human drift 방지). machine-readable은 JSON 1줄만 출력.
+        # IMP-20260703-B985 MT-31: machine-readable 시 scratch 경로에 final_user_message.txt 자동 저장.
         if getattr(args, "machine_readable", False):
+            _reuse_arm = _reuse_approval_out.get("approval_request_message", "")
+            try:
+                _reuse_scratch_dir = _get_scratch_dir(pipeline_id)
+                _reuse_msg_path = os.path.join(_reuse_scratch_dir, "final_user_message.txt")
+                _reuse_msg_bytes = _reuse_arm.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+                with open(_reuse_msg_path, "wb") as _rmf:
+                    _rmf.write(_reuse_msg_bytes)
+                _reuse_approval_out["message_file"] = _reuse_msg_path
+            except OSError:
+                pass  # scratch 저장 실패는 non-fatal
             print(json.dumps(_reuse_approval_out, ensure_ascii=False))
         else:
             print()
@@ -23628,7 +23702,19 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # IMP-20260624-069A MT-1: User Acceptance 최종 승인 요청문을 최소 고정 양식으로 통일.
     # IMP-20260703-B985 MT-16: --machine-readable 시 human stdout 없이 JSON만 출력.
     # IMP-20260703-B985 MT-24: human/machine 모두 snapshot의 frozen approval message를 1회만 출력한다.
+    # IMP-20260703-B985 MT-31: machine-readable 시 scratch 경로에 final_user_message.txt 자동 저장.
     if getattr(args, "machine_readable", False):
+        _arm = _approval_out.get("approval_request_message", "")
+        # scratch 저장 (BOM 없이 LF UTF-8)
+        try:
+            _scratch_dir = _get_scratch_dir(pipeline_id)
+            _msg_path = os.path.join(_scratch_dir, "final_user_message.txt")
+            _msg_bytes = _arm.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+            with open(_msg_path, "wb") as _mf:
+                _mf.write(_msg_bytes)
+            _approval_out["message_file"] = _msg_path
+        except OSError:
+            pass  # scratch 저장 실패는 non-fatal — JSON 출력은 계속 진행
         print(json.dumps(_approval_out, ensure_ascii=False))
     else:
         print()

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <mt_id>MT-31</mt_id>
+  <verdict>PASS</verdict>
+  <verification_evidence>
+    <item id="1" status="PASS">_APPROVAL_MSG_FORBIDDEN_FINAL 6개 신규 문구 추가 확인</item>
+    <item id="2" status="PASS">BOM 감지 로직 추가 확인</item>
+    <item id="3" status="PASS">CRLF 감지 로직 추가 확인</item>
+    <item id="4" status="PASS">_get_scratch_dir 헬퍼 추가 확인</item>
+    <item id="5" status="PASS">machine-readable scratch 저장 확인 (신규+reuse)</item>
+    <item id="6" status="PASS">테스트 14/14 PASS</item>
+  </verification_evidence>
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+</module_qa_report>
