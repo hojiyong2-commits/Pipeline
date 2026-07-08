@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260611-A716</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning Phase</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, PD</category_tags>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>함수명, 내부 변수 네이밍, 코드 스타일 같은 P2 질문은 묻지 않았습니다. 공통 validator 함수명(_validate_pr_body_readiness)과 snapshot 필드명(pr_body_sha256)은 PM이 기존 코드 패턴을 따라 결정합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>request-accept에서 PR body readiness 검사를 언제 하면 좋을까요? AC 검증 먼저? 아니면 PR body readiness 먼저?</user_facing_question>
+        <evidence>현재 _cmd_gates_request_accept는 AC 검증(_validate_ac_table_before_request_accept)은 하지만 PR body readiness(_check_acceptance_readiness) 검사는 하지 않습니다. accept 단계에서만 PR body를 검사하기 때문에 승인 코드를 받았는데 accept에서 막히는 불일치가 발생합니다.</evidence>
+        <why_it_matters>PR body readiness를 먼저 검사해야 승인 코드를 받고 나서 accept에서 막히는 사용자 혼란을 방지할 수 있습니다. IMP-20260611-508F에서 AC 10/10 PASS 후 승인 코드가 발급되었는데 accept에서 pr_body_incomplete로 BLOCKED된 실사례가 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>PR body readiness 먼저, 그 다음 AC 검증</label>
+            <benefit>PR 본문이 완성되어 있을 때만 승인 코드를 발급하므로, 코드를 받은 후 accept에서 막히는 불일치가 사라집니다.</benefit>
+            <cost>AC가 PASS라도 PR 본문이 미완성이면 승인 코드 발급이 차단됩니다.</cost>
+          </option>
+          <option id="B">
+            <label>AC 검증 먼저, 그 다음 PR body readiness</label>
+            <benefit>기존 흐름과 가장 가까워서 코드 변경 폭이 작습니다.</benefit>
+            <cost>PR body readiness 실패가 AC 통과 후에만 발견되므로 현재 불일치 문제를 완전히 해결하지 못합니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청에 request-accept 단계에서 PR body readiness 실패 시 승인 코드 발급하지 말것이 명시되어 있으므로 옵션 A로 진행합니다.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline_state.json (활성 파이프라인 상태), 실행 시 GitHub PR 원격 본문
+    - Output: 검증 결과 dict (status/failure_code/allow_accept/missing_sections/detected_phrases), acceptance_request.json (pr_body_sha256/pr_body_readiness 필드 추가), tests/e2e/test_pr_body_readiness_a716.py
+    - Validation: _validate_pr_body_readiness 반환 status=PASS 또는 BLOCKED; acceptance_request.json의 pr_body_sha256 필드 존재; gates accept에서 pr_body_sha256 불일치 시 pr_body_stale BLOCKED
+  </interface_spec>
+
+  <requirements>
+    1. _validate_pr_body_readiness(pr_body, acceptance_packet_status) 공통 validator 신규 생성:
+       Draft 차단, 필수 섹션 검사(PR_REQUIRED_SECTIONS SSoT), 임시 문구 검사(TEMPORARY_PR_BODY_PATTERNS SSoT),
+       acceptance packet 상태 검사. 반환값: status/failure_code/allow_accept/missing_sections/detected_temporary_phrase dict.
+       오류 메시지 [PIPELINE ERROR] 형식, raw traceback 미노출.
+       메시지에 failure_code, actual, expected, 누락 섹션 목록, 감지된 임시 문구 목록, minimal_rerun 명령 포함.
+    2. _cmd_gates_request_accept 수정:
+       AC 검증(ac_blocker) 앞에 _validate_pr_body_readiness 호출 추가.
+       기존 stale 문구 직접 검사(_find_temporary_pr_body_pattern 직접 호출) 로직 제거, validator 호출로 교체.
+       실패 시 승인 코드 발급 차단 + [PIPELINE ERROR] 메시지 출력 후 SystemExit.
+    3. _check_acceptance_readiness 수정:
+       PR body 검증 로직(Draft, 필수 섹션, 임시 문구, acceptance packet 검사)을
+       _validate_pr_body_readiness 호출로 교체. 중복 코드 제거. 반환값 형식 통일.
+    4. _write_acceptance_request 수정:
+       파라미터에 pr_body_sha256, pr_body_readiness_snapshot dict 추가.
+       acceptance_request.json에 pr_body_sha256, pr_body_readiness, required_sections_present,
+       temporary_phrases_absent, validated_at 필드 기록.
+    5. gates accept ACCEPT 처리 흐름에 pr_body_stale 검증 추가:
+       acceptance_request.json의 pr_body_sha256 로드.
+       _get_pr_body_text()로 현재 GitHub PR body fetch.
+       SHA-256 계산 및 비교. 불일치 시 pr_body_stale BLOCKED + gates request-accept 재실행 복구 안내.
+       [PIPELINE ERROR] 형식 메시지 준수. _check_acceptance_readiness 호출 이전에 stale 검사 수행.
+    6. TEMPORARY_PR_BODY_PATTERNS에 누락 패턴 추가: PM Phase 진행 중, Phase Attestation 대기, TBD, TODO.
+    7. tests/e2e/test_pr_body_readiness_a716.py 신규 생성:
+       PIPELINE_STATE_PATH 격리, subprocess 기반 실제 CLI 실행, final_state assertion 필수.
+       5개 테스트: 임시 문구 차단, 섹션 누락 차단, 정상 발급, pr_body_stale 차단, 동일 validator 확인.
+       oracle 파일: tests/oracles/IMP-20260611-A716/ 케이스 사용.
+    8. .claude/agents/pipeline-manager-agent.md 신규 생성:
+       승인 코드 발급 전 PR body readiness PASS 필수 명시.
+       AC 10/10 PASS만으로 승인 코드 발급 가능 오해 방지 문구.
+       PR 최종 본문에 임시 phase 문구 없어야 함 명시.
+       pr_body_stale 오류 발생 시 복구 절차 안내.
+    [Documentation-Code Drift 방지] TEMPORARY_PR_BODY_PATTERNS 변경 시 pipeline-manager-agent.md 동일 MT에서 업데이트.
+  </requirements>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py는 Trust-Root 파일이며 User Acceptance 흐름의 핵심 gate를 수정합니다. 잘못된 변경 시 모든 파이프라인의 gates accept 흐름이 깨질 수 있습니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>6</expected_changed_functions>
+      <expected_changed_lines>200</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>PR 본문에 PM Phase 진행 중 등 임시 문구가 있으면 gates request-accept가 BLOCKED되고 승인 코드가 발급되지 않는다. 출력 메시지에 failure_code=pr_body_temporary와 감지된 문구가 포함된다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>PR 본문에 필수 섹션(작업 요약, 사용자가 확인할 결과물, 기대 결과와 실제 결과, 중요한 선택과 트레이드오프, 검증) 중 1개 이상 누락 시 gates request-accept가 BLOCKED되고 누락 섹션 목록이 출력된다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept와 gates accept가 동일한 _validate_pr_body_readiness 함수를 사용한다. 코드에서 두 함수 모두 _validate_pr_body_readiness를 호출하는 것을 grep으로 확인할 수 있다.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>승인 코드 발급 후 PR 본문이 변경되면 gates accept가 pr_body_stale로 BLOCKED된다. 복구 안내 메시지에 python pipeline.py gates request-accept --evidence ... 명령이 포함된다.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>acceptance_request.json에 pr_body_sha256, pr_body_readiness, required_sections_present, temporary_phrases_absent, validated_at 필드가 기록된다.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>오류 메시지는 [PIPELINE ERROR] 형식이며 raw Python traceback이 노출되지 않는다. 메시지에 failure_code, 누락 섹션 목록, 감지된 임시 문구, minimal_rerun 명령이 포함된다.</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>tests/e2e/test_pr_body_readiness_a716.py의 회귀 테스트 5개가 모두 PASS 된다. 각 테스트는 PIPELINE_STATE_PATH 격리를 사용하고 final_state를 assert 한다.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <decomposition_audit>
+    <total_functions_identified>7</total_functions_identified>
+    <micro_task_count>7</micro_task_count>
+    <grep_executions>6</grep_executions>
+    <split_decision>MT-1(공통 validator 신규) / MT-2(request-accept 수정) / MT-3(accept 수정) / MT-4(write_acceptance_request 수정) / MT-5(pr_body_stale 검증) / MT-6(E2E 테스트 신규) / MT-7(agent MD 신규) 7개로 분할. pipeline.py 5개 함수 영향 범위 + 신규 테스트 파일 + 신규 agent MD 파일.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_validate_pr_body_readiness (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept (MT-2에서 호출 추가)</site>
+        <site>_check_acceptance_readiness (MT-3에서 교체)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _check_acceptance_readiness|_find_temporary_pr_body_pattern|PR_REQUIRED_SECTIONS|TEMPORARY_PR_BODY_PATTERNS</pattern>
+        <match_count>6</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_check_acceptance_readiness에서 PR body 검증 로직을 추출하여 _validate_pr_body_readiness 공통 validator로 분리. TEMPORARY_PR_BODY_PATTERNS에 PM Phase 진행 중, Phase Attestation 대기, TBD, TODO 추가.</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>line ~16122 (gates subcommand 라우터에서 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_request_accept|_validate_ac_table_before_request_accept</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_cmd_gates_request_accept에 _validate_pr_body_readiness 호출 추가. AC 검증(ac_blocker) 이전에 PR body readiness 먼저 검사. 기존 stale 문구 직접 검사(_find_temporary_pr_body_pattern 직접 호출) 로직을 validator 호출로 교체. 실패 시 [PIPELINE ERROR] + SystemExit.</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>_check_acceptance_readiness</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>line ~17006 (gates accept ACCEPT 처리 흐름에서 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_acceptance_readiness</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_check_acceptance_readiness 내부의 PR body 검증 로직을 _validate_pr_body_readiness 호출로 교체. 중복 코드 제거, 반환값 형식 통일.</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-3, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>_write_acceptance_request</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept (line ~15779에서 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _write_acceptance_request</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_write_acceptance_request에 pr_body_sha256, pr_body_readiness, required_sections_present, temporary_phrases_absent, validated_at 파라미터/필드 추가. acceptance_request.json에 snapshot 기록.</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>gates accept ACCEPT 처리 흐름</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>line ~17006 (_check_acceptance_readiness 호출 직전)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_load_acceptance_request|pr_body_sha256|pr_body_stale</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>gates accept ACCEPT 처리에 pr_body_stale 검증 추가. acceptance_request.json의 pr_body_sha256과 현재 PR body SHA-256 비교. 불일치 시 pr_body_stale BLOCKED + gates request-accept 재실행 복구 안내.</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-4, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>test_pr_body_readiness_a716 (신규 파일)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_pr_body_readiness_a716.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pr_body_readiness_a716</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>E2E 회귀 테스트 5개 신규 생성. PIPELINE_STATE_PATH 격리, subprocess 기반 실제 CLI 실행, final_state assertion. 임시 문구 차단, 섹션 누락 차단, 정상 발급, pr_body_stale 차단, 동일 validator 확인.</change_summary>
+      <line_estimate>180</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-7">
+      <affected_function>pipeline-manager-agent.md (신규 생성)</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>pipeline-manager-agent.md</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>.claude/agents/pipeline-manager-agent.md 신규 생성. 승인 코드 발급 전 PR body readiness PASS 필수 명시. AC 10/10 PASS만으로 승인 코드 발급 가능 오해 방지. PR 최종 본문 임시 phase 문구 금지. pr_body_stale 복구 절차 안내.</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_iqr>IQR-DOC-1</covers_iqr>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 프로젝트 기존 Python 버전과 동일</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>pyrightconfig.json: pythonVersion = 3.10, typeCheckingMode = basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria_list>
+    - [AC-1] PM Phase 진행 중 포함 PR body: request-accept BLOCKED, failure_code=pr_body_temporary, 승인 코드 없음
+    - [AC-2] 필수 섹션 1개 이상 누락: request-accept BLOCKED, failure_code=pr_body_incomplete, 누락 섹션 목록 출력
+    - [AC-3] _cmd_gates_request_accept와 _check_acceptance_readiness 모두 _validate_pr_body_readiness 호출 (grep 확인)
+    - [AC-4] request-accept 후 PR body 변경: accept BLOCKED, failure_code=pr_body_stale, 복구 명령 포함
+    - [AC-5] acceptance_request.json에 pr_body_sha256, pr_body_readiness, required_sections_present, temporary_phrases_absent, validated_at 필드 존재
+    - [AC-6] 모든 오류 메시지 [PIPELINE ERROR] 형식, raw traceback 없음
+    - [AC-7] test_pr_body_readiness_a716.py 5개 테스트 PASS, PIPELINE_STATE_PATH 격리, final_state assertion
+    - [엣지] PR body None/빈 문자열: pr_body_missing 또는 pr_not_found BLOCKED (기존 동작 유지)
+    - [엣지] acceptance_request.json에 pr_body_sha256 없으면 pr_body_stale 검증 건너뜀 (하위 호환성)
+    - [엣지] gh CLI 없으면 기존 gh_cli_not_available BLOCKED 동작 유지
+  </acceptance_criteria_list>
+
+  <forbidden>
+    잘못된 PR 본문을 무시하고 accept 통과시키는 구현.
+    accept에서만 검사하고 request-accept에서는 통과시키는 이전 구조 유지.
+    승인 코드 발급 후 PR body 수정해도 기존 코드 유효하게 만드는 구현.
+    단순 메시지 개선만으로 끝내기.
+    Trust-Root 파일(.github/workflows, CLAUDE.md, tests/**) 범위 외 수정 금지.
+    validator 로직을 _check_acceptance_readiness와 _cmd_gates_request_accept에 각각 별도 구현 (SSoT 위반).
+    oracle expected 파일 수정 금지.
+    scope_manifest 외 파일 변경 금지.
+  </forbidden>
+
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260611-A716</pipeline_id>
+      <evidence>
+        <file>pipeline.py (MT-1 ~ MT-5 변경)</file>
+        <file>tests/e2e/test_pr_body_readiness_a716.py (MT-6 신규)</file>
+        <file>.claude/agents/pipeline-manager-agent.md (MT-7 신규)</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_pr_body_readiness_a716.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>tests/oracles/IMP-20260611-A716/normal_request_accept_blocked_temporary_phrase/input.json</file>
+      <file>tests/oracles/IMP-20260611-A716/normal_request_accept_blocked_temporary_phrase/expected.json</file>
+      <file>tests/oracles/IMP-20260611-A716/edge_accept_blocked_pr_body_stale/input.json</file>
+      <file>tests/oracles/IMP-20260611-A716/edge_accept_blocked_pr_body_stale/expected.json</file>
+      <file>tests/oracles/IMP-20260611-A716/normal_accept_blocked_pr_body_readiness_fail/input.json</file>
+      <file>tests/oracles/IMP-20260611-A716/normal_accept_blocked_pr_body_readiness_fail/expected.json</file>
+    </target_files>
+    <phase_rules_excerpt>HIGH_RISK 프로필: pipeline.py는 Trust-Root 파일. scope_lock_check verdict PASS 없이 handover 금지. oracle expected 파일 수정 금지. E2E 테스트: PIPELINE_STATE_PATH 격리 + final_state assertion 필수.</phase_rules_excerpt>
+    <prev_phase_summary>PM Phase: IMP-20260611-A716 계획 완료. Contract frozen. 변경 대상: pipeline.py (MT-1~MT-5), tests/e2e/test_pr_body_readiness_a716.py (MT-6), .claude/agents/pipeline-manager-agent.md (MT-7). 핵심: request-accept와 accept에서 동일한 _validate_pr_body_readiness validator 사용.</prev_phase_summary>
+  </context_injection>
+
+</step_plan>
