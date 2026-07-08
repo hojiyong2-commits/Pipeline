@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260624-069A</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <description>User Acceptance 최종 승인 요청문을 4요소 최소 고정 양식으로 통일</description>
+  <created_at>2026-06-24T10:00:00Z</created_at>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py (trust-root)와 에이전트 MD (trust-root) 수정 포함. 승인 요청 출력 양식 변경은 User Acceptance gate 경로에 영향.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <audit_timestamp>2026-06-24T10:00:00Z</audit_timestamp>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>4</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <total_micro_tasks>4</total_micro_tasks>
+    <trust_root_files_involved>pipeline.py, .claude/agents/pipeline-manager-agent.md</trust_root_files_involved>
+    <deletion_logic_present>false</deletion_logic_present>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>출력 양식 변경은 단일 표준 양식으로 통일. 내부 코드 스타일 질문 생략.</filter_summary>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>출력 양식 변경은 단일 표준 양식으로 통일. 내부 코드 스타일 질문 생략.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>PR pending 댓글도 최소 양식으로 단순화할까요?</user_facing_question>
+        <evidence>_render_pending_acceptance_comment 함수(L16206~16296)가 현재 게이트 상태, 요구사항 요약, 증거 무결성, 작업공간 정리 상태, 사용자 체크리스트 등 많은 정보를 포함.</evidence>
+        <why_it_matters>CLI 출력과 PR 댓글이 다른 양식이면 혼란. 통일하면 유지보수 단순화.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A"><label>PR pending 댓글도 최소 양식 적용</label><benefit>CLI와 댓글 양식이 완전히 통일되어 코드 유지보수가 단순해짐</benefit><cost>기존 상세 게이트 상태 정보와 체크리스트가 PR 댓글에서 사라짐</cost></option>
+          <option id="B"><label>PR pending 댓글은 기존 상세 양식 유지</label><benefit>게이트 상태, 체크리스트 등 상세 정보가 PR 댓글에 보존됨</benefit><cost>CLI 출력과 PR 댓글 두 곳의 양식이 달라 유지보수 복잡도 증가</cost></option>
+        </options>
+        <user_answer>옵션 A 선택</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">CLI 승인 요청 출력을 4요소 최소 양식으로 통일 (사용자 승인 요청 / PR 링크 / 승인 코드 / CODEX 검토 필요)</requirement>
+    <requirement id="REQ-2">PR pending 댓글도 동일한 4요소 최소 양식으로 통일</requirement>
+    <requirement id="REQ-3">pipeline-manager-agent.md에 최소 양식 전달 원칙 추가</requirement>
+    <requirement id="REQ-4">새 회귀 테스트로 양식 준수 검증</requirement>
+    <requirement id="REQ-5">기존 기능 유지 (nonce 동기화, acceptance_request.json 저장, packet 자동 생성 등)</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py:18573 (argparse handler)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_cmd_gates_request_accept</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>L17956~17998 print 블록을 4요소 최소 양식으로 교체</change_summary>
+      <line_estimate>45</line_estimate>
+      <covers_ac>AC-1,AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>_render_pending_acceptance_comment</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py:16389 (_post_github_pending_acceptance_comment 내부)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_render_pending_acceptance_comment</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>L16206~16296 함수 본문을 4요소 최소 양식으로 교체</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-2,AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>none</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>User Acceptance 안내 템플릿 SSoT 원칙</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>최소 양식 전달 원칙 섹션 추가</change_summary>
+      <line_estimate>10</line_estimate>
+      <covers_ac>AC-3</covers_ac>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>none</affected_function>
+      <target_files>
+        <file>tests/test_acceptance_request_format_069a.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_acceptance_request_format_069a</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>최소 양식 준수 회귀 테스트 생성</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>CLI 승인 요청 출력이 정확히 4요소만 포함: "사용자 승인 요청" 헤더, "PR:" 링크, "승인 코드:" + ACCEPT-코드, "CODEX 검토 필요" 문구</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>PR pending 댓글이 정확히 4요소만 포함: "사용자 승인 요청" 헤더, "PR:" 링크, "승인 코드:" + ACCEPT-코드, "CODEX 검토 필요" 문구</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>pipeline-manager-agent.md에 최소 양식 전달 원칙 섹션이 존재</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>tests/test_acceptance_request_format_069a.py 회귀 테스트가 양식 준수를 검증하고 pytest PASS</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="false">
+      <text>기존 기능 유지: nonce 동기화, acceptance_request.json 저장, packet 자동 생성, PR 본문 업데이트 등 모든 기존 로직 정상 동작</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 기존 pipeline.py와 테스트가 3.10 기준</python_version>
+  <forbidden>
+    - _render_pr_body_final_packet (L12812~) 수정 금지 — PR body renderer 별도
+    - human_acceptance_packet.md/.json 생성 로직 수정 금지
+    - acceptance_request.json nonce/SHA 동기화 로직 수정 금지
+    - gates accept provenance/replay/stale 검증 로직 수정 금지
+  </forbidden>
+</step_plan>
