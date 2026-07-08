@@ -1,0 +1,18 @@
+{
+  "pipeline_id": "IMP-20260703-B985",
+  "micro_tasks": [
+    {
+      "id": "MT-28",
+      "files": [
+        "pipeline.py",
+        "tests/test_approval_output_channel_b985.py",
+        ".claude/hooks/codex_user_acceptance_review.py"
+      ],
+      "affected_functions": [
+        "_validate_approval_request_message",
+        "_build_approval_request_output",
+        "_approve_message"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+<dev_handover>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <agent_run_id>dev-200eb1569128c81a</agent_run_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_approval_output_channel_b985.py</file>
+      <file>.claude/hooks/codex_user_acceptance_review.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_validate_approval_request_message (신규)</target_function>
+    <target_function>_build_approval_request_output (수정)</target_function>
+    <target_function>_approve_message (수정)</target_function>
+  </impact_analysis>
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/test_approval_output_channel_b985.py</file>
+    <file>.claude/hooks/codex_user_acceptance_review.py</file>
+  </implemented_files>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py .claude/hooks/codex_user_acceptance_review.py</git_diff_files>
+    <manifest_files>pipeline.py tests/test_approval_output_channel_b985.py .claude/hooks/codex_user_acceptance_review.py</manifest_files>
+    <extra_files>없음 (지원 파일 제외)</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <change_summary>
+    MT-28 approval output channel SSoT:
+    1. pipeline.py: _validate_approval_request_message() 신규 추가 — 4요소 count, 금지 문구, 마지막 줄 검증
+    2. pipeline.py: _build_approval_request_output()에 검증 게이트 호출 추가
+    3. .claude/hooks/codex_user_acceptance_review.py: _approve_message()가 빈 문자열 반환 (이중 출력 방지)
+    4. tests/test_approval_output_channel_b985.py: 14개 단위 테스트 신규 작성 (모두 PASS)
+  </change_summary>
+</dev_handover>
+</handover>

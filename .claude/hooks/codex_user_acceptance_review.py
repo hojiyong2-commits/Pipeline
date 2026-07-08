@@ -596,14 +596,20 @@ def _build_codex_prompt(packet: Dict[str, Any]) -> str:
 def _approve_message(pipeline_id: str, pr_url: Optional[str]) -> str:
     """APPROVE 시 사용자에게 출력할 메시지를 구성.
 
-    nonce를 절대 노출하지 않고 ACCEPT-<pipeline_id> 형식만 출력한다.
-    'CODEX 검토 필요' 마커를 추가하지 않는다 (재트리거 방지).
+    IMP-20260703-B985 MT-28: 이중 출력 방지.
+    "사용자 승인 요청" 블록을 포함하지 않는다 — Pipeline Manager가 이미
+    gates request-accept --machine-readable JSON의 approval_request_message를
+    1회 relay하므로, Stop hook에서 동일 블록을 출력하면 사용자가 2회 수신한다.
+    APPROVE 기록만 하고 빈 문자열을 반환 (조용히 exit 0).
+
+    nonce를 절대 노출하지 않는다.
+    'CODEX 검토 필요' 마커를 포함하지 않는다 (재트리거 방지 — 기존 정책 유지).
 
     Args:
         pipeline_id: 파이프라인 ID.
         pr_url: PR 링크 (없으면 None).
     Returns:
-        APPROVE 사용자 출력 메시지.
+        빈 문자열 (사용자 facing 출력 없음 — 이중 출력 방지).
     Raises:
         TypeError: pipeline_id가 None이거나 str가 아닌 경우.
     """
@@ -613,14 +619,10 @@ def _approve_message(pipeline_id: str, pr_url: Optional[str]) -> str:
         raise TypeError(
             f"pipeline_id must be str, got {type(pipeline_id).__name__}"
         )
-    pr_line = pr_url if pr_url else "(PR 링크 없음)"
-    return (
-        "Codex 검토 통과\n\n"
-        "사용자 승인 요청\n\n"
-        f"PR: {pr_line}\n\n"
-        "승인 코드:\n"
-        f"ACCEPT-{pipeline_id}"
-    )
+    # IMP-20260703-B985 MT-28: 이중 출력 방지 — 빈 문자열 반환.
+    # Pipeline Manager가 approval_request_message를 1회 relay하므로 여기서 출력 금지.
+    _ = pr_url  # 사용 안 함 — 인터페이스 호환성 유지
+    return ""
 
 
 def process_verdict(
@@ -900,9 +902,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
-    # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 같은 APPROVE 출력만.
+    # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 조용히 exit 0.
+    # IMP-20260703-B985 MT-28: _approve_message()가 빈 문자열을 반환하므로 print 생략.
     if _check_stale(loop_state, head_sha, packet_sha256):
-        print(_approve_message(pipeline_id, pr_url))
+        msg = _approve_message(pipeline_id, pr_url)
+        if msg:
+            print(msg)
         return 0
 
     try:
@@ -969,8 +974,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             },
         )
 
-    # REJECT 원문은 prefix/suffix 없이 그대로, APPROVE는 안내 메시지 출력
-    print(outcome["output"])
+    # REJECT 원문은 prefix/suffix 없이 그대로 출력.
+    # IMP-20260703-B985 MT-28: APPROVE 시 _approve_message()가 빈 문자열 반환 → 출력 생략.
+    output_msg = outcome["output"]
+    if output_msg:
+        print(output_msg)
     return int(outcome["exit_code"])
 
 

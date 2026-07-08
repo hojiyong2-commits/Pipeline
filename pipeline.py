@@ -5628,6 +5628,65 @@ def _resolve_acceptance_display_status(state: Dict[str, Any]) -> str:
     return str(effective)
 
 
+# [Purpose]: IMP-20260703-B985 MT-28 — 승인 요청문(approval_request_message)의 구조 무결성을
+#            조립 시점에 fail-closed로 검증한다. REJECT #21(승인 요청문 이중 출력)의 근본 원인은
+#            Pipeline Manager가 relay 문구를 message에 섞어 넣거나 4요소가 중복/누락되는 것이므로,
+#            SSoT renderer가 낸 message가 정확히 1회씩 4요소를 갖고 금지 문구가 없음을 강제한다.
+# [Assumptions]: msg는 _build_approval_request_output이 만든 4요소 고정 양식 문자열이다.
+# [Vulnerability & Risks]: 검증 실패는 곧 코드 회귀를 뜻하므로 ValueError(BLOCKED)로 즉시 차단한다.
+#            금지 문구 목록은 REJECT #21 재발 방지용이며, 새 relay 문구가 발견되면 이 목록에 추가한다.
+# [Improvement]: 향후 승인 양식이 다국어로 확장되면 언어별 필수 마커 표를 도입할 수 있다.
+def _validate_approval_request_message(msg: str) -> None:
+    """approval_request_message 구조를 fail-closed로 검증한다 (MT-28).
+
+    Args:
+        msg: 검증 대상 승인 요청문. None/비str 금지, 빈 문자열 금지.
+    Raises:
+        TypeError: msg가 None이거나 str이 아닌 경우.
+        ValueError: 필수 요소 count가 1이 아니거나, 금지 문구를 포함하거나,
+            마지막 의미 있는 줄이 'CODEX 검토 필요'가 아닌 경우.
+    """
+    if msg is None:
+        raise TypeError("msg must not be None")
+    if not isinstance(msg, str):
+        raise TypeError(f"msg must be str, got {type(msg).__name__}")
+    if len(msg.strip()) == 0:  # empty not allowed: 승인 코드 노출 채널이 사라진다.
+        raise ValueError("[BLOCKED] approval_request_message 구조 오류: 빈 문자열")
+
+    counts = {
+        "사용자 승인 요청": msg.count("사용자 승인 요청"),
+        "\nPR:": msg.count("\nPR:"),
+        "승인 코드:": msg.count("승인 코드:"),
+        "CODEX 검토 필요": msg.count("CODEX 검토 필요"),
+    }
+    for key, count in counts.items():
+        if count != 1:
+            raise ValueError(
+                f"[BLOCKED] approval_request_message 구조 오류: '{key}' count={count}, expected=1"
+            )
+
+    forbidden_phrases = (
+        "JSON 출력은 성공",
+        "필드에서 추출",
+        "위 PR에 승인 코드를",
+        "Pipeline Manager도",
+        "GitHub Actions 자동 검사가 통과",
+        "이번 응답에서 중계",
+        "댓글에 입력해 주세요",
+    )
+    for phrase in forbidden_phrases:
+        if phrase in msg:
+            raise ValueError(
+                f"[BLOCKED] approval_request_message에 금지 문구 포함: '{phrase}'"
+            )
+
+    lines = [ln for ln in msg.strip().split("\n") if ln.strip()]
+    if lines and lines[-1].strip() != "CODEX 검토 필요":
+        raise ValueError(
+            f"[BLOCKED] 마지막 줄이 'CODEX 검토 필요'가 아님: '{lines[-1]}'"
+        )
+
+
 # [Purpose]: IMP-20260703-B985 MT-16 — 승인 요청 출력(human/JSON 공통)의 message/필드를 단일
 #            지점에서 조립한다. --machine-readable JSON과 human stdout이 동일 내용을 공유하게 한다.
 # [Assumptions]: pipeline_id는 비어있지 않고, pr_url은 str(빈 문자열 허용).
@@ -5669,6 +5728,11 @@ def _build_approval_request_output(pipeline_id: str, pr_url: str) -> Dict[str, A
         f"승인 코드:\n{acceptance_code_display}\n\n"
         "CODEX 검토 필요"
     )
+    # IMP-20260703-B985 MT-28: approval_request_message 구조 검증 게이트 (fail-closed).
+    # REJECT #21 근본 방지 — 승인 요청문이 정확히 4요소를 1회씩만 포함하고, Pipeline Manager가
+    # 임의로 덧붙이는 relay 문구(예: "JSON 출력은 성공")가 섞이지 않았음을 조립 시점에 보증한다.
+    # SSoT renderer 결과는 항상 이 검증을 통과하므로, 통과 실패는 곧 코드 회귀를 뜻한다.
+    _validate_approval_request_message(approval_request_message)
     return {
         "approval_request_message": approval_request_message,
         "approval_display": approval_request_message,  # MT-34: main context가 파일에서 직접 읽는 표시용 필드
@@ -22708,8 +22772,9 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         _is_new_candidate = True
 
     nonce = str(req_candidate.get("nonce", "") or "")
-    # 사용자에게 보이는 PR 댓글 승인 코드는 nonce 없는 단순 형식이며 Codex APPROVE 후에만 출력한다.
-    pr_comment_accept_code = f"ACCEPT-{pipeline_id}"
+    # 사용자에게 보이는 PR 댓글 승인 코드는 nonce 없는 단순 형식(ACCEPT-<pipeline_id>)이며,
+    # IMP-20260703-B985 MT-28: 재사용/신규 경로 모두 _build_approval_request_output SSoT의
+    # approval_request_message 안에서 이 코드가 렌더링되므로 별도 지역 변수를 두지 않는다.
 
     # ── IMP-20260703-B985 MT-10: True Idempotent Reuse (재사용 경로는 진정한 read-only) ──
     # 재사용(_is_new_candidate=False)일 때는 staging 재생성 / packet 재materialize /
@@ -22850,21 +22915,13 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         # IMP-20260703-B985 MT-16: --machine-readable 시 human stdout 없이 JSON만 출력.
         # IMP-20260703-B985 MT-34: _build_approval_request_output 재사용으로 SSoT 유지.
         _reuse_approval_out = _build_approval_request_output(pipeline_id, pr_url or "")
+        # IMP-20260703-B985 MT-28: 재사용 경로 human 출력도 SSoT message를 그대로 사용한다
+        # (인라인 재조립 제거 → machine/human drift 방지). machine-readable은 JSON 1줄만 출력.
         if getattr(args, "machine_readable", False):
             print(json.dumps(_reuse_approval_out, ensure_ascii=False))
         else:
             print()
-            print("사용자 승인 요청")
-            print()
-            if pr_url:
-                print(f"PR: {pr_url}")
-            else:
-                print("PR: (PR 링크 없음)")
-            print()
-            print("승인 코드:")
-            print(f"{pr_comment_accept_code}")
-            print()
-            print("CODEX 검토 필요")
+            print(_reuse_approval_out["approval_request_message"])
         accept_code = f"ACCEPT-{pipeline_id}-{nonce}"  # 내부 CLI nonce SSoT 보존
         # MT-29: reuse path에서도 fresh pending comment를 게시한다. reuse는 파일을 write하지
         # 않지만, PR comment는 사용자가 승인 코드를 확인하는 주 채널이므로 항상 최신화한다.

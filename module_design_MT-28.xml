@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_design>
+  <mt_id>MT-28</mt_id>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <status>PASS</status>
+  <summary>approval output channel SSoT — machine-readable JSON 단일 출력, 이중 출력 차단 (REJECT #21 근본 수정)</summary>
+  <target_files>
+    <file>pipeline.py</file>
+    <file>tests/test_approval_output_channel_b985.py</file>
+    <file>.claude/hooks/codex_user_acceptance_review.py</file>
+  </target_files>
+  <design_decision>
+    세 가지 수정으로 이중 출력을 차단한다.
+    1. pipeline.py: _validate_approval_request_message() 함수 추가 — approval_request_message
+       조립 시점에 4요소 count 검증 + 금지 문구 검증 + 마지막 줄 검증을 fail-closed로 수행.
+       _build_approval_request_output()이 이 함수를 호출하여 SSoT 구조를 보증한다.
+    2. .claude/hooks/codex_user_acceptance_review.py: _approve_message()가 APPROVE 시
+       "사용자 승인 요청" 블록을 포함한 메시지를 출력하던 것을 빈 문자열 반환으로 변경.
+       Pipeline Manager가 --machine-readable JSON의 approval_request_message를 1회 relay하므로
+       Stop hook에서 동일 블록을 출력하면 2회가 된다 — 이를 차단.
+    3. tests/test_approval_output_channel_b985.py: 14개 단위 테스트로 위 두 수정을 회귀 고정.
+  </design_decision>
+  <completed_at>2026-07-08T10:00:00Z</completed_at>
+</module_design>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <mt_id>MT-28</mt_id>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/test_approval_output_channel_b985.py</file>
+    <file>.claude/hooks/codex_user_acceptance_review.py</file>
+  </implemented_files>
+  <self_check>
+    <scope_lock_check>
+      <git_diff_files>pipeline.py tests/test_approval_output_channel_b985.py .claude/hooks/codex_user_acceptance_review.py scope_manifest_MT-28.json module_design_MT-28.xml</git_diff_files>
+      <manifest_files>pipeline.py tests/test_approval_output_channel_b985.py .claude/hooks/codex_user_acceptance_review.py</manifest_files>
+      <extra_files>없음 (scope_manifest/module_design/handover XML은 지원 파일)</extra_files>
+      <trust_root_violation>false</trust_root_violation>
+      <verdict>PASS</verdict>
+    </scope_lock_check>
+  </self_check>
+  <evidence>
+    <change_summary>
+      MT-28: approval output channel SSoT
+      - pipeline.py: _validate_approval_request_message() 추가 (5630-5688줄), _build_approval_request_output()에 검증 게이트 추가
+      - .claude/hooks/codex_user_acceptance_review.py: _approve_message() 빈 문자열 반환으로 변경, stale/verdict 출력 조건부 처리
+      - tests/test_approval_output_channel_b985.py: 14개 단위 테스트 신규 작성
+    </change_summary>
+    <test_count>14</test_count>
+    <test_result>PASS (14/14)</test_result>
+  </evidence>
+</module_handover>

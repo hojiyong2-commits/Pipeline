@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+<module_qa>
+  <mt_id>MT-28</mt_id>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <result>PASS</result>
+  <numeric_score>100</numeric_score>
+  <test_count>14</test_count>
+  <tests_passed>14</tests_passed>
+  <summary>
+    MT-28 approval output channel SSoT 검증 완료.
+    14개 단위 테스트 모두 PASS.
+    _validate_approval_request_message 구조 검증 gate 추가 확인.
+    hook _approve_message() 빈 문자열 반환으로 이중 출력 방지 확인.
+  </summary>
+  <ac_verification>
+    <criterion id="AC-1" result="PASS">
+      --machine-readable 모드에서 approval_request_message가 정확히 1회 출력됨.
+      Stop hook이 빈 문자열을 반환하여 이중 출력 차단됨.
+    </criterion>
+  </ac_verification>
+  <micro_task_boundary>
+    <mt_id>MT-28</mt_id>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <changed_files>
+      <file>pipeline.py</file>
+      <file>tests/test_approval_output_channel_b985.py</file>
+      <file>.claude/hooks/codex_user_acceptance_review.py</file>
+    </changed_files>
+    <extra_changes>없음</extra_changes>
+  </micro_task_boundary>
+</module_qa>
+<verification_evidence>
+  <test_file>tests/test_approval_output_channel_b985.py</test_file>
+  <tests_run>14</tests_run>
+  <tests_passed>14</tests_passed>
+  <tests_failed>0</tests_failed>
+  <pytest_command>python -m pytest tests/test_approval_output_channel_b985.py -v</pytest_command>
+  <result_summary>14 passed in 0.10s</result_summary>
+</verification_evidence>
+</module_qa_report>
