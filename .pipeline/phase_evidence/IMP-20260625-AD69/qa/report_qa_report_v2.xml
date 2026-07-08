@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <verdict>PASS</verdict>
+  <numeric_score>114</numeric_score>
+
+  <pipeline_id>IMP-20260625-AD69</pipeline_id>
+  <round>2</round>
+  <round_context>Round 1 FAIL(AL:5adfa064 — ruff F401 typing.Any unused), 본 라운드는 1줄 surgical fix(from typing import Any, List, Optional -> List, Optional) 재검증입니다.</round_context>
+
+  <handover>
+    <from>dev-agent</from>
+    <evidence>tests/test_acceptance_comment_reuse_ad69.py, pipeline.py, .claude/agents/pipeline-manager-agent.md</evidence>
+    <accepted>YES — category_tags에 UI 없음, dev-agent handover 단독 수락. dev_handover.xml에 구체적 파일명 + 실제 파일 제출 확인.</accepted>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. helper의 gh api 호출은 subprocess이며 WA 4항목(HTTP timeout 튜플/Retry) 대상이 아님(subprocess timeout=30 적용됨).</wa>
+    <ui>N-A — UI 카테고리 없음</ui>
+    <fs>N-A — 파일 쓰기/인코딩 fallback 신규 추가 없음(_save만 사용)</fs>
+    <pd>PASS — helper 분리(_find_existing_valid_acceptance_comment)로 단일 책임 분리, _cmd_gates_request_accept 호출. 모듈 경계 준수.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — None 입력 방어 + isinstance 타입 가드 + 빈 값 가드 + JSON 파싱 except + 리스트/딕셔너리 타입 검증 + strict replay 비교. ruff exit 0.</al>
+    <build>N-A — BUILD 태그 없음(trust-root 코드 수정, EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+
+  <numeric_score_breakdown>
+    <pd score="10" max="10">모듈분리 5/5(helper 단일 책임 분리, 호출처 명확) + 인터페이스 계약 5/5(Optional[dict] 반환 타입, dict 키 명시 comment_id/author/created_at)</pd>
+    <al score="20" max="20">0나눗셈 N-A / 범위검증 5(빈 값·PR URL 파싱 가드) / 입력 타입검증 5(None+isinstance 6중 가드) / 빈 데이터 처리 5(빈 리스트·빈 stdout None 반환) / 예외 처리 5(subprocess Timeout/OSError, JSON DecodeError except)</al>
+    <security_review score="84" max="90">gates accept 미수정(provenance/replay/stale/nonce 무변경) + 자동 ACCEPT 경로 없음 + idempotent return은 request format 출력만 SKIP + strict replay(created_at > request, 동일시각 제외) + 완전 일치(멀티라인/packet 자동 제외) + 허용 승인자 검증. -6: anti_gaming_read 태그 부재(improvement).</security_review>
+    <total score="114" max="120"/>
+    <percentage>95.0</percentage>
+    <numeric_verdict>PASS(>=96/120)</numeric_verdict>
+  </numeric_score_breakdown>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>PASS — gh api stdout json.loads가 try-except(ValueError, JSONDecodeError)로 감싸짐, 실패 시 None fallback</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — helper 시그니처 (pr_url: str, pipeline_id: str, request_created_at: str) -> Optional[dict] 전부 타입 힌팅</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover evidence에 ruff/pytest 실행 결과 포함</execution_check_present>
+    <execution_check_verdict>PASS — ruff exit 0, pytest 10 passed (QA 재실행으로 직접 확인)</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _find_existing_valid_acceptance_comment가 _cmd_gates_request_accept line 18066에서 실제 호출됨(정의만 있는 dead code 아님)</functional_binding_verified>
+  </runtime_functional_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml에 decomposition_audit 블록 존재(SINGLE_TASK_OK)</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-4 각 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>none — git diff 신규 함수는 _find_existing_valid_acceptance_comment 1개, 수정 함수는 _cmd_gates_request_accept 1개. 모두 PM micro_tasks 범위 내.</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>3</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff origin/main...HEAD --name-only로 정확히 3개 파일 확인</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <security_boundary_check>
+    <gates_accept_modified>NO — _cmd_gates_accept 함수 diff 무변경. provenance/replay/stale/nonce 검증 로직 그대로 유지.</gates_accept_modified>
+    <auto_accept_path>NONE — idempotent return은 request format 출력만 SKIP, 사용자에게 gates accept 수동 실행 안내. 자동 ACCEPT 기록 없음.</auto_accept_path>
+    <nonce_provenance_stale_relaxed>NO — 완화 없음. helper는 strict replay(created_at > request, 동일시각 제외), 완전 일치(멀티라인/packet 제외), 허용 승인자(PIPELINE_ALLOWED_APPROVER) 검증 추가. forbidden 항목(자동 게시/우회/완화 금지) 모두 준수.</nonce_provenance_stale_relaxed>
+    <secrets_gate>PASS — gates secrets exit 0, 3개 파일 민감정보 없음</secrets_gate>
+  </security_boundary_check>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="유효 댓글(완전 일치+승인자+replay 통과) 시 helper가 dict 반환, request-accept가 gates accept 경로 안내 후 return(요청문 SKIP). TC-1 PASS로 검증."/>
+    <criterion ac_id="AC-2" status="PASS" evidence="채팅 메시지는 코드 경로에 진입하지 않음. helper는 PR 댓글만 조회(gh api). 승인 증거는 오직 PR 댓글 본문 완전 일치 + gates accept. step_plan REQ-2 + agent MD 원칙 문서화로 보장."/>
+    <criterion ac_id="AC-3" status="PASS" evidence="_cmd_gates_accept 미수정(git diff 확인). _check_pr_approver_provenance 보존(TC-7: gh 없을 때 BLOCKED/pr_approver_fetch_failed 확인). 허용 승인자/완전 일치/timestamp/replay 검증 유지."/>
+    <criterion ac_id="AC-4" status="PASS" evidence=".claude/agents/pipeline-manager-agent.md에 'Idempotent 승인 재조회 원칙(IMP-20260625-AD69)' 섹션 추가 확인. '최종 PASS는 gates accept provenance/replay/stale 검증을 따른다' 명시."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="tests/test_acceptance_comment_reuse_ad69.py 8케이스 10테스트 모두 PASS(QA 재실행 확인). TC-1~TC-8 + TC-3b/TC-6b 보강."/>
+  </criteria_verification>
+
+  <verification_evidence>
+    <ruff>python -m ruff check pipeline.py .claude/agents/pipeline-manager-agent.md tests/test_acceptance_comment_reuse_ad69.py — All checks passed, exit 0 (Round 1 F401 해소 확인)</ruff>
+    <pytest>python -m pytest tests/test_acceptance_comment_reuse_ad69.py -v — 10 passed in 1.25s, exit 0</pytest>
+    <git_diff>git diff origin/main...HEAD --name-only — 3개 파일(pipeline.py +177, agent MD +4, test +269), 450 insertions</git_diff>
+    <secrets>python pipeline.py gates secrets — 검사 파일 3개 민감정보 없음, exit 0</secrets>
+    <dead_code_grep>_find_existing_valid_acceptance_comment 호출처 pipeline.py:18066 확인 — dead code 아님</dead_code_grep>
+  </verification_evidence>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — 모든 자동 FAIL 트리거 통과. 보안 경계(gates accept 미수정, 자동 ACCEPT 없음, 검증 완화 없음) 확인. Round 1 ruff F401 해소 완료(exit 0).
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. (감점 아님) step_plan.xml에 IMP-20260507-FC80 Step 0-B의 anti_gaming_read 태그가 부재합니다. 본 라운드는 Round 1 baseline(PM done 수락 + Round 1 FAIL이 AL only)과의 일관성을 위해 hard FAIL이 아닌 improvement로 처리했으나, 차기 PM step_plan에는 anti_gaming_read 태그를 포함하는 것을 권장합니다.
+    2. helper의 gh api 댓글 조회는 단일 페이지(>30개 미페이지네이션) 응답만 처리합니다. 대형 PR 대비 gh api --paginate 확장 권장(docstring [Improvement]에 이미 명시됨).
+    3. helper의 gh api는 subprocess timeout=30이 적용되어 있으나 retry는 없습니다. idempotent 재조회 특성상 실패 시 None graceful skip이므로 retry 불필요(fail-closed 설계로 적절).
+  </improvement_suggestions>
+</qa_report>
