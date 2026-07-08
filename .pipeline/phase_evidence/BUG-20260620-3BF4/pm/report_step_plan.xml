@@ -1,0 +1,275 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260620-3BF4</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py는 신뢰 루트 파일이며, 브라우저 승인 게이트 제거는 기존 보안 로직 구조를 바꾸는 작업입니다. 인증/승인 관련 코드 수정이므로 HIGH_RISK 프로필이 필수입니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>5</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>350</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>true</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>4</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <total_micro_tasks>4</total_micro_tasks>
+    <call_site_verification>
+      <function>_run_browser_approval_server</function>
+      <call_sites>
+        <site>_cmd_gates_request_accept (line ~17065)</site>
+      </call_sites>
+      <grep_evidence>
+        <pattern>_run_browser_approval_server</pattern>
+        <match_count>7</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+    </call_site_verification>
+    <call_site_verification>
+      <function>browser_click_confirmed|browser_approval_token|browser_approval_skip</function>
+      <call_sites>
+        <site>_write_acceptance_request params (line 4686-4689)</site>
+        <site>_cmd_gates_request_accept browser result handling (line 17079-17087)</site>
+        <site>gates accept browser check (line 18738-18777)</site>
+      </call_sites>
+      <grep_evidence>
+        <pattern>browser_click_confirmed|browser_approval_token|browser_approval_skip</pattern>
+        <match_count>35</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+    </call_site_verification>
+    <file_spread>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+      <file>tests/e2e/test_pr_comment_accept_3bf4.py (신규)</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>tests/oracles/BUG-20260620-3BF4/</file>
+    </file_spread>
+    <trust_root_changes>true</trust_root_changes>
+    <trust_root_files>
+      <file>pipeline.py</file>
+    </trust_root_files>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <confirmation_evidence>사용자 원문에서 4개 핵심 목표(브라우저 게이트 제거, PR 댓글 승인, nonce 안정화, SSoT 표시 일관성)와 대상 파일(pipeline.py, test_request_accept_nonce_reuse_aef0.py, pipeline-manager-agent.md)을 명시적으로 지정했습니다.</confirmation_evidence>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>코드 스타일, 변수명, 함수명 관련 P2 질문은 유지보수성 우선 원칙에 따라 필터링했습니다. 브라우저 코드 제거 방식, nonce 표시 형식 등 모든 기술적 세부사항이 사용자 요청에 명시되어 있어 추가 clarification이 필요하지 않습니다.</filter_summary>
+    <user_response>NO_ASKUSER_REQUIRED</user_response>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>브라우저 승인 게이트를 완전히 제거하고 PR 댓글 기반 승인으로 전환하는 4개 micro-task 분해에 동의하시나요?</user_facing_question>
+        <evidence>사용자 원문에서 "브라우저 승인 게이트 완전 제거", "PR 댓글로만 처리", "request-accept 반복 실행 안정화", "테스트 필수" 4개 핵심 목표를 명시했습니다.</evidence>
+        <why_it_matters>pipeline.py 신뢰 루트 파일 수정이므로 MT 단위로 검증하며 진행해야 회귀를 방지할 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>4개 MT 분리 (브라우저 코드 제거 → nonce 안정화 → PR 댓글 provenance 강화 → 테스트/문서)</label>
+            <benefit>각 MT를 독립 검증 가능하고 회귀 위험 최소화</benefit>
+            <cost>MT 간 의존성 관리 필요</cost>
+          </option>
+          <option id="B">
+            <label>단일 MT로 일괄 수정</label>
+            <benefit>단일 스텝으로 빠른 구현 완료 가능, 컨텍스트 전환 비용 없음</benefit>
+            <cost>회귀 발생 시 원인 분리 어려움, HIGH_RISK 작업에 부적합</cost>
+          </option>
+        </options>
+        <user_answer>사용자 원문에서 14개 테스트 케이스와 대상 함수를 구체적으로 명시하여 분리 검증 의도 확인됨 → 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1" source="user">브라우저 승인 게이트 완전 제거 — _run_browser_approval_server, browser_click_confirmed, browser_approval_token, browser_approval_skip, PIPELINE_BROWSER_APPROVAL_SKIP, PIPELINE_BROWSER_APPROVAL_TIMEOUT, localhost/127.0.0.1 approve URL 관련 코드 완전 제거</requirement>
+    <requirement id="REQ-2" source="user">PR 댓글로만 승인 처리 — 사용자가 GitHub PR에 ACCEPT-{pipeline_id} 한 줄 댓글 입력, gates accept는 PR 댓글 provenance와 freshness만 검증</requirement>
+    <requirement id="REQ-3" source="user">nonce는 내부 SSoT 검증값으로만 보존 — 사용자에게 표시하는 승인 코드에서 nonce 제거, acceptance_request.json 내부에서만 유지</requirement>
+    <requirement id="REQ-4" source="user">request-accept 반복 실행 안정화 — 같은 조건(head_sha/ci_run_id/evidence/pr_body)에서 기존 PENDING request 재사용, --force-new-code에서만 새 nonce 생성</requirement>
+    <requirement id="REQ-5" source="user">PR 댓글 provenance 검증 강화 — 작성자 일치, ACCEPT-{pipeline_id} 정확히 한 줄, 댓글 timestamp > request.created_at, 자동 생성 packet 댓글 제외</requirement>
+    <requirement id="REQ-6" source="user">PR diff 실행 산출물 오염 차단 — pipeline_state.json, step_plan*.xml 등 포함 시 BLOCKED</requirement>
+    <requirement id="REQ-7" source="user">기존 무결성 검증 유지 — packet_sha256, verification_json_sha256, pr_body_sha256, head_sha, ci_run_id, evidence_sha256 검증 모두 유지</requirement>
+    <requirement id="REQ-8" source="user">테스트 필수 — 14개 테스트 케이스 명시</requirement>
+    <requirement id="REQ-9" source="user">문서 갱신 — pipeline-manager-agent.md에서 브라우저 승인 안내 제거, PR 댓글 승인 절차 명시</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <title>브라우저 승인 게이트 완전 제거</title>
+      <affected_function>_run_browser_approval_server, _write_acceptance_request, _cmd_gates_request_accept, gates accept handler</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept line ~17065 (브라우저 서버 호출)</site>
+        <site>gates accept handler line ~18738-18777 (브라우저 검증 블록)</site>
+        <site>_write_acceptance_request params line 4686-4689 (브라우저 관련 매개변수)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_run_browser_approval_server|browser_click_confirmed|browser_approval_token|PIPELINE_BROWSER_APPROVAL_SKIP</pattern>
+        <match_count>42</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_run_browser_approval_server 함수 전체 제거, _write_acceptance_request에서 browser_* 매개변수 제거, _cmd_gates_request_accept에서 브라우저 서버 호출 로직 제거, gates accept에서 browser_approval_required 검증 블록 제거, PIPELINE_BROWSER_APPROVAL_SKIP/TIMEOUT 환경변수 참조 제거</change_summary>
+      <line_estimate>180</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <title>PR 댓글 승인 방식 단순화 및 nonce 표시 제거</title>
+      <affected_function>_check_pr_approver_provenance, _issue_acceptance_nonce, _should_reuse_acceptance_nonce, _cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>gates accept handler line ~18663 (_check_pr_approver_provenance 호출)</site>
+        <site>_cmd_gates_request_accept nonce 발급/표시 로직</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_pr_approver_provenance|ACCEPT-.*-.*nonce</pattern>
+        <match_count>15</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_check_pr_approver_provenance에서 승인 코드 형식을 ACCEPT-{pipeline_id}로 단순화(nonce 부분 제거), 사용자에게 표시하는 승인 코드에서 nonce 제거, nonce는 acceptance_request.json 내부 SSoT 검증용으로만 보존, PR 댓글 timestamp 검증 추가(created_at 또는 createdAt 파싱, 실패 시 BLOCKED), 다른 pipeline_id active pending 댓글 obsolete 처리 로직 추가</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-3, AC-4, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <title>request-accept 반복 실행 안정화 및 원자적 동기화</title>
+      <affected_function>_should_reuse_acceptance_nonce, _cmd_gates_request_accept, _atomic_write_acceptance_request</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept line ~16937 (재사용 판단 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_should_reuse_acceptance_nonce|force_new_code|os.replace</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>기존 PENDING request 재사용 로직 강화(--force-new-code에서만 새 nonce 생성), PR body 갱신 후 acceptance_request.json의 pr_body_sha256, packet_sha256, verification_json_sha256를 temp file + os.replace로 원자적 동기화, 중간 실패 시 BLOCKED 처리, placeholder 검사(ABCDEFGH/XXXXXXXX/nonce) 추가</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <title>테스트 추가 및 문서 갱신</title>
+      <affected_function>none</affected_function>
+      <target_files>
+        <file>tests/e2e/test_pr_comment_accept_3bf4.py</file>
+        <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+        <file>tests/oracles/BUG-20260620-3BF4/normal_accept/given.json</file>
+        <file>tests/oracles/BUG-20260620-3BF4/normal_accept/expected.json</file>
+        <file>tests/oracles/BUG-20260620-3BF4/edge_no_comment/given.json</file>
+        <file>tests/oracles/BUG-20260620-3BF4/edge_no_comment/expected.json</file>
+        <file>tests/oracles/BUG-20260620-3BF4/error_timestamp_missing/given.json</file>
+        <file>tests/oracles/BUG-20260620-3BF4/error_timestamp_missing/expected.json</file>
+        <file>tests/oracles/BUG-20260620-3BF4/edge_diff_contamination/given.json</file>
+        <file>tests/oracles/BUG-20260620-3BF4/edge_diff_contamination/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PIPELINE_BROWSER_APPROVAL_SKIP</pattern>
+        <match_count>14</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 테스트 파일 test_pr_comment_accept_3bf4.py 생성(14개 테스트 케이스), 기존 test_request_accept_nonce_reuse_aef0.py에서 PIPELINE_BROWSER_APPROVAL_SKIP 참조 제거, pipeline-manager-agent.md에서 브라우저 승인 안내 제거 및 PR 댓글 승인 절차 추가, oracle 파일 생성(4케이스)</change_summary>
+      <line_estimate>400</line_estimate>
+      <covers_ac>AC-7, AC-8, AC-9, AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py에서 _run_browser_approval_server 함수가 완전히 제거되어야 한다. grep으로 검색 시 0개 매칭.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py와 agent 문서에서 browser_click_confirmed, browser_approval_token, browser_approval_skip, PIPELINE_BROWSER_APPROVAL_SKIP, PIPELINE_BROWSER_APPROVAL_TIMEOUT, localhost approve?session 관련 문자열이 0개여야 한다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>gates accept 실행 시 PR 댓글에서 ACCEPT-{pipeline_id} 형식의 승인 댓글을 검증해야 한다. nonce 부분은 사용자에게 표시하지 않고 내부 SSoT로만 유지.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>PR 댓글 timestamp가 acceptance_request.created_at보다 이후여야 PASS. timestamp 파싱 실패 시 fail-closed BLOCKED.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>자동 생성 packet 마커(pipeline-human-acceptance-packet)가 포함된 댓글은 승인 후보에서 제외되어야 한다.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>request-accept 3회 반복 실행해도 같은 PENDING request의 nonce/request_id가 불변이어야 한다(조건 동일 시).</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>PR diff에 pipeline_state.json, step_plan*.xml, dev_handover*.xml, qa_report*.xml, build_report*.xml, .pipeline/**, pipeline_contracts/**, *_dump.txt가 포함되면 request-accept 실행 시 BLOCKED 반환.</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>14개 테스트 케이스가 모두 PASS해야 한다.</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>pipeline-manager-agent.md에서 브라우저 승인 안내가 제거되고 PR 댓글 승인 절차가 명시되어야 한다.</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>Claude/Codex가 대신 댓글을 쓰면 안 된다는 경고가 pipeline-manager-agent.md에 명시되어야 한다.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_design>
+    <oracle_case case_id="normal_accept" case_kind="normal">
+      <description>PR에 허용 승인자가 ACCEPT-BUG-20260620-3BF4 댓글을 남긴 경우 gates accept PASS</description>
+      <input_file>tests/oracles/BUG-20260620-3BF4/normal_accept/given.json</input_file>
+      <expected_file>tests/oracles/BUG-20260620-3BF4/normal_accept/expected.json</expected_file>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case case_id="edge_no_comment" case_kind="edge">
+      <description>PR에 승인 댓글이 없는 경우 gates accept BLOCKED (pr_approver_missing)</description>
+      <input_file>tests/oracles/BUG-20260620-3BF4/edge_no_comment/given.json</input_file>
+      <expected_file>tests/oracles/BUG-20260620-3BF4/edge_no_comment/expected.json</expected_file>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case case_id="error_timestamp_missing" case_kind="error">
+      <description>PR 댓글에 timestamp가 없는 경우 fail-closed BLOCKED</description>
+      <input_file>tests/oracles/BUG-20260620-3BF4/error_timestamp_missing/given.json</input_file>
+      <expected_file>tests/oracles/BUG-20260620-3BF4/error_timestamp_missing/expected.json</expected_file>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case case_id="edge_diff_contamination" case_kind="edge">
+      <description>PR diff에 pipeline_state.json이 포함된 경우 request-accept BLOCKED</description>
+      <input_file>tests/oracles/BUG-20260620-3BF4/edge_diff_contamination/given.json</input_file>
+      <expected_file>tests/oracles/BUG-20260620-3BF4/edge_diff_contamination/expected.json</expected_file>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+  </oracle_design>
+
+  <python_version>3.9</python_version>
+
+  <forbidden>
+    <item>브라우저 승인 코드를 조건부로 유지하거나 환경변수로 토글하는 것 금지 — 완전 제거만 허용</item>
+    <item>nonce를 사용자에게 표시하는 것 금지 — 내부 SSoT 검증용으로만 보존</item>
+    <item>PR 댓글 timestamp 검증을 WARN으로 처리하는 것 금지 — 파싱 실패 시 fail-closed BLOCKED 필수</item>
+    <item>테스트 파일에서 PIPELINE_BROWSER_APPROVAL_SKIP 환경변수를 계속 사용하는 것 금지</item>
+  </forbidden>
+</step_plan>
