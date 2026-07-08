@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260628-F52C",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-3ec95e0deeaba9fd",
+  "status": "COMPLETED",
+  "started_at": "2026-06-30T00:21:46Z",
+  "completed_at": "2026-06-30T00:24:36Z",
+  "output_file": "module_handover_MT-8-r8-safe-replace.xml",
+  "output_sha256": "395a6951734d6fdce36be07b089058f5c97b9fc75e996ee1878c908d497f7df0",
+  "evidence_files": [],
+  "commit_sha": "6f0f5b31342fb1aabe9f5feb7c5387056653bda6"
+}
