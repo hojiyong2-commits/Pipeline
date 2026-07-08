@@ -20783,6 +20783,48 @@ def _check_codex_review_freshness_for_reuse(
 #            fail-closed BLOCKED(verdict="REJECT")로 처리한다. legacy "미설정 시 통과" fallback을
 #            제거하여 "검토 없이 publish"가 불가능하다.
 # [Improvement]: result 파일에 reviewer 서명/타임스탬프 TTL을 추가하면 위변조/만료 검출이 가능하다.
+
+
+def _check_codex_pr_body_sha_invariant(
+    codex_result: Dict[str, Any], staged_candidate_sha: str
+) -> Dict[str, Any]:
+    """Codex Review와 staged snapshot의 PR body SHA 3-way 불변식 hard gate (MT-29).
+
+    codex_review_result.json에 기록된 pr_body_candidate_sha256/pr_body_sha256이
+    현재 staged candidate SHA와 일치하는지 검증한다. 불일치이면 Codex Review가
+    다른 PR body를 검토한 것이므로 BLOCKED를 반환한다.
+
+    Returns:
+        {'ok': True} — 일치 (PASS)
+        {'ok': False, 'failure_code': ..., 'message': ...} — 불일치 (BLOCKED)
+    """
+    codex_pr_body_sha = str(
+        codex_result.get("pr_body_candidate_sha256", "")
+        or codex_result.get("pr_body_sha256", "")
+        or ""
+    )
+    if not codex_pr_body_sha:
+        return {
+            "ok": False,
+            "failure_code": "codex_pr_body_sha_missing",
+            "message": (
+                "codex_review_result에 pr_body_sha256이 없습니다. "
+                "gates codex-review를 다시 실행하세요."
+            ),
+        }
+    if codex_pr_body_sha != staged_candidate_sha:
+        return {
+            "ok": False,
+            "failure_code": "codex_pr_body_sha_mismatch",
+            "message": (
+                f"Codex가 검토한 PR body SHA({codex_pr_body_sha[:12]}...)와 "
+                f"현재 staged candidate SHA({staged_candidate_sha[:12]}...)가 다릅니다. "
+                "PR body가 변경되었으므로 gates codex-review를 다시 실행하세요."
+            ),
+        }
+    return {"ok": True}
+
+
 def _codex_review_snapshot(
     pipeline_id: str,
     staged_sha_manifest: Dict[str, Any],
@@ -23209,50 +23251,38 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             # snapshot_id/sha 기록 실패는 non-fatal — publish 불변식 검증이 fail-closed로 판정한다.
             pass
 
-        # ── IMP-20260703-B985 MT-33: codex → acceptance_request SHA 동기화 (REJECT #16) ──
-        # 이 request-accept 호출이 방금 계산한 staged_pr_body_sha(= acceptance_request에 기록될
-        # pr_body_candidate_sha256)와 이전 gates codex-review가 codex_review_result.json에 기록한
-        # pr_body_candidate_sha256이 다르면, 아래 _codex_review_snapshot이 candidate-vs-candidate
-        # 검증에서 REJECT를 반환하여 codex_review_not_approved BLOCKED가 재발한다. staging이
-        # 새로 생성되어 후보 SHA가 갱신된 경우에 발생한다. codex → acceptance_request 순서로
-        # SHA가 일치하도록, staged 값이 있고 기존 codex 기록과 다르면 codex_review_result.json의
-        # pr_body_candidate_sha256(및 backward-compat pr_body_sha256)을 staged 값으로 갱신한다.
-        # verdict / status / packet_sha256 등 다른 필드는 절대 변경하지 않는다(승인 판정 무결성 보존).
-        # 파일 부재/파싱 실패/verdict 미승인은 graceful skip — 아래 codex 검증이 그대로 판정한다.
+        # ── MT-29: codex_review_result PR body SHA hard gate (CODEX SHA 자동 override 제거) ──
+        # IMP-20260703-B985 MT-33의 자동 덮어쓰기("CODEX SHA 동기화") 로직을 제거하고
+        # hard gate로 교체한다. staged_pr_body_sha와 codex_review_result의 pr_body_sha256이
+        # 다르면 Codex가 다른 PR body를 검토한 것이므로 BLOCKED. 자동 override는
+        # 실제 검토를 우회할 수 있으므로 완전 폐기한다.
         if staged_pr_body_sha:
             try:
-                _cx_sync_path = _codex_review_result_path()
-                if _cx_sync_path.exists():
-                    _cx_sync = json.loads(
-                        _cx_sync_path.read_text(encoding="utf-8", errors="replace")
+                _cx_gate_path = _codex_review_result_path()
+                if _cx_gate_path.exists():
+                    _cx_gate = json.loads(
+                        _cx_gate_path.read_text(encoding="utf-8", errors="replace")
                     )
                     if (
-                        isinstance(_cx_sync, dict)
-                        and str(_cx_sync.get("pipeline_id", "") or "") == pipeline_id
-                        and str(_cx_sync.get("verdict", "") or "") == "APPROVE_TO_USER"
+                        isinstance(_cx_gate, dict)
+                        and str(_cx_gate.get("pipeline_id", "") or "") == pipeline_id
+                        and str(_cx_gate.get("verdict", "") or "") == "APPROVE_TO_USER"
                     ):
-                        _cx_recorded_body = str(
-                            _cx_sync.get("pr_body_candidate_sha256", "")
-                            or _cx_sync.get("pr_body_sha256", "")
-                            or ""
-                        )
-                        if _cx_recorded_body and _cx_recorded_body != staged_pr_body_sha:
-                            _cx_sync["pr_body_candidate_sha256"] = staged_pr_body_sha
-                            _cx_sync["pr_body_sha256"] = staged_pr_body_sha
-                            _si = _cx_sync.get("snapshot_identity")
-                            if isinstance(_si, dict):
-                                _si["pr_body_candidate_sha256"] = staged_pr_body_sha
-                            _cx_sync_path.write_text(
-                                json.dumps(_cx_sync, ensure_ascii=False, indent=2),
-                                encoding="utf-8",
+                        _cx_inv = _check_codex_pr_body_sha_invariant(_cx_gate, staged_pr_body_sha)
+                        if not _cx_inv.get("ok"):
+                            _log_event(
+                                state,
+                                f"request-accept blocked by codex PR body SHA invariant: "
+                                f"{_cx_inv.get('failure_code')}",
                             )
-                            if not _machine_readable:
-                                print(
-                                    "  [CODEX SHA 동기화] codex_review_result.pr_body_candidate_sha256을 "
-                                    f"staged 값으로 갱신: {staged_pr_body_sha[:12]}..."
-                                )
+                            _save(state)
+                            _die(
+                                f"[BLOCKED] failure_code={_cx_inv.get('failure_code')}\n"
+                                f"  {_cx_inv.get('message')}"
+                            )
+                            return  # unreachable
             except (OSError, json.JSONDecodeError, ValueError, TypeError):
-                # 동기화 실패는 non-fatal — 아래 _codex_review_snapshot이 fail-closed로 판정한다.
+                # 파일 부재/파싱 실패는 아래 _codex_review_snapshot이 fail-closed로 판정한다.
                 pass
 
         # ── 단계 2: codex_review_snapshot — staged SHA 기준 hard gate. ──

@@ -18,17 +18,5 @@
     ]
   },
   "skipDangerousModePermissionPrompt": true,
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -File \".claude/hooks/codex-user-acceptance-review.ps1\""
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }
