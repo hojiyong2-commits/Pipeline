@@ -1,0 +1,10 @@
+﻿{
+  "pipeline_id": "IMP-20260606-0159",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["gate_roi_report.md"],
+      "affected_functions": ["none"]
+    }
+  ]
+}

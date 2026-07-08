@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260606-0159</pipeline_id>
+  <agent_run_id>dev-4cc7062f9ff9d34f</agent_run_id>
+  <execution_profile>FAST_ANALYSIS</execution_profile>
+  <phase>dev</phase>
+  <status>COMPLETE</status>
+  <completed_at>2026-06-06T02:14:30Z</completed_at>
+
+  <scope_declaration>
+    <files_modified>
+      <file>gate_roi_report.md</file>
+    </files_modified>
+    <files_created>
+      <file>gate_roi_report.md</file>
+    </files_created>
+    <files_deleted></files_deleted>
+    <product_code_modified>false</product_code_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>none</target_function>
+    <target_files>
+      <file>gate_roi_report.md</file>
+    </target_files>
+    <affected_call_sites>
+      <site>none</site>
+    </affected_call_sites>
+    <blast_radius>MINIMAL</blast_radius>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>gate_roi_report.md</git_diff_files>
+    <manifest_files>gate_roi_report.md</manifest_files>
+    <extra_files>none</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <micro_tasks_completed>
+    <micro_task id="MT-1">
+      <status>COMPLETE</status>
+      <description>Gate ROI 분석 보고서 작성</description>
+      <implemented_files>
+        <file>gate_roi_report.md</file>
+      </implemented_files>
+      <implemented_ac>AC-1, AC-2, AC-3</implemented_ac>
+    </micro_task>
+  </micro_tasks_completed>
+
+  <evidence>
+    <primary_deliverable>gate_roi_report.md</primary_deliverable>
+  </evidence>
+
+  <qa_handover>
+    <ready>true</ready>
+  </qa_handover>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260606-0159</pipeline_id>
+    <agent_run_id>dev-4cc7062f9ff9d34f</agent_run_id>
+    <evidence>
+      <file>gate_roi_report.md</file>
+    </evidence>
+    <summary>FAST_ANALYSIS 프로파일 — gate_roi_report.md 1개 파일 생성 완료. 제품 코드 수정 없음. 10개 파이프라인 분석 데이터 포함, 게이트별 권고 표, 프로파일 표, Three-Gate/Nonce Gate/Verification JSON SSoT 유지 권고 명시.</summary>
+  </handover>
+</dev_handover>
