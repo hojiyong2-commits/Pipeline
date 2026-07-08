@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260613-82ED</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_evidence_inventory_82ed.py</file>
+    <file>scope_manifest_MT-1.json</file>
+    <file>scope_manifest_MT-2.json</file>
+    <file>scope_manifest_MT-3.json</file>
+    <file>module_handover_MT-1.xml</file>
+    <file>module_handover_MT-2.xml</file>
+    <file>module_handover_MT-3.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+  <files_modified>
+    <file>pipeline.py</file>
+    <file>tests/test_evidence_inventory_82ed.py</file>
+  </files_modified>
+  <modules_completed>
+    <module id="MT-1" status="PASS">pipeline.py Evidence Inventory SSoT — _register_evidence_to_inventory, _validate_evidence_provenance 신규, gate 핸들러 확장, evidence_integrity 섹션 추가</module>
+    <module id="MT-2" status="PASS">tests/test_evidence_inventory_82ed.py — 11개 회귀 테스트 PASS</module>
+    <module id="MT-3" status="PASS">pipeline.py 게이트 관계 문서화 (IQR-1)</module>
+  </modules_completed>
+  <integration_result>PASS</integration_result>
+  <ac_coverage>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11</ac_coverage>
+  <scope_declaration>
+    <pipeline_id>IMP-20260613-82ED</pipeline_id>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_evidence_inventory_82ed.py</file>
+    </files_to_modify>
+    <frozen_files>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/oracles/**</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/*.md</file>
+    </frozen_files>
+    <rationale>MT-1: pipeline.py Evidence Inventory SSoT 도입. MT-2: 회귀 테스트 신규 작성. MT-3: pipeline.py 게이트 관계 문서화.</rationale>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_register_evidence_to_inventory (신규), _validate_evidence_provenance (신규)</target_function>
+    <blast_radius>pipeline.py 내 contract add-oracle / gates oracle / gates request-accept / gates accept / report final-packet 처리 경로</blast_radius>
+    <state_mutations>evidence_inventory.json 신규 파일 생성 (pipeline_contracts/IMP-20260613-82ED/evidence_inventory.json)</state_mutations>
+    <risk_assessment>
+      <data_deletion>false</data_deletion>
+      <auth_or_secret>false</auth_or_secret>
+      <external_api>false</external_api>
+      <regression_risk>LOW — 기존 gate 흐름에 추가만, AC-11 회귀 테스트 11개로 검증됨</regression_risk>
+    </risk_assessment>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_evidence_inventory_82ed.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_evidence_inventory_82ed.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <status>READY_FOR_QA</status>
+</handover>
