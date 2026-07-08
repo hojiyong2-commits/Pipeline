@@ -1,0 +1,83 @@
+<impact_analysis>
+  <pipeline_id>IMP-20260625-CD3C</pipeline_id>
+  <round>r2 — QA 재작업 (_safe_resolve dead code 제거)</round>
+  <target_function>codex_user_acceptance_review._safe_resolve</target_function>
+  <change_type>remove_dead_code</change_type>
+  <affected_files>
+    <file>.claude/hooks/codex_user_acceptance_review.py</file>
+  </affected_files>
+  <call_sites_affected>none</call_sites_affected>
+  <risk>low — dead code 제거, 호출처 0개, 동작 변화 없음</risk>
+</impact_analysis>
+
+<scope_declaration>
+  <pipeline_id>IMP-20260625-CD3C</pipeline_id>
+  <files_to_modify>
+    <file>.claude/hooks/codex_user_acceptance_review.py</file>
+    <file>.claude/hooks/codex-user-acceptance-review.ps1</file>
+    <file>.claude/settings.json</file>
+    <file>tests/test_codex_review_hook_cd3c.py</file>
+  </files_to_modify>
+  <scope_confirmed>true</scope_confirmed>
+</scope_declaration>
+
+<handover>
+  <from>dev-agent</from>
+  <pipeline_id>IMP-20260625-CD3C</pipeline_id>
+  <round>r2 (QA 재작업 — dead code 제거)</round>
+  <summary>
+    QA가 FS traversal 항목에서 FAIL 판정한 dead code _safe_resolve 함수를
+    .claude/hooks/codex_user_acceptance_review.py 에서 제거했습니다.
+    이 함수는 user-supplied 경로를 다루는 호출처가 0개여서 traversal 방어 목적이
+    충족되지 않는 dead code였습니다. 함수 정의(88~115줄)만 제거하고 나머지 코드는
+    Frozen Codebase 원칙대로 일체 변경하지 않았습니다.
+  </summary>
+  <files_changed>
+    <file role="hook helper — _safe_resolve dead code 제거">.claude/hooks/codex_user_acceptance_review.py</file>
+  </files_changed>
+  <verification>
+    <check name="py_compile">PASS</check>
+    <check name="import">PASS</check>
+    <check name="ruff">PASS — All checks passed (unused import 없음, Path는 다른 함수에서 계속 사용)</check>
+    <check name="grep_safe_resolve">PASS — 0 matches (정의 완전 제거)</check>
+    <check name="pytest">PASS — tests/test_codex_review_hook_cd3c.py 13 passed</check>
+    <check name="self_verify">PASS — [SELF-VERIFY] OK</check>
+  </verification>
+  <frozen_codebase_check>
+    PASS — (1) Frozen: codex_user_acceptance_review.py 1개 파일만 변경
+    (2) Minimal: _safe_resolve 제거 외 무관한 리팩토링 0건
+    (3) OAR 0회 (1회 수정으로 완료)
+    (4) Pre-Fix Snapshot 출력 + Post-Fix Diff: _safe_resolve 제거, 호출자 0개라 영향 없음
+    (5) Side-Effect Audit: Grep _safe_resolve 0 호출 → 호출자 영향 없음 확인
+    (6) Multi-location Sync: _safe_resolve는 단일 위치 정의 → 동기화 불필요
+  </frozen_codebase_check>
+  <scope_lock_check>
+    <git_diff_files>.claude/hooks/codex_user_acceptance_review.py (이번 파이프라인 변경분)</git_diff_files>
+    <manifest_files>.claude/hooks/codex_user_acceptance_review.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>.claude/hooks/codex_user_acceptance_review.py</evidence>
+  <next_phase>QA 재검증 — _safe_resolve 제거 확인 (Grep 0 matches)</next_phase>
+  <module_gate_deadlock>
+    <description>
+      코드 수정(_safe_resolve dead code 제거)은 완료/검증되었으나, module gate가
+      이미 MT-1~MT-4 전부 PASS + integration PASS 상태이므로 정상 CLI 경로로
+      dev done 재기록이 불가능합니다. Pipeline Manager의 개입이 필요합니다.
+    </description>
+    <blocked_paths>
+      <path cmd="done --phase dev">[MODULE CHECKPOINT] MT-1 checkpoint changed after PASS — MT-1 파일이 PASS 시점 SHA와 달라 차단 (_validate_module_checkpoints, pipeline.py:2072)</path>
+      <path cmd="module design/dev/qa --mt-id MT-1">[MODULE GATE] later module MT-2 already advanced before MT-1 — 후속 모듈이 advanced되어 MT-1 재진입 차단 (_require_module_current, pipeline.py:2019)</path>
+    </blocked_paths>
+    <available_recovery>
+      checkpoint 갱신은 module qa --result PASS 시점에만 발생하나, 그 경로가 MT-2 advanced로 막힘.
+      reset/force/checkpoint-refresh 플래그가 pipeline.py에 존재하지 않음.
+      Pipeline Manager가 module gate 상태를 재설정하거나 별도 복구 절차를 결정해야 함.
+    </available_recovery>
+    <code_status>
+      코드 자체는 QA 요청대로 완료됨: _safe_resolve 0 matches, pytest 13 passed,
+      py_compile/import/ruff/self-verify 전부 PASS. 검증 차원의 추가 작업은 없음.
+    </code_status>
+  </module_gate_deadlock>
+</handover>
