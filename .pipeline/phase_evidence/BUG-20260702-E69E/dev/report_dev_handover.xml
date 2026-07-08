@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <pipeline_id>BUG-20260702-E69E</pipeline_id>
+  <run_id>dev-0b59d44ade974322</run_id>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py, tests/oracles/BUG-20260702-E69E/**</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py</manifest_files>
+    <extra_files>없음 (oracle 파일은 tests/oracles/BUG-20260702-E69E/ 하위 — 현재 파이프라인 전용 answer key, Oracle gate 필수)</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+    <file>dev_handover.xml</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_coverages>
+      <mt id="MT-1"><target_function>_classify_codex_cli_error</target_function></mt>
+      <mt id="MT-2"><target_function>_cmd_gates_codex_review (스키마 확장)</target_function></mt>
+      <mt id="MT-3"><target_function>_check_codex_rate_limit</target_function></mt>
+      <mt id="MT-4"><target_function>_cmd_gates_codex_review (복구 명령 인자)</target_function></mt>
+      <mt id="MT-5"><target_function>_codex_review_snapshot</target_function></mt>
+      <mt id="MT-6"><target_function>_append_codex_history</target_function></mt>
+      <mt id="MT-7"><target_function>test_tc1_* ~ test_tc10_*</target_function></mt>
+    </mt_coverages>
+  </impact_analysis>
+  <implementation_summary>
+MT-1 (_classify_codex_cli_error, pipeline.py:6833): CLI 실행 결과(exit_code/stdout/stderr)를 usage_limit/timeout/missing_executable/network/parse_failure/nonzero_exit로 분류. None/isinstance/bool 배제 타입 가드 완비. pure function.
+MT-2 (_cmd_gates_codex_review + _run_codex_cli_review, pipeline.py:6910/19019): codex_review_result.json schema_version=3로 확장 — status/error_type/error_retryable/reject_count/cli_error_count/codex_cli_exit_code/stdout|stderr_excerpt/verdict/acceptance_eligible 필드 추가. exit!=0은 절대 REJECT로 fallback하지 않고 ERROR로 분류. exit 0 + "REJECT -" 시작만 REJECTED, "APPROVE_TO_USER"만 APPROVED, 그 외 parse_failure ERROR.
+MT-3 (_check_codex_rate_limit, pipeline.py:7063): reject_count>=2만 RATE_LIMITED. cli_error_count는 rate-limit 미적용. 음수 카운트 방어적 0 clamp. --force-review로만 우회.
+MT-4 (_cmd_gates_codex_review argparse, pipeline.py:23838/23842): --retry-cli-error(ERROR 상태 재시도, REJECTED 상태 차단), --force-review(reject rate-limit 수동 우회) 추가. retry 전 REJECTED 상태이면 codex_retry_cli_error_on_reject BLOCKED.
+MT-5 (_codex_review_snapshot + _codex_review_error_blocker, pipeline.py:18837/19424): request-accept에서 status=ERROR 감지 시 "[CODEX REVIEW ERROR]" + 복구 명령 출력 후 BLOCKED. status=APPROVED AND verdict=APPROVE_TO_USER일 때만 승인 코드 발급. retry_after 파싱 지원.
+MT-6 (_append_codex_history + _finish_codex_review_error, pipeline.py:7016/19346): .pipeline/codex_review_history.jsonl append-only 이력. ERROR 이벤트는 counts_toward_reject_rate_limit=false, acceptance_eligible=false, verdict=None으로 APPROVED cache 재사용 불가.
+MT-7 (test_codex_cost_optimization_9f5e.py:162-399): TC-1~TC-12 추가. subprocess + PIPELINE_STATE_PATH 격리 기반 실제 CLI 경로 검증.
+  </implementation_summary>
+  <test_verification>
+python -m pytest tests/e2e/test_codex_cost_optimization_9f5e.py -q
+결과: 11 passed, 1 skipped (TC-9는 @pytest.mark.skip — SHA provenance 재검증은 request-accept publish 경로에서 gh CLI로 커버됨, 문서화된 skip).
+py_compile: pipeline.py + test 파일 모두 통과. import pipeline OK.
+회귀: tests/ -k codex 전체 실행 시 4건 FAIL은 tests/test_verification_json_codex_evidence.py의 Windows cp949 콘솔 인코딩 mojibake/terminal-state 사전 문제로, git stash로 pipeline.py를 HEAD로 되돌려도 동일하게 FAIL — 본 파이프라인 변경과 무관(내 scope 함수 미참조 확인).
+  </test_verification>
+  <note>
+이 워크스페이스는 이전 dev 라운드에서 MT-1~MT-7 로직이 이미 pipeline.py에 구현·배선되어 있었습니다(git diff HEAD 확인). 본 라운드는 정합성 검증 + scope_manifest.json/scope_manifest_MT-1~7.json을 현재 파이프라인 BUG-20260702-E69E로 재작성했습니다(기존 MT-N manifest는 IMP-20260701-9F5E 소유의 stale 파일이었음). 코드 로직 신규 변경 없음.
+  </note>
+</handover>
