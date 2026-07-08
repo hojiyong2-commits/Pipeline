@@ -1,0 +1,187 @@
+{
+  "pipeline_id": "BUG-20260628-F52C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._materialize_acceptance_snapshot"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_materialize_acceptance_snapshot staging/publish 분리"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_request_accept",
+        "pipeline._prepare_acceptance_snapshot_candidate",
+        "pipeline._publish_acceptance_request"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_cmd_gates_request_accept 3단계 분리, Codex APPROVE_TO_USER 필수"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_codex_review",
+        "pipeline._codex_review_snapshot",
+        "pipeline._codex_review_result_path"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-2", "AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "gates codex-review verdict codex_review_result.json 기록, NOT_CONFIGURED 제거"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_pending_snapshot_lock"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-5", "AC-6"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_check_pending_snapshot_lock pending packet divergent 변형 방지"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._verify_snapshot_invariant"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-4", "AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_verify_snapshot_invariant 3-way packet SHA 일치 강제"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/e2e/test_codex_snapshot_sync_f52c.py",
+        "tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/expected.json",
+        "tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/input.json",
+        "tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/expected.json",
+        "tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/input.json"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_codex_snapshot_sync_f52c.py"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10"],
+          "changed_files": ["tests/e2e/test_codex_snapshot_sync_f52c.py"],
+          "implementation_evidence": [
+            "22개 TC E2E 검증"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-7-AMENDMENT",
+      "files": [
+        "tests/e2e/test_request_accept_snapshot_8c3b.py",
+        "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+        "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+        "tests/test_acceptance_request_format_069a.py",
+        "tests/e2e/test_final_packet_2e3d.py",
+        "tests/e2e/test_ci_run_id_filter_4ac2.py",
+        "tests/test_acceptance_request_verification_json.py"
+      ],
+      "affected_functions": [
+        "consumer_test_codex_sync"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7-AMENDMENT",
+          "implemented_ac": ["AC-2"],
+          "changed_files": [
+            "tests/e2e/test_request_accept_snapshot_8c3b.py",
+            "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+            "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+            "tests/test_acceptance_request_format_069a.py",
+            "tests/e2e/test_final_packet_2e3d.py",
+            "tests/e2e/test_ci_run_id_filter_4ac2.py",
+            "tests/test_acceptance_request_verification_json.py"
+          ],
+          "implementation_evidence": [
+            "consumer E2E 동기화: codex-review 사전 승인 주입"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-8-r8",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_codex_snapshot_sync_f52c.py",
+        "test_results_F52C_evidence.txt"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_codex_review",
+        "pipeline._cmd_gates_request_accept",
+        "pipeline._verify_snapshot_invariant",
+        "pipeline._cmd_gates_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8-r8",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_codex_snapshot_sync_f52c.py"
+          ],
+          "implementation_evidence": [
+            "pr_body_sha256 staged/canonical 분리, codex_review_stale 순환 해소, TC-R8-1..7 신규 7개"
+          ]
+        }
+      ]
+    }
+  ]
+}
