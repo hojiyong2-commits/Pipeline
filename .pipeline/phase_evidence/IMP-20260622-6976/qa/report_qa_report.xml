@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260622-6976</pipeline_id>
+  <agent_run_id>qa-025671f35ad801a9</agent_run_id>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>.claude/agents/pm-planner-agent.md, tests/test_pm_planner_oracle_contract_6976.py</evidence>
+  </handover>
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 없음 (메타 태스크, MD 문서 + 테스트)</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>N-A — 제품 파일 쓰기 로직 없음. 테스트는 read-only(UTF-8 fallback 적용됨)</fs>
+    <pd>PASS — 단일 섹션 추가, God class 없음. 테스트 모듈 책임 분리 명확</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. gates secrets exit 0</sec>
+    <al>PASS — 테스트 _get_content()에 FileNotFoundError/UnicodeDecodeError 방어, 인코딩 fallback, IndexError 방지(start_idx None 처리)</al>
+    <build>N-A — meta-task, EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+  <numeric_score>120</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 네트워크 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — FS 카테고리 미해당 (제품 파일 쓰기 없음)</fs>
+    <pd score="10" max="10">모듈분리 5/5 (섹션 단일 추가, 책임 분리) / 인터페이스계약 5/5 (테스트 타입힌팅 -> str 명시, 명확한 함수 계약)</pd>
+    <al score="20" max="20">0나눗셈 N/A / 범위검증 5 (start_idx None 가드) / 타입검증 5 (isinstance self-verify) / 빈데이터 5 (파일 부재 FileNotFoundError) / 예외방어 5 (인코딩 fallback 3종)</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음 (meta-task)</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="30" max="30"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+  </numeric_score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>PASS — 테스트 _get_content()가 utf-8 -> cp949 -> latin-1 fallback 적용</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — pytest 10/10 실행 증거 확보</execution_check_present>
+    <execution_check_verdict>PASS — python -m pytest 10 passed in 0.06s</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 섹션 헤딩이 실제 라인 97에 존재, 테스트가 실제 파일 내용 검증</functional_binding_verified>
+  </runtime_functional_check>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>0</declared_functions>
+    <actual_modified_functions>0</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <boundary_result>WITHIN_SCOPE</boundary_result>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="'## Oracle Design Contract' 섹션이 pm-planner-agent.md 라인 97에 존재 (Grep 1회 매칭)"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="라인 102: 'Save every oracle input/expected file in UTF-8 encoding' + CRLF/LF .gitattributes 언급"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="라인 106 'tests/oracles/&lt;pipeline_id&gt;/&lt;case_id&gt;/' + pytest 미수집 네이밍 원칙 명시"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="라인 111-112: '--ac-ids AC-N' 매핑 요구 + 예시 명령어 포함"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="라인 115-116: 최소 1개 'normal' + 1개 'edge/exception/error/regression' 구성 명시"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="라인 121: 'expected_source=agent_generated is forbidden by default' 명시"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="라인 125-127: user_provided / production_sample / regression_capture 출처 구분 정의"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="라인 132-133: 'tests/oracles/&lt;pipeline_id&gt;/&lt;case_id&gt;/' 위치 + CODEOWNERS 보호 근거 명시"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="라인 136-137: 'contract add-oracle', 'gates oracle' 용어 일치"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="python -m pytest tests/test_pm_planner_oracle_contract_6976.py -v -> 10 passed in 0.06s (EXIT 0)"/>
+    <criterion ac_id="AC-11" status="PASS" evidence="^## Oracle Design Contract Grep count=1, 기존 섹션 중복 없이 단일 추가"/>
+    <criterion ac_id="AC-12" status="PASS" evidence="섹션 범위 라인 97-142(다음 ## 헤딩 143), 46줄로 80줄 한도 이내. test_ssot_no_excessive_duplication PASS"/>
+  </criteria_verification>
+  <result>[PASS]</result>
+  <verdict>PASS</verdict>
+  <numeric_score_value>30</numeric_score_value>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    - 없음. 12개 AC 전부 PASS, 10개 회귀 테스트 전부 PASS.
+  </critical_issues>
+  <improvement_suggestions>
+    - 테스트는 전체 문서 substring 매칭이므로 동일 키워드가 섹션 밖에 있어도 통과 가능 (테스트 docstring에 이미 명시됨). AC-12만 섹션 격리 검증 수행. 향후 강화 시 각 AC를 섹션 본문 슬라이스 기준으로 검증 권장 — 현재 FAIL 사유 아님.
+  </improvement_suggestions>
+</qa_report>
