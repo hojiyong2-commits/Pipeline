@@ -1,0 +1,433 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PM Planner Agent Output for IMP-20260701-9F5E -->
+<!-- Codex Review 비용 최적화 — deterministic preflight + minimal review bundle + safe cache + append-only review history -->
+
+<decomposition_audit>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>7</micro_task_count>
+  <grep_executions>3</grep_executions>
+  <module_count>7</module_count>
+  <file_count>2</file_count>
+  <function_count>12</function_count>
+  <rationale>
+    Codex Review 비용 최적화를 위해 7개 모듈로 분해:
+    (1) codex-preflight gate 신규 추가
+    (2) review bundle 생성기 구현
+    (3) critical coverage 추출기 구현
+    (4) codex-review bundle 모드 전환
+    (5) safe cache 구현
+    (6) rate-limit + append-only history 구현
+    (7) E2E 테스트 + 비용 측정
+
+    모든 모듈이 pipeline.py 단일 파일에 집중되며, 테스트는 tests/e2e/에 추가됩니다.
+    기존 F52C 불변식을 유지하면서 신규 preflight/bundle/cache 레이어를 추가하는 구조입니다.
+  </rationale>
+  <grep_validation>
+    <item>
+      <pattern>_cmd_gates_codex_review</pattern>
+      <match_count>4</match_count>
+      <executed>true</executed>
+    </item>
+    <item>
+      <pattern>codex_review_result</pattern>
+      <match_count>50</match_count>
+      <executed>true</executed>
+    </item>
+    <item>
+      <pattern>CONSISTENCY_TRUST_ROOT</pattern>
+      <match_count>4</match_count>
+      <executed>true</executed>
+    </item>
+  </grep_validation>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260701-9F5E</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>
+      pipeline.py(trust-root 파일) 수정, 보안 게이트 로직 변경, Codex Review 검증 흐름 재설계.
+      기존 F52C 불변식(packet SHA 3자 일치, APPROVE 전 승인 코드 미노출)을 유지해야 하는
+      보안 크리티컬 작업입니다. 실패 시 User Acceptance gate 우회 가능성이 있어 HIGH_RISK.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>12</expected_changed_functions>
+      <expected_changed_lines>800</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      P2 내부 구현 취향 질문(함수명, 캐시 저장 형식 세부사항 등)은 유지보수성 기준으로 정리했습니다.
+      사용자가 제공한 요구사항이 12개 필수 구현 항목으로 명확히 정의되어 있어 추가 P0/P1 질문이 필요하지 않습니다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          Codex Review 비용 최적화를 3단계(preflight → bundle → cache)로 분리해서 구현하려고 합니다.
+          이렇게 하면 각 단계를 독립적으로 테스트할 수 있고, 문제 발생 시 어느 단계에서 실패했는지 명확해집니다.
+          이 접근 방식이 괜찮을까요?
+        </user_facing_question>
+        <evidence>
+          현재 _cmd_gates_codex_review는 200줄 이상의 단일 함수로 구현되어 있습니다.
+          preflight 검사 로직을 분리하면 Codex CLI 호출 없이 빠르게 실패할 수 있고,
+          bundle 생성을 분리하면 입력 크기를 측정 가능하며,
+          cache를 분리하면 중복 호출을 방지할 수 있습니다.
+        </evidence>
+        <why_it_matters>
+          3단계 분리가 실패하면 복잡한 단일 함수가 되어 디버깅과 유지보수가 어려워집니다.
+          반면 분리 시 각 단계의 책임이 명확해지고 테스트 커버리지도 높아집니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>3단계 분리 (preflight → bundle → codex-review 수정)</label>
+            <benefit>각 단계 독립 테스트 가능, 실패 지점 명확, 캐시 hit 시 0회 호출</benefit>
+            <cost>함수 수 증가(약 8개 신규), 호출 체인 복잡도 증가</cost>
+          </option>
+          <option id="B">
+            <label>단일 함수 확장 (_cmd_gates_codex_review에 모든 로직 추가)</label>
+            <benefit>기존 구조 유지, 호출 체인 단순</benefit>
+            <cost>함수가 400줄 이상으로 비대해짐, 테스트 어려움, 캐시 로직 분리 불가</cost>
+          </option>
+        </options>
+        <user_answer>사용자 원문 요청에서 "gates codex-preflight 신규 추가" 및 "review bundle 생성"을 명시적으로 요구했으므로 옵션 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">gates codex-preflight 서브커맨드 신규 추가 — Codex CLI 호출 전 로컬 deterministic 검사</requirement>
+    <requirement id="REQ-2">codex_review_bundle.json 생성 — 최소 review bundle만 Codex CLI에 전달</requirement>
+    <requirement id="REQ-3">gates codex-review가 bundle만 사용 — 전체 diff 직접 붙이기 금지</requirement>
+    <requirement id="REQ-4">Critical coverage 보장 — pipeline.py, CLAUDE.md, .claude/**, .github/workflows/**, tests/e2e/** 변경 시 bundle 포함 필수</requirement>
+    <requirement id="REQ-5">safe cache — contract_sha256 + review_bundle_sha256 키로 캐시, critical 변경 시 무효</requirement>
+    <requirement id="REQ-6">rate-limit — Codex REJECT 2회 이상 시 자동 재호출 금지, --force-review만 허용</requirement>
+    <requirement id="REQ-7">append-only history — .pipeline/codex_review_history.jsonl에 덮어쓰기 금지 기록</requirement>
+    <requirement id="REQ-8">모델/CLI 정보 기록 — gpt-5.5 거짓 기록 금지, Codex CLI 분리</requirement>
+    <requirement id="REQ-9">Before/After 비용 측정 — 입력 크기 감소율 보고</requirement>
+    <requirement id="REQ-10">F52C 불변식 유지 — packet_sha256/pr_body_sha256/pr_head_sha 3자 일치, APPROVE 전 승인 코드 미노출</requirement>
+    <requirement id="REQ-11">E2E 테스트 24개 케이스 구현</requirement>
+    <requirement id="REQ-12">Fake optimization 금지 — skip→APPROVE 금지, 중요 내용 누락 금지</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_cmd_gates_codex_preflight (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 함수)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex-preflight</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        gates codex-preflight 서브커맨드 신규 추가.
+        검사 항목: raw ACCEPT 코드 노출, codex_review_loop_state.json 참조,
+        NOT_CONFIGURED fallback 허용, APPROVED 전 pending comment 경로,
+        SHA 덮어쓰기 우회, except:pass/best-effort PASS,
+        PENDING 중 frozen snapshot 변경, PR diff hygiene.
+        실패 시 exit 1 + BLOCKED 반환, Codex CLI 미호출.
+      </change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_build_codex_review_bundle (신규), _extract_critical_function_diffs (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 함수, MT-4에서 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>review_bundle</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        codex_review_bundle.json 생성기 구현.
+        포함: pipeline_id, PR URL, head SHA, changed files, critical file 변경 여부,
+        핵심 함수 단위 diff, preflight 결과, gate 상태, F52C 불변식 상태, 테스트 요약, oracle 요약.
+        제외: PR body 전체, packet 전체, oracle JSON 원문, 대형 테스트 파일 전체 diff, raw ACCEPT 코드.
+        critical coverage: pipeline.py, CLAUDE.md, .claude/**, .github/workflows/**, tests/e2e/** 변경 시 bundle 필수 포함.
+      </change_summary>
+      <line_estimate>180</line_estimate>
+      <covers_ac>AC-3, AC-4, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>CODEX_REVIEW_CRITICAL_PATTERNS (신규 SSoT 상수), _is_critical_file (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>CONSISTENCY_TRUST_ROOT_PATTERNS (line 6104) 참조</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>CONSISTENCY_TRUST_ROOT_PATTERNS</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        Critical file 패턴 SSoT 상수 정의.
+        패턴: pipeline.py, CLAUDE.md, .claude/**, .github/workflows/**, tests/e2e/**.
+        기존 CONSISTENCY_TRUST_ROOT_PATTERNS와 별도로 Codex Review 전용 패턴 유지.
+        _is_critical_file 함수로 파일 경로가 critical인지 판정.
+      </change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>_cmd_gates_codex_review (수정)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_codex_review (line 18676)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_codex_review</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        기존 codex-review 핸들러 수정.
+        1) codex-preflight 자동 호출 (실패 시 Codex CLI 미호출)
+        2) bundle 기반 모드 추가 (--use-bundle 옵션)
+        3) 전체 diff 직접 붙이기 차단 (truncation 금지, 분할 시 included/excluded manifest 기록)
+        4) 기존 F52C staging/result 로직 유지
+        5) codex_cli_command, codex_model_detected 필드 추가
+      </change_summary>
+      <line_estimate>100</line_estimate>
+      <covers_ac>AC-6, AC-7, AC-11</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>_codex_review_cache_path (신규), _load_codex_cache (신규), _save_codex_cache (신규), _compute_cache_key (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 함수, MT-4에서 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex.*cache|cache.*codex</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        safe cache 구현.
+        cache key = contract_sha256 + review_bundle_sha256.
+        cache hit도 현재 SHA 필드 새로 검증/기록.
+        critical 변경 시 cache 무효.
+        stale cache 조용한 덮어쓰기 금지 (append-only history에 기록 후 새 entry).
+      </change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-8, AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>_codex_review_history_path (신규), _append_codex_history (신규), _check_codex_rate_limit (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 함수, MT-4에서 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex.*history|history.*codex</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        rate-limit + append-only history 구현.
+        .pipeline/codex_review_history.jsonl에 attempt 단위 기록.
+        덮어쓰기 금지 (append 전용).
+        Codex REJECT 2회 이상 시 자동 재호출 금지.
+        --force-review 옵션으로만 rate-limit 우회 가능.
+        Phase 8 RCA용 이력 보존.
+      </change_summary>
+      <line_estimate>70</line_estimate>
+      <covers_ac>AC-10, AC-12</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-7">
+      <affected_function>test_codex_preflight_*, test_codex_bundle_*, test_codex_cache_*, test_codex_rate_limit_*</affected_function>
+      <target_files>
+        <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>tests/e2e/test_codex_snapshot_sync_f52c.py 참조</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_codex.*9f5e</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        E2E 테스트 24개 케이스 구현.
+        TC-1~TC-8: preflight 검사 (raw ACCEPT 노출, loop_state 참조, SHA 우회 등)
+        TC-9~TC-12: bundle 생성 (포함/제외 검증, critical coverage)
+        TC-13~TC-16: codex-review bundle 모드 (전체 diff 차단, truncation 차단)
+        TC-17~TC-20: safe cache (hit/miss, critical 무효, stale 차단)
+        TC-21~TC-24: rate-limit + history (REJECT 2회 차단, --force-review, append-only)
+        Before/After 비용 측정 포함.
+      </change_summary>
+      <line_estimate>400</line_estimate>
+      <covers_ac>AC-13, AC-14, AC-15, AC-16</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>gates codex-preflight가 raw ACCEPT 코드 노출을 감지하면 exit 1 + failure_code=raw_accept_exposed 반환</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>gates codex-preflight 실패 시 gates codex-review가 Codex CLI를 호출하지 않음 (call counter = 0)</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>codex_review_bundle.json이 PR body 전체, packet 전체, oracle JSON 원문, raw ACCEPT 코드를 포함하지 않음</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>codex_review_bundle.json이 pipeline_id, PR URL, head SHA, changed files, critical 변경 여부, 함수 단위 diff를 포함함</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py, CLAUDE.md, .claude/**, .github/workflows/**, tests/e2e/** 변경 시 해당 파일의 함수 단위 diff가 bundle에 필수 포함됨. 추출 실패 시 요약 대체 금지, BLOCKED 반환</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>gates codex-review --use-bundle이 bundle만 사용하고 전체 PR diff를 Codex CLI에 직접 전달하지 않음</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>bundle truncation 금지 — 분할 필요 시 included/excluded manifest를 codex_review_result.json에 기록</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>cache key = contract_sha256 + review_bundle_sha256. cache hit 시 Codex CLI call counter = 0, 현재 SHA 필드는 새로 검증/기록</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>critical file 변경 시 cache 무효화. stale cache 조용한 덮어쓰기 금지 (history에 기록 후 새 entry)</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>Codex REJECT 2회 이상 시 자동 재호출 금지 (exit 1 + failure_code=codex_rate_limited). --force-review로만 우회 가능</text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true">
+      <text>codex_review_result.json에 codex_cli_command, codex_model_detected(또는 unknown) 필드 추가. gpt-5.5 거짓 기록 금지</text>
+    </criterion>
+    <criterion id="AC-12" must_verify="true" source="user" user_visible="true">
+      <text>.pipeline/codex_review_history.jsonl에 append-only 기록. 덮어쓰기 시도 시 BLOCKED</text>
+    </criterion>
+    <criterion id="AC-13" must_verify="true" source="user" user_visible="true">
+      <text>F52C 불변식 유지: codex_review_result.packet_sha256 == acceptance_request.packet_sha256, pr_body_sha256 일치, pr_head_sha 일치, Codex APPROVE 전 승인 코드 미노출</text>
+    </criterion>
+    <criterion id="AC-14" must_verify="true" source="user" user_visible="true">
+      <text>Before/After 비용 측정 보고서에 입력 크기 감소율 포함. 50% 미만 시 이유 분류</text>
+    </criterion>
+    <criterion id="AC-15" must_verify="true" source="user" user_visible="true">
+      <text>테스트에서 captured prompt에 전체 diff, raw PR body, packet 전문, oracle 원문, raw ACCEPT 없음 검증</text>
+    </criterion>
+    <criterion id="AC-16" must_verify="true" source="user" user_visible="true">
+      <text>preflight BLOCKED 시 call counter = 0, cache hit 시 call counter = 0, miss+PASS 시 call counter = 1</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_design>
+    <oracle_case id="OC-1" case_kind="normal">
+      <description>preflight PASS → bundle 생성 → codex-review APPROVE_TO_USER 정상 흐름</description>
+      <input_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc1_normal/input_state.json</file>
+        <file>tests/oracles/IMP-20260701-9F5E/oc1_normal/input_diff.txt</file>
+      </input_files>
+      <expected_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc1_normal/expected_bundle.json</file>
+        <file>tests/oracles/IMP-20260701-9F5E/oc1_normal/expected_result.json</file>
+      </expected_files>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case id="OC-2" case_kind="edge">
+      <description>preflight BLOCKED — raw ACCEPT 코드 노출 감지</description>
+      <input_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc2_raw_accept/input_transcript.txt</file>
+      </input_files>
+      <expected_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc2_raw_accept/expected_blocked.json</file>
+      </expected_files>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case id="OC-3" case_kind="edge">
+      <description>cache hit — Codex CLI 미호출, call counter = 0</description>
+      <input_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc3_cache_hit/input_cache.json</file>
+        <file>tests/oracles/IMP-20260701-9F5E/oc3_cache_hit/input_bundle.json</file>
+      </input_files>
+      <expected_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc3_cache_hit/expected_result.json</file>
+      </expected_files>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case id="OC-4" case_kind="error">
+      <description>rate-limit BLOCKED — REJECT 2회 후 자동 재호출 금지</description>
+      <input_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc4_rate_limit/input_history.jsonl</file>
+      </input_files>
+      <expected_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc4_rate_limit/expected_blocked.json</file>
+      </expected_files>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case id="OC-5" case_kind="edge">
+      <description>critical coverage — pipeline.py 변경 시 함수 diff 필수 포함</description>
+      <input_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc5_critical/input_diff.txt</file>
+      </input_files>
+      <expected_files>
+        <file>tests/oracles/IMP-20260701-9F5E/oc5_critical/expected_bundle.json</file>
+      </expected_files>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+  </oracle_design>
+
+  <python_version>3.10 — 기존 pipeline.py 호환성 유지, typing 기능 활용</python_version>
+
+  <forbidden>
+    <item>F52C 불변식 약화 — packet_sha256/pr_body_sha256/pr_head_sha 3자 일치 필수</item>
+    <item>Codex APPROVE 전 승인 코드/nonce 노출</item>
+    <item>skip → APPROVE 자동 변환 (fake optimization)</item>
+    <item>중요 내용(critical file diff) 누락 후 APPROVE</item>
+    <item>느슨한 cache key (SHA 제외, 시간 기반 등)</item>
+    <item>보안 검증 WARN 강등 (BLOCKED 유지)</item>
+    <item>codex_review_history.jsonl 덮어쓰기</item>
+    <item>gpt-5.5 거짓 기록</item>
+  </forbidden>
+
+  <!-- handover_template removed — dev-agent will output handover separately -->
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
