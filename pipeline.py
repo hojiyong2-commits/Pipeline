@@ -5809,24 +5809,6 @@ def _cmd_gates_validate_user_approval_message(args: "argparse.Namespace") -> Non
         sys.exit(0)
 
 
-# [Purpose]: IMP-20260703-B985 MT-31 — machine-readable request-accept 시 approval message를
-#            repo root가 아닌 scratch 디렉토리에 자동 저장한다.
-_SCRATCH_DIR_TEMPLATE = ".pipeline/runs/{pipeline_id}/scratch"
-
-
-def _get_scratch_dir(pipeline_id: str) -> str:
-    """pipeline_id에 해당하는 scratch 디렉토리 경로를 반환하고 존재하지 않으면 생성한다.
-
-    Args:
-        pipeline_id: 현재 파이프라인 ID.
-    Returns:
-        scratch 디렉토리 절대 경로 문자열.
-    """
-    p = _SCRATCH_DIR_TEMPLATE.format(pipeline_id=pipeline_id)
-    os.makedirs(p, exist_ok=True)
-    return p
-
-
 # [Purpose]: IMP-20260703-B985 MT-16 — 승인 요청 출력(human/JSON 공통)의 message/필드를 단일
 #            지점에서 조립한다. --machine-readable JSON과 human stdout이 동일 내용을 공유하게 한다.
 # [Assumptions]: pipeline_id는 비어있지 않고, pr_url은 str(빈 문자열 허용).
