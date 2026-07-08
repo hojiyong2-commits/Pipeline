@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-07-08T12:03:25Z",
+  "generated_at": "2026-07-08T12:09:13Z",
   "pipeline_id": "IMP-20260703-B985",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "c4e00c7d56aefd1caff6fca02fbacc600c87c295",
+  "commit_hint": "cee88a2c47939088b74fa49dd63a8701581aa65d",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-07-08T12:02:58Z",
@@ -59,8 +59,8 @@
     },
     {
       "path": "tests/test_pr_body_sha_invariant_b985.py",
-      "sha256": "192b82515aab4fe86ca5ec274d2fa497b4bc451ab4fb4c897f03d321d2838a5b",
-      "size_bytes": 7337
+      "sha256": "9c0ba394cffbc9768a29488aec03c583bc0985ecb1992e0af71c2ac7ba645233",
+      "size_bytes": 7312
     },
     {
       "path": "tests/test_approval_output_channel_b985.py",
