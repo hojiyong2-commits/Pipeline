@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-03T12:48:40Z",
+  "pipeline_id": "IMP-20260703-B985",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "56f0eb5066d165c8fb029d20e7d7e45120285e72",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-07-03T12:38:41Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/test_canonical_pr_body_sha256_b985.py"
+  },
+  "agent_run": {
+    "run_id": "dev-6d64f348784248e5",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "dfde251dd7b6d9d140f615b669d4d636c14ba3ed3e5c9ef66b7fd4f5ef5cea76",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/agent_receipt_dev-6d64f348784248e5.json",
+    "receipt_sha256": "a4dbd6a7dc56d0c008424258259d9e9cc7a38fc8b1bb698f909403ea0690bd26",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260703-B985\\dev\\dev-6d64f348784248e5.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260703-B985\\dev\\dev-6d64f348784248e5.json",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/agent_receipt_dev-6d64f348784248e5.json",
+      "sha256": "a4dbd6a7dc56d0c008424258259d9e9cc7a38fc8b1bb698f909403ea0690bd26",
+      "size_bytes": 502,
+      "requires_force_add": false
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/report_dev_handover.xml",
+      "sha256": "dfde251dd7b6d9d140f615b669d4d636c14ba3ed3e5c9ef66b7fd4f5ef5cea76",
+      "size_bytes": 5067,
+      "requires_force_add": false
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/scope_manifest_scope_manifest.json",
+      "sha256": "746c0d10e507b5614db81279e22525225dd8076b5aade20914963d8eb47119dc",
+      "size_bytes": 5461,
+      "requires_force_add": false
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": []
+}
