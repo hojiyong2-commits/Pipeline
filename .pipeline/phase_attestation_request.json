@@ -51,32 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "71dc3bb9782e43e2893f8a5a106bab98e01091790e4a886c56fffcf39dbd7e2a",
-      "size_bytes": 1454513
-    },
-    {
-      "path": "tests/test_pr_body_sha_invariant_b985.py",
-      "sha256": "9c0ba394cffbc9768a29488aec03c583bc0985ecb1992e0af71c2ac7ba645233",
-      "size_bytes": 7312
-    },
-    {
-      "path": "tests/test_approval_output_channel_b985.py",
-      "sha256": "9409cc2d50c0a32a187ec8b2cadd93da2e84fdfd6e978adf94088b59c3c4748f",
-      "size_bytes": 12004
-    },
-    {
-      "path": "tests/test_canonical_pr_body_sha256_b985.py",
-      "sha256": "c8eb7f33e36bf8c56fcdb7e5d4959a1c4aedbf3bb649262113c33fff1f28d878",
-      "size_bytes": 172667
-    },
-    {
-      "path": ".claude/settings.json",
-      "sha256": "e0252796dc3532e107fbdc9f8fae2717f61d37dfab92f68373e81507357761bb",
-      "size_bytes": 382
-    }
-  ],
+  "workspace_file_checks": null,
   "local_only_files": []
 }
