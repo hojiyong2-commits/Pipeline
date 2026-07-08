@@ -1,0 +1,95 @@
+{
+  "pipeline_id": "IMP-20260627-3BB6",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py", ".claude/codex_review_contract.md"],
+      "affected_functions": [
+        "pipeline.py::_load_codex_review_contract (신규) + .claude/codex_review_contract.md (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-7"],
+          "implementation_evidence": ".claude/codex_review_contract.md 신규 생성, pipeline.py _load_codex_review_contract() 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline.py::_cmd_gates_codex_review (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1", "AC-2", "AC-6"],
+          "implementation_evidence": "pipeline.py gates codex-review 서브커맨드 추가, codex_review_result.json 8개 필드 기록"
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline.py::_check_codex_review_gate (SSoT 전환) + _cmd_gates_request_accept (사전 검증 추가)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-3", "AC-4", "AC-5"],
+          "implementation_evidence": "_check_codex_review_gate codex_review_result.json SSoT로 전환, request-accept 사전 검증 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline.py 라인 16460 + 18327 문구 교체"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-6"],
+          "implementation_evidence": "CODEX 검토 필요 -> Codex 검토 완료 문구 교체"
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        ".claude/settings.json"
+      ],
+      "affected_functions": [
+        "Stop hook 파일 삭제 + .claude/settings.json 수정"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-7", "AC-8"],
+          "implementation_evidence": "Stop hook 파일 git rm, settings.json hooks 블록 제거, 관련 테스트/oracle git rm"
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        "tests/e2e/test_real_cli_paths.py",
+        "tests/test_acceptance_request_format_069a.py"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_codex_review_gate_3bb6.py (신규) + 구 테스트/oracle 삭제"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"],
+          "implementation_evidence": "Real CLI Path E2E 테스트 5케이스 신규, 구 loop 테스트 삭제, 관련 테스트 갱신"
+        }
+      ]
+    }
+  ]
+}
