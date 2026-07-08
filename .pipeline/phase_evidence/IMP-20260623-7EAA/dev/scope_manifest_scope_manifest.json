@@ -1,0 +1,101 @@
+{
+  "pipeline_id": "IMP-20260623-7EAA",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_register_workspace_artifact", "_load_workspace_artifacts", "_save_workspace_artifacts"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_register_workspace_artifact/_load_workspace_artifacts/_save_workspace_artifacts + _workspace_artifacts_path 헬퍼 추가, cleanup_policy enum 상수 5개 선언, workspace_artifacts.json을 .pipeline/runs/<id>/에 원자적 저장"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_run_post_complete_cleanup"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-2", "AC-3", "AC-5", "AC-6"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_run_post_complete_cleanup 신규 정의: cleanup_only 파일만 unlink, protected_evidence 누락 시 status=BLOCKED+ready_for_next_task=False, PermissionError/OSError → deferred WARN, 매니페스트 없는 scratch 파일 unknown 보존",
+            "Round 3 REJECT 재작업: state['workspace_hygiene']['cleanup_only_items'] SSoT 입력 처리 블록 추가. .pytest_tmp_* 디렉터리는 shutil.rmtree, 파일은 unlink, 허용 루트 외부 경로는 deferred, 중복 경로는 registered_paths skip"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["cmd_status", "cmd_new"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-7", "AC-8"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "cmd_status: post_complete_cleanup 기반 'Workspace Readiness' 블록 추가(try/except 격리)",
+            "cmd_new: existing=_load() 직후 post_complete_cleanup.status=='BLOCKED'이면 복구 명령 출력 후 sys.exit(1)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["cmd_hygiene"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-9"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "cmd_hygiene_final_cleanup 신규(--dry-run/--apply, cleanup_only만 삭제, PermissionError → deferred)",
+            "cmd_hygiene_ready_next 신규(post_complete_cleanup status 출력, BLOCKED → exit 1)",
+            "cmd_hygiene 디스패처 분기 + build_parser hygiene_sub 서브파서 추가"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_save"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-4", "AC-10"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "AC-4: _save가 _resolve_state_path_for_write로만 쓰기 → legacy pipeline_state.json split-brain write 없음(코드 변경 없음, TC-E2E-4 회귀)",
+            "AC-10: git diff로 _check_workspace_hygiene/_external_gate_blockers/_check_acceptance_readiness 정의 미변경 확인 — gate 보안 로직 완화 없음"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": ["tests/e2e/test_final_workspace_cleanup_7eaa.py", "core/acceptance/scorers.py"],
+      "affected_functions": ["test_final_workspace_cleanup_7eaa.py (신규)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10"],
+          "changed_files": ["tests/e2e/test_final_workspace_cleanup_7eaa.py"],
+          "implementation_evidence": [
+            "tests/e2e/test_final_workspace_cleanup_7eaa.py 신규: TC-E2E-1~13, PIPELINE_STATE_PATH 격리 + subprocess + final_state assertion. pytest 11 passed, 2 skipped(Windows)",
+            "Round 3 REJECT 재작업: TC-E2E-14(cleanup_only_items .pytest_tmp_* 실제 삭제 검증), TC-E2E-15(Permission denied deferred, Windows skip) 추가. pytest 13 passed, 2 skipped"
+          ]
+        }
+      ]
+    }
+  ]
+}
