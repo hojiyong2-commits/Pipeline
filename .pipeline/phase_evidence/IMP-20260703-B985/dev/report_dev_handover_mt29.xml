@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+<dev_handover>
+  <mt_id>MT-29</mt_id>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <agent_id>dev-agent</agent_id>
+  <summary>Codex/acceptance PR body SHA 불변식 hard gate + Stop hook 완전 제거 (MT-29)</summary>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_pr_body_sha_invariant_b985.py</file>
+      <file>.claude/settings.json</file>
+    </files_to_modify>
+    <files_to_delete>
+      <file>.claude/hooks/codex_user_acceptance_review.py</file>
+      <file>.claude/hooks/codex-user-acceptance-review.ps1</file>
+    </files_to_delete>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>_cmd_gates_request_accept (pipeline.py)</target_function>
+    <target_function>_check_codex_pr_body_sha_invariant (pipeline.py — 신규)</target_function>
+    <change_type>hard gate 추가, 자동 override 제거, Stop hook 삭제</change_type>
+    <risk>낮음 — 자동 override 제거로 SHA 불일치 시 BLOCKED(정상 동작), Stop hook 없어짐으로 이중 출력 해소</risk>
+  </impact_analysis>
+
+  <implemented_changes>
+    <change>_check_codex_pr_body_sha_invariant 함수 신규 추가 (_codex_review_snapshot 직전 위치)</change>
+    <change>MT-33 "CODEX SHA 동기화" 자동 override 블록(45줄) 제거 — hard gate 호출로 교체</change>
+    <change>.claude/hooks/codex_user_acceptance_review.py 파일 삭제</change>
+    <change>.claude/hooks/codex-user-acceptance-review.ps1 파일 삭제</change>
+    <change>.claude/settings.json hooks.Stop 항목 완전 제거</change>
+  </implemented_changes>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_pr_body_sha_invariant_b985.py</file>
+    <file>.claude/settings.json</file>
+  </evidence>
+
+  <test_results>
+    <passed>6</passed>
+    <failed>0</failed>
+    <command>python -m pytest tests/test_pr_body_sha_invariant_b985.py -v</command>
+  </test_results>
+
+  <scope_lock_check>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</dev_handover>
+</handover>
