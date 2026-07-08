@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260617-E2D5</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>72f28513d25d8e7d586333abc184aa6b831ac125de1fefe47c56c05f873be869</step_plan_sha256>
+  <planner_run_id>pm_planner-cc05cfea4f935b25</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <execution_profile>FAST_DOC</execution_profile>
+  <status>READY</status>
+  <oracle_decision>
+    <waive>true</waive>
+    <reason>docs-only 작업 — --allow-no-oracle 사용. 5개 섹션 포함 문서 파일 존재 여부가 acceptance criteria로 검증된다.</reason>
+  </oracle_decision>
+</manager_handoff>
