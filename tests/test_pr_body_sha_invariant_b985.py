@@ -11,12 +11,9 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
-
-import pytest
 
 # pipeline.py를 직접 import하기 위해 프로젝트 루트를 sys.path에 추가
 _REPO_ROOT = Path(__file__).parent.parent
