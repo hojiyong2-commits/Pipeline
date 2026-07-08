@@ -1,0 +1,148 @@
+{
+  "pipeline_id": "IMP-20260703-B985",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_canonical_pr_body_sha256 (\uc2e0\uaddc)"
+      ]
+    },
+    {
+      "id": "MT-10",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_build_final_packet_content (packet_md_sha256 removal)",
+        "_cmd_gates_request_accept (reuse early-return block)"
+      ]
+    },
+    {
+      "id": "MT-11",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_build_final_packet_content",
+        "_cmd_gates_request_accept",
+        "_materialize_acceptance_snapshot",
+        "_publish_acceptance_request"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_prepare_acceptance_snapshot_candidate"
+      ]
+    },
+    {
+      "id": "MT-28",
+      "files": [
+        "pipeline.py",
+        "tests/test_approval_output_channel_b985.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept",
+        "_render_pending_acceptance_comment"
+      ]
+    },
+    {
+      "id": "MT-29",
+      "files": [
+        ".claude/settings.json",
+        "pipeline.py",
+        "tests/test_pr_body_sha_invariant_b985.py"
+      ],
+      "affected_functions": [
+        "_check_codex_pr_body_sha_invariant",
+        "_cmd_gates_request_accept"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_verify_published_canonical_pr_body"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_fetch_canonical_pr_body_sha256",
+        "_get_pr_body_text"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept",
+        "_get_staged_pr_body_sha"
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_review"
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_prepare_acceptance_snapshot_candidate",
+        "_publish_acceptance_request"
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "tests/test_canonical_pr_body_sha256_b985.py (\uc2e0\uaddc)"
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept (acceptance_staging frozen snapshot)"
+      ]
+    },
+    {
+      "id": "MT-30",
+      "files": [
+        "pipeline.py",
+        "tests/test_final_user_message_validator_b985.py",
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": [
+        "_cmd_gates_validate_user_approval_message"
+      ]
+    }
+  ]
+}
