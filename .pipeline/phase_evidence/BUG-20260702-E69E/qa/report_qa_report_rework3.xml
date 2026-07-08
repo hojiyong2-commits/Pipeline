@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260702-E69E</pipeline_id>
+  <agent_run_id>qa-551bc7734775031b</agent_run_id>
+  <round>rework3 (REJECT #3)</round>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+
+  <handover_check>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py</evidence>
+    <accepted>true</accepted>
+    <note>category_tags에 UI 미포함 — dev-agent handover 단독 수락. handover XML의 scope_lock_check verdict=PASS 확인.</note>
+  </handover_check>
+
+  <category_check>
+    <wa>N-A — 이번 rework는 순수 파이프라인 로직(SSoT bundle 구체화). gh/git 조회는 best-effort 진단용이며 실패 시 빈 문자열 fallback(fail-closed). WA 4항목 강제 대상 아님.</wa>
+    <ui>N-A — GUI 위젯 없음. category_tags에 UI 미포함.</ui>
+    <fs>PASS — bundle write가 pathlib(_codex_review_bundle_path -> Path) + write_bytes 원자적 직렬화. PIPELINE_STATE_PATH 격리 지원으로 하드코딩 경로 없음. json.dumps(ensure_ascii=False, sort_keys=True)로 결정적 스냅샷.</fs>
+    <pd>PASS — 모듈 분리: 경로 계산(_codex_review_bundle_path)과 빌드(_build_codex_review_bundle) 책임 분리. 인터페이스 계약: Tuple[str, str] 반환 타입 명시, snapshot_identity dict 계약 유지.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — TypeError 방어(pipeline_id None/비str), 모든 gh/git/파일 조회를 개별 try/except로 격리(빈 값 대체), write 실패 시 ("", "") fail-closed. isinstance 타입가드 존재.</al>
+    <build>N-A — BUILD 태그 없음(파이프라인 엔진 수정, EXE 대상 아님).</build>
+    <vsce>N-A — VSCE 태그 없음.</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <wa score="0" max="0">N/A — best-effort 진단 호출, WA 강제 대상 아님</wa>
+    <ui score="0" max="0">N/A — UI 없음</ui>
+    <fs score="20" max="20">pathlib 경로/원자적 write/격리 경로/결정적 직렬화 모두 충족</fs>
+    <pd score="10" max="10">모듈분리 5/인터페이스계약 5 — 경로/빌드 책임 분리 + Tuple 반환 타입 명시</pd>
+    <al score="20" max="20">TypeError 방어/isinstance 타입가드/빈데이터 fail-closed 모두 충족</al>
+    <build score="0" max="0">N/A</build>
+    <sec score="0" max="0">Phase 5 전담 — QA 미채점</sec>
+    <total score="50" max="50"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 적용 카테고리(FS/PD/AL) 전 항목 만점. CLI --numeric-score는 120점 정규화 값 110 사용(ruff baseline 미개선 -10 보수적 감점, 회귀 아님).</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <fs>
+      <atomic_write>PASS — write_bytes 단일 직렬화 write, json.dumps 결정적 출력</atomic_write>
+      <encoding_fallback>N-A — 쓰기 경로. encoding="utf-8" 명시적 write</encoding_fallback>
+      <traversal_wired>PASS — 경로가 pipeline_id 기반 내부 CONTRACTS_DIR 하위 고정, user-supplied 외부 경로 아님</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover test_result "23 passed" + QA 재실행 23 passed 확인</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _codex_review_bundle_path 3회 호출, _build_codex_review_bundle 4회 호출. _cmd_gates_codex_review(19342)가 실제 호출하고 SHA 빈 값 시 _die로 BLOCK. dead code 아님.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <note>REJECT #3 rework의 실제 변경은 HEAD 커밋 2d22cda0에 커밋됨. git show 2d22cda0 --name-only = pipeline.py + test_codex_cost_optimization_9f5e.py 정확히 2개. scope_declaration과 1:1 일치. git diff HEAD 비어있음(작업 커밋 완료). git diff origin/main에 나온 tests/oracles/BUG-20260702-E69E/** 파일들은 이전 rework 커밋분으로 이번 rework 밖. trust-root(pipeline.py/tests) 수정은 이 BUG 파이프라인 PM scope 대상.</note>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <declared_functions>_codex_review_bundle_path, _build_codex_review_bundle, _cmd_gates_codex_review, _finish_codex_review_error, _snapshot_identity_matches</declared_functions>
+    <actual_modified_functions>동일 5개 + _codex_snapshot_identity(_codex_review_bundle_path 사용) — impact_analysis에 명시됨</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <test_results>
+    <pytest_command>pytest tests/e2e/test_codex_cost_optimization_9f5e.py -q</pytest_command>
+    <pytest_result>23 passed, 0 skipped in 11.57s</pytest_result>
+    <ruff_command>ruff check pipeline.py --select E,W,F,B --ignore E501,B006,B007,B008</ruff_command>
+    <ruff_result>34 errors (B904:3, E402:24, E701:1, E731:6) — 전부 pre-existing baseline. REJECT #3 직전(2d22cda0^) 동일 34개, origin/main 동일 34개. 이번 변경으로 신규 오류 0개(회귀 없음). Dev handover의 "0 errors" 주장은 부정확하나 회귀 없음이 검증됨 — FAIL 사유 아님.</ruff_result>
+    <import_check>python -c "import pipeline" 성공</import_check>
+    <new_tests>
+      <test id="TC-B1" name="test_bundle_sha256_nonempty_in_approved">PASS — APPROVED result top-level + snapshot_identity 양쪽 non-empty bundle SHA, 실제 파일 SHA 일치 검증. subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion.</test>
+      <test id="TC-B2" name="test_bundle_sha256_nonempty_in_error">PASS — ERROR result에도 non-empty bundle SHA 기록 검증.</test>
+      <test id="TC-B3" name="test_retry_empty_prev_bundle_sha_blocked">PASS — 빈 prev bundle SHA로 retry 시 fail-closed BLOCK, failure_code=codex_retry_missing_prev_bundle_sha 매칭 검증.</test>
+    </new_tests>
+  </test_results>
+
+  <implementation_verification>
+    <item name="_codex_review_bundle_path 신규">PASS — 6806라인, Path 반환, PIPELINE_STATE_PATH 격리 지원, TypeError 방어.</item>
+    <item name="_build_codex_review_bundle 신규">PASS — 6836라인, Tuple[str,str] 반환. best-effort 필드 수집, write 성공 시 non-empty SHA, 실패 시 ("","") fail-closed. 결정적 스냅샷(휘발성 메타데이터 제외).</item>
+    <item name="_cmd_gates_codex_review fail-closed">PASS — 19342라인 bundle 빌드, 19343 not _review_bundle_sha256 시 _die(codex_review_bundle_build_failed)로 Codex CLI 호출 전 BLOCK.</item>
+    <item name="_finish_codex_review_error 시그니처">PASS — 19926라인, snapshot_identity: Optional[Dict]=None + review_bundle_sha256: str="" 파라미터 추가. effective bundle SHA 우선 반영(19964-19967).</item>
+    <item name="_snapshot_identity_matches OR 조건">PASS — 19876라인 "if not pv or not cv: continue" — 한쪽 미관측 차원 비교 제외(레거시 ERROR attempt 하위호환). 기존 and -> or 변경 확인.</item>
+    <item name="_codex_snapshot_identity SSoT 경로">PASS — 19788라인 _codex_review_bundle_path 사용으로 producer/consumer 동일 경로 읽기.</item>
+    <item name="producer-consumer 계약">PASS — pipeline.py failure_code(codex_retry_missing_prev_bundle_sha:19380, codex_review_bundle_build_failed:19345)가 TC-B3 assertion과 정확히 일치.</item>
+  </implementation_verification>
+
+  <criteria_verification>
+    <note>legacy 파이프라인(requirements_tracking 미적용 BUG rework) — 구조화 AC 블록 대신 REJECT #3 수정 요구사항 기준 검증.</note>
+    <criterion id="R3-1" status="PASS" evidence="review_bundle_sha256가 _build_codex_review_bundle 단일 경로로 materialize되어 APPROVED/ERROR 양쪽 result에 non-empty로 기록됨 (TC-B1/TC-B2 검증)"/>
+    <criterion id="R3-2" status="PASS" evidence="bundle 빌드 실패 시 _cmd_gates_codex_review가 codex_review_bundle_build_failed로 fail-closed BLOCK — Codex CLI 미호출 (19343-19348)"/>
+    <criterion id="R3-3" status="PASS" evidence="_snapshot_identity_matches가 OR 조건(not pv or not cv)으로 한쪽 미관측 차원을 비교 제외 — 레거시 ERROR attempt 하위호환 (19876)"/>
+    <criterion id="R3-4" status="PASS" evidence="빈 prev bundle SHA로 retry 금지 — codex_retry_missing_prev_bundle_sha BLOCK (TC-B3 검증, 19378-19384)"/>
+  </criteria_verification>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음. REJECT #3 4개 핵심 요건 모두 현재 코드(HEAD 2d22cda0) 기준 PASS. 신규 함수는 dead code 아니며 fail-closed 경로가 실제 호출됨. producer(pipeline.py failure_code)-consumer(TC-B3 assertion) 계약 일치 확인.
+  </critical_issues>
+  <improvement_suggestions>
+    1. Dev handover의 "ruff 0 errors" 주장이 부정확함(실제 34개 pre-existing baseline). 회귀는 없으나, handover 정확성을 위해 향후 "baseline 34개 유지, 신규 0개" 형태로 명시 권장.
+    2. pipeline.py 전체에 걸친 34개 baseline ruff 오류(E402 조건부 import, E731 lambda)는 이번 파이프라인 scope 밖이나, 별도 정리 IMP 파이프라인 고려 가능.
+    3. _build_codex_review_bundle의 critical_file_summary에 diff 통계(추가/삭제 라인) 포함 시 Codex 컨텍스트 강화 가능(Dev 주석의 Improvement 항목과 동일).
+  </improvement_suggestions>
+</qa_report>
