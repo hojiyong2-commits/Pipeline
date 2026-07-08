@@ -5687,6 +5687,83 @@ def _validate_approval_request_message(msg: str) -> None:
         )
 
 
+# [Purpose]: IMP-20260703-B985 MT-30 — final_user_message.txt 고정 양식 검증 게이트.
+#            Pipeline Manager가 approval_request_message를 파일에 쓴 뒤 이 CLI로 검증한다.
+#            이중 출력 구조 차단: task result에 approval 블록 포함 금지를 강제하는 하드 게이트.
+# [Assumptions]: --file에 지정된 파일은 approval_request_message만 담아야 한다(prefix/suffix 없음).
+# [Vulnerability & Risks]: 금지 문구 목록은 REJECT #23 재발 방지용이다.
+# [Improvement]: 새 relay 문구가 발견되면 _APPROVAL_MSG_FORBIDDEN_FINAL에 추가한다.
+
+_APPROVAL_MSG_REQUIRED_COUNTS: Dict[str, int] = {
+    "사용자 승인 요청": 1,
+    "PR:": 1,
+    "승인 코드:": 1,
+    "CODEX 검토 필요": 1,
+}
+
+_APPROVAL_MSG_FORBIDDEN_FINAL: list = [
+    "gates request-accept가 성공했습니다",
+    "JSON stdout에서 approval_request_message를 추출",
+    "승인 요청 메시지:",
+    "위 PR에 승인 코드를 입력해 주세요",
+    "Pipeline Manager도 확인했습니다",
+    "GitHub Actions 확인 후",
+    "댓글에 입력해 주세요",
+    "이번 응답에서 중계",
+    "기타 approval_request_message 앞뒤 설명",
+]
+
+
+def _cmd_gates_validate_user_approval_message(args: "argparse.Namespace") -> None:
+    """gates validate-user-approval-message: final_user_message.txt가 고정 양식과 일치하는지 검증.
+
+    MT-30: 이중 출력 구조 차단 하드 게이트.
+    Pipeline Manager가 approval_request_message를 final_user_message.txt에 쓴 뒤 실행.
+    PASS(exit 0) / FAIL(exit 1) + JSON stdout.
+
+    Args:
+        args: argparse Namespace. --file 필수.
+    Raises:
+        SystemExit: 검증 실패 시 exit 1.
+    """
+    file_path = getattr(args, "file", None)
+    if not file_path:
+        print(json.dumps({"status": "FAIL", "errors": ["--file 인자가 필요합니다."]}, ensure_ascii=False))
+        sys.exit(1)
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            msg = f.read()
+    except FileNotFoundError:
+        print(json.dumps({"status": "FAIL", "errors": [f"파일을 찾을 수 없습니다: {file_path}"]}, ensure_ascii=False))
+        sys.exit(1)
+
+    errors: list = []
+
+    # count 검증
+    for phrase, expected in _APPROVAL_MSG_REQUIRED_COUNTS.items():
+        actual = msg.count(phrase)
+        if actual != expected:
+            errors.append(f'"{phrase}" count={actual} (expected {expected})')
+
+    # 마지막 의미있는 줄 검증
+    meaningful_lines = [ln for ln in msg.strip().splitlines() if ln.strip()]
+    last_line = meaningful_lines[-1].strip() if meaningful_lines else ""
+    if last_line != "CODEX 검토 필요":
+        errors.append(f'마지막 의미있는 줄이 "CODEX 검토 필요"가 아닙니다: "{last_line}"')
+
+    # 금지 문구 검증
+    for phrase in _APPROVAL_MSG_FORBIDDEN_FINAL:
+        if phrase in msg:
+            errors.append(f'금지 문구 포함: "{phrase}"')
+
+    if errors:
+        print(json.dumps({"status": "FAIL", "errors": errors, "file": file_path}, ensure_ascii=False))
+        sys.exit(1)
+    else:
+        print(json.dumps({"status": "PASS", "file": file_path}, ensure_ascii=False))
+        sys.exit(0)
+
+
 # [Purpose]: IMP-20260703-B985 MT-16 — 승인 요청 출력(human/JSON 공통)의 message/필드를 단일
 #            지점에서 조립한다. --machine-readable JSON과 human stdout이 동일 내용을 공유하게 한다.
 # [Assumptions]: pipeline_id는 비어있지 않고, pr_url은 str(빈 문자열 허용).
@@ -24121,6 +24198,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
         _cmd_gates_secrets(args)
         return
 
+    # IMP-20260703-B985 MT-30: validate-user-approval-message — state 없이도 동작
+    if action == "validate-user-approval-message":
+        _cmd_gates_validate_user_approval_message(args)
+        return
+
     state = _require_state()
     state = _ensure_v210_fields(state)
     pid = str(state.get("pipeline_id"))
@@ -26950,6 +27032,13 @@ def build_parser() -> argparse.ArgumentParser:
                                 help="polling 간격(초, 기본값: 15)")
     p_gate_wait_ci.add_argument("--token-env", dest="token_env", default="GITHUB_TOKEN",
                                 help="GitHub 토큰 환경 변수명")
+
+    # IMP-20260703-B985 MT-30: validate-user-approval-message — final_user_message.txt 고정 양식 검증
+    p_gate_validate_msg = gsub.add_parser(
+        "validate-user-approval-message",
+        help="final_user_message.txt가 고정 양식과 일치하는지 검증 (이중 출력 차단 하드 게이트)",
+    )
+    p_gate_validate_msg.add_argument("--file", required=True, help="검증할 final_user_message.txt 경로")
 
     # GPT/OpenAI advisory reviews (non-binding; CRITICAL must be resolved)
     p_advisory = sub.add_parser("advisory", help="External advisory reviews and resolutions")

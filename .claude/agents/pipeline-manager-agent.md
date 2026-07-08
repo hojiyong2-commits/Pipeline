@@ -334,3 +334,26 @@ Pipeline Manager는 `gates request-accept` 실행 시 반드시 `--machine-reada
 - `--machine-readable` 없이 실행 시 pipeline.py human stdout + Pipeline Manager 중계가 이중으로 출력되어 사용자가 동일한 승인 요청을 2회 받는다.
 - Pipeline Manager가 승인 요청문(사용자 승인 요청 / 승인 코드: / CODEX 검토 필요 블록)을 직접 조립하거나 재작성하는 것은 금지다.
 - `request-accept` human stdout을 그대로 복붙하는 것도 금지다.
+
+## request-accept 중계 프로토콜 (이중 출력 완전 차단 — IMP-20260703-B985 MT-30)
+
+REJECT #23 근본 원인 차단: task result에 approval 블록 포함 시 task-notification + 오케스트레이터 relay = 2회 출력.
+
+`gates request-accept --machine-readable` 실행 후 반드시 아래 프로토콜을 따른다:
+
+1. JSON stdout에서 `approval_request_message` 필드 추출
+2. `final_user_message.txt` 파일에 approval_request_message만 기록 (prefix/suffix 없이 원문 그대로)
+3. `python pipeline.py gates validate-user-approval-message --file final_user_message.txt` 실행
+4. **PASS이면**: task result를 아래 기계 가독 JSON으로만 반환 — approval 블록 포함 절대 금지
+   `{"request_accept": "PASS", "validated": true, "message_file": "final_user_message.txt"}`
+5. **FAIL이면**: task result를 BLOCKED 상태 JSON으로 반환 후 오류 수정
+
+**task result에 절대 포함 금지:**
+- approval 블록 전체 (사용자 승인 요청 ... CODEX 검토 필요)
+- "gates request-accept가 성공했습니다" 등 설명 문구
+- "승인 요청 메시지:" prefix
+- "JSON stdout에서 approval_request_message를 추출" 등 프로세스 설명
+- "아래를 사용자에게 전달해 주세요" 안내
+
+**오케스트레이터 역할:**
+오케스트레이터는 Pipeline Manager task result에서 기계 가독 JSON을 받은 뒤, `final_user_message.txt`를 Read 도구로 읽어 내용을 사용자에게 1회만 출력한다. task-notification(PM result)에는 JSON만 표시되고, 오케스트레이터 응답에서만 approval 블록이 1회 표시된다.
