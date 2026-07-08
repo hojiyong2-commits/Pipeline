@@ -1,0 +1,40 @@
+{
+  "pipeline_id": "IMP-20260701-9F5E",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_cmd_gates_codex_preflight (신규)"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_build_codex_review_bundle (신규)", "_extract_critical_function_diffs (신규)"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["CODEX_REVIEW_CRITICAL_PATTERNS (신규 SSoT 상수)", "_is_critical_file (신규)"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_cmd_gates_codex_review (수정)"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_codex_review_cache_path (신규)", "_load_codex_cache (신규)", "_save_codex_cache (신규)", "_compute_cache_key (신규)"]
+    },
+    {
+      "id": "MT-6",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_codex_review_history_path (신규)", "_append_codex_history (신규)", "_check_codex_rate_limit (신규)"]
+    },
+    {
+      "id": "MT-7",
+      "files": ["tests/e2e/test_codex_cost_optimization_9f5e.py"],
+      "affected_functions": ["test_codex_preflight_*", "test_codex_bundle_*", "test_codex_cache_*", "test_codex_rate_limit_*"]
+    }
+  ]
+}
