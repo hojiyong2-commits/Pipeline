@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <run_id>qa-871db05e688d9944</run_id>
+  <pipeline_id>BUG-20260702-E69E</pipeline_id>
+  <execution_profile>HIGH_RISK</execution_profile>
+
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py</evidence>
+    <accepted>YES — category_tags에 UI 미포함, dev-agent handover 단독 수락. 대상 파일 2개 모두 실제 제출 확인(커밋 541894e2).</accepted>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 신규 구현 없음. codex CLI는 subprocess 결과값(exit_code/stdout/stderr)을 인자로 받아 분류만 하며 HTTP 호출 아님.</wa>
+    <ui>N-A — GUI 위젯 변경 없음. 순수 파이프라인 엔진 로직.</ui>
+    <fs>N-A — 파일 쓰기는 기존 _write_json/_append_codex_history 패턴 재사용. 신규 파일 IO 패턴 도입 없음.</fs>
+    <pd>PASS — 상태 모델 재설계가 단일 책임 함수로 분리됨: _parse_json_verdict(파싱), _codex_snapshot_identity(identity 계산), _extract_snapshot_identity(추출), _snapshot_identity_matches(비교), _invalidate_error_attempt(무효화 이력), _finish_codex_review_error(ERROR 기록). 인터페이스 계약이 Dict[str, str]/Dict[str, Any] 반환 형태로 명확. God function 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — fail-closed 방어 로직 전반 우수: 알 수 없는 verdict → parse_failure ERROR 승격 금지, reason 없는 REJECT → None, None/비str 입력 방어(TypeError 명시), snapshot 관측 불가 차원 제외 처리, isinstance 타입 가드 일관 적용. bare except 없음(모두 명시적 예외 타입 또는 noqa BLE001 best-effort 주석).</al>
+    <build>N-A — 파이프라인 엔진 수정(meta-task). EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VSCE 카테고리 태그 없음. VSCE Compliance 전체 자동 SKIP.</vsce>
+  </category_check>
+
+  <numeric_score>
+    <wa score="0" max="0">N/A — WA 카테고리 미해당</wa>
+    <ui score="0" max="0">N/A — UI 카테고리 미해당</ui>
+    <fs score="0" max="0">N/A — FS 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5(6개 단일책임 함수로 분해, God function 없음) / 인터페이스계약 5/5(Dict 반환 타입 명시, snapshot_identity 6필드 표준 dict, verdict/reason/source 명확)</pd>
+    <al score="20" max="20">경계값방어 5/5(rfind 인덱스 -1 가드, JSON 블록 경계 검증) / 범위검증 5/5(관측 불가 snapshot 차원 제외) / 입력타입검증 5/5(None/비str/비int TypeError 명시, isinstance 가드 일관) / 빈데이터처리 5/5(빈 stdout→parse_failure, reason 없는 REJECT→None)</al>
+    <build score="0" max="0">N/A — BUILD 카테고리 미해당(엔진 meta-task)</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="30" max="30"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 적용 카테고리(PD+AL) 만점 30/30. 정규화 120점 만점 환산 120/120, hard gate 임계 96 초과.</numeric_verdict>
+    <cli_numeric_score>120</cli_numeric_score>
+  </numeric_score>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A — VSCE 태그 없음</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — 대상 E2E 20개 실제 실행(pytest 20 passed, 0 skipped, 8.06s). subprocess 기반 실제 CLI 실행 + PIPELINE_STATE_PATH 격리 + codex_review_result.json final_state assertion 확인.</execution_check_present>
+    <execution_check_verdict>PASS — TC-1~TC-17 + 2개 구조증명 단위테스트 전부 PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 신규 함수 6개 모두 정의+호출 확인(_parse_json_verdict 2refs, _generate_attempt_id 3, _codex_snapshot_identity 5, _extract_snapshot_identity 3, _snapshot_identity_matches 2, _invalidate_error_attempt 2, _finish_codex_review_error 2). _cmd_gates_codex_review→_run_codex_cli_review→_finish_codex_review_error 실제 호출 경로 확인.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <confirmation_points>
+    <point id="1">PASS — --retry-cli-error + snapshot 변경 → BLOCKED. TC-10(snapshot_changed_blocked) 증명: prev ERROR packet_sha=stale, 현재 cwd packet=new SHA → _snapshot_identity_matches changed=True → _invalidate_error_attempt(INVALIDATED_BY_SNAPSHOT_CHANGE 이력) + _die(codex_snapshot_changed_need_new_review). TC-9(same snapshot)는 새 attempt 허용으로 대비 검증.</point>
+    <point id="2">PASS — startswith("REJECT") 취약 판정 제거. JSON verdict protocol 우선(_parse_json_verdict: verdict==REJECT+reason만 REJECTED), legacy fallback은 re.match(r"^REJECT\s+-\s+\S")로 정확한 "REJECT - 사유" 형식만 승격. TC-13/tc_reject_misformat 증명: "REJECTED"/"REJECT_LIMIT"/"INFO: REJECT"/"WARNING: REJECT"/bare "REJECT" 전부 parse_failure ERROR.</point>
+    <point id="3">PASS — reject_count vs parse_failure ERROR 분리. TC-14 증명: 유효 REJECT→reject_count=1, 이어진 "REJECTED"(parse_failure ERROR)→reject_count 1 유지 + cli_error_count=1. ERROR는 reject rate-limit 미기여(counts_toward_reject_rate_limit=False).</point>
+    <point id="4">PASS — "APPROVE_TO_USER" exact match. up=="APPROVE_TO_USER"로 substring 오분류 제거. TC-17 증명: "WARNING: APPROVE_TO_USER may be premature" → parse_failure ERROR, verdict=None, acceptance_eligible=False, non-zero exit.</point>
+  </confirmation_points>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — rework 커밋 541894e2 변경 파일: pipeline.py + tests/e2e/test_codex_cost_optimization_9f5e.py + oracle actual_output.json 5개. HIGH_RISK 프로필로 trust-root(pipeline.py)는 PM scope 명시 대상이므로 허용.</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — resume 검증 컨텍스트 기준. 대상 산출물이 PM MT 계획 범위 내.</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>7</declared_functions>
+    <actual_modified_functions>7</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — 모든 변경이 Codex Review 상태 모델 함수군 내</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <static_analysis>
+    <ruff>PASS — All checks passed (exit 0)</ruff>
+    <bandit>PASS — High=0, Medium=10(전부 기존 urllib.urlopen pre-existing, 변경 코드 무관), exit 0</bandit>
+    <mypy>ADVISORY_ONLY — 1 error at line 7153: dict(entry.get("snapshot_identity")) Any|None narrowing. line 7152 isinstance(dict) 가드로 런타임 안전. mypy가 .get() 재호출 narrowing 미인식하는 알려진 한계. exit 0(선택 항목, non-blocking).</mypy>
+  </static_analysis>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — 이번 파이프라인 대상 산출물(pipeline.py Codex Review 상태 모델 + tests/e2e/test_codex_cost_optimization_9f5e.py) 기준 자동 FAIL 트리거 없음. 20 passed/0 skipped, ruff PASS, bandit High=0, fail-closed 설계 일관, 확인 포인트 4개 전부 증명.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. [인터페이스 계약 drift 주의] untracked 별개 파이프라인 산출물 tests/e2e/test_codex_review_gate_3bb6.py(IMP-20260627-3BB6, 7 failed)는 gates codex-review가 PATH의 codex CLI shim을 자동 호출하기를 기대하나, 이번 rework는 --codex-cli-exit-code/--codex-cli-stdout 또는 --verdict 명시 전달 방식으로 설계됨. 두 파이프라인의 gates codex-review 인터페이스 가정이 상충. 이 파일은 main/현재 브랜치 모두에 미커밋(untracked)이므로 이번 PR GitHub CI 및 scope에 미포함 → 이번 파이프라인 자동 FAIL 트리거 아님. 단 IMP-20260627-3BB6 파이프라인 진행 시 codex CLI 자동 호출 경로 부재를 반영해 테스트를 갱신하거나, pipeline.py에 CLI 자동 호출 경로를 별도 IMP로 추가할지 결정 필요.
+    2. [mypy 개선] line 7153을 지역 변수로 narrowing 고정하면(_si = entry.get("snapshot_identity"); if isinstance(_si, dict): record["snapshot_identity"] = dict(_si)) mypy arg-type 오류 제거 가능. 런타임 영향 없음.
+  </improvement_suggestions>
+</qa_report>
