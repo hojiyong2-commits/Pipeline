@@ -11,8 +11,6 @@ import subprocess
 import sys
 import tempfile
 
-import pytest
-
 PIPELINE_PY = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pipeline.py"
 )
