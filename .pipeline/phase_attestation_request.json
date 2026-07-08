@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-20T10:28:14Z",
+  "pipeline_id": "BUG-20260620-3BF4",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "76512f64adc6b2a0b329c654ecfaff129cc9cebc",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-20T10:27:36Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_pr_comment_accept_3bf4.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,.claude/agents/pipeline-manager-agent.md"
+  },
+  "agent_run": {
+    "run_id": "dev-db376d0fcff89469",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "18dd9ff46bd7cc4aea9b8cb44881ea05e0d2df053a70a1d43d8e3706ccce9033",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260620-3BF4/dev/agent_receipt_dev-db376d0fcff89469.json",
+    "receipt_sha256": "6c727d34baf81aa09e1a01c6b5589d69ef55c54e1da61794a3e99cf0c22505ed",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260620-3BF4\\dev\\dev-db376d0fcff89469.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260620-3BF4\\dev\\dev-db376d0fcff89469.json",
+      "path": ".pipeline/phase_evidence/BUG-20260620-3BF4/dev/agent_receipt_dev-db376d0fcff89469.json",
+      "sha256": "6c727d34baf81aa09e1a01c6b5589d69ef55c54e1da61794a3e99cf0c22505ed",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260620-3BF4/dev/report_dev_handover.xml",
+      "sha256": "f891ad83cdc8257ba7a5c26aa1364435802ad945f9319789ef78f529574c10b4",
+      "size_bytes": 2959,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260620-3BF4/dev/scope_manifest_scope_manifest.json",
+      "sha256": "2ad07fa30fed978e360a68ebba930dfd1e26cc91c7d589728fd564da899b11f1",
+      "size_bytes": 1058,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": null,
+  "local_only_files": []
+}

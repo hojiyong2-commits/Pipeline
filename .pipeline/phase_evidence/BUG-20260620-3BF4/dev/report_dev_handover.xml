@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260620-3BF4</pipeline_id>
+  <agent_run_id>dev-db376d0fcff89469</agent_run_id>
+  <phase>dev</phase>
+  <status>COMPLETE</status>
+  <handover>
+    <mt_id>MT-1, MT-2, MT-3, MT-4</mt_id>
+    <pipeline_id>BUG-20260620-3BF4</pipeline_id>
+    <files>pipeline.py, tests/e2e/test_pr_comment_accept_3bf4.py, tests/e2e/test_request_accept_nonce_reuse_aef0.py, .claude/agents/pipeline-manager-agent.md</files>
+    <evidence>
+      MT-1: 브라우저 승인 게이트 완전 제거 (ABSENT 확인).
+      MT-2: PR 댓글 ACCEPT-{pipeline_id} 형식 단순화, timestamp fail-closed 추가.
+      MT-3: _should_reuse_acceptance_nonce 개선, --force-new-code 플래그, 원자적 쓰기.
+      MT-4: 14개 테스트 PASS, PIPELINE_BROWSER_APPROVAL_SKIP 제거, agent MD 갱신.
+    </evidence>
+    <verdict>PASS</verdict>
+  </handover>
+  <impact_analysis>
+    <target_function>_run_browser_approval_server (제거), _check_pr_approver_provenance (수정), _should_reuse_acceptance_nonce (개선), _write_acceptance_request (원자적 쓰기로 교체)</target_function>
+    <side_effects>
+      브라우저 승인 서버 완전 제거. PR 댓글 기반 ACCEPT-{pipeline_id} 단순 형식으로 전환.
+      timestamp fail-closed 검증 추가. 원자적 acceptance_request.json 쓰기 구현.
+      14개 신규 테스트, 기존 8개 테스트 회귀 없음. agent MD 갱신.
+    </side_effects>
+    <downstream_dependencies>없음 — 브라우저 승인 함수 호출처 0건 (Grep 확인)</downstream_dependencies>
+  </impact_analysis>
+  <scope_declaration>
+    <files_modified>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+    </files_modified>
+    <files_created>
+      <file>tests/e2e/test_pr_comment_accept_3bf4.py</file>
+    </files_created>
+  </scope_declaration>
+  <module_summary>
+    <module id="MT-1" status="PASS">브라우저 승인 게이트 완전 제거 — pipeline.py</module>
+    <module id="MT-2" status="PASS">PR 댓글 승인 방식 단순화 — pipeline.py</module>
+    <module id="MT-3" status="PASS">request-accept 반복 실행 안정화 — pipeline.py</module>
+    <module id="MT-4" status="PASS">테스트 추가 및 문서 갱신 — 3개 파일</module>
+  </module_summary>
+  <evidence>
+    <py_compile>PASS</py_compile>
+    <browser_approval_server_absent>PASS</browser_approval_server_absent>
+    <pr_comment_accept_format_ok>PASS</pr_comment_accept_format_ok>
+    <timestamp_check_ok>PASS</timestamp_check_ok>
+    <nonce_reuse_logic_ok>PASS</nonce_reuse_logic_ok>
+    <force_new_code_flag_ok>PASS</force_new_code_flag_ok>
+    <test_14_passed>PASS</test_14_passed>
+    <aef0_regression_8_passed>PASS</aef0_regression_8_passed>
+    <agent_md_updated>PASS</agent_md_updated>
+  </evidence>
+  <handover_to>qa-agent</handover_to>
+</dev_handover>
