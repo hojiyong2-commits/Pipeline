@@ -2404,6 +2404,26 @@ WORKSPACE_INTERNAL_DIR_PREFIXES: List[str] = [
 ]
 
 # ---------------------------------------------------------------------------
+# IMP-20260703-B985 MT-32: Root-level runtime XML artifact SSoT (PR diff hard gate)
+# ---------------------------------------------------------------------------
+# root-level(경로 세그먼트 없음) *.xml 실행 산출물의 basename 접두사 목록.
+# _check_pr_diff_runtime_artifacts()가 PR diff에서 이 접두사로 시작하는
+# root-level XML 파일을 감지하여 request-accept를 차단한다.
+# REJECT-25 재발 방지: dev_handover_mt*.xml / integration_report_r*.xml /
+# architect_rca_b985_mt27.xml 같은 파일이 PR diff에 다시 포함되는 것을 막는다.
+RUNTIME_XML_PATTERNS: List[str] = [
+    "dev_handover",       # dev_handover.xml, dev_handover_mt27.xml 등
+    "qa_report",          # qa_report.xml, qa_report_r5.xml 등
+    "build_report",       # build_report.xml, build_report_F52C.xml 등
+    "integration_report", # integration_report.xml, integration_report_r6.xml 등
+    "architect_rca",      # architect_rca_b985_mt27.xml 등
+    "architect_report",   # architect_report.xml, architect_report_rework.xml 등
+    "security_audit",     # security_audit.xml 등
+    "manager_handoff",    # manager_handoff.xml, manager_handoff_A35C.xml 등
+    "step_plan",          # step_plan.xml, step_plan_509F.xml 등
+]
+
+# ---------------------------------------------------------------------------
 # IMP-20260601-0DF5 MT-1: Hygiene Scan/Archive — SSoT 상수
 # ---------------------------------------------------------------------------
 # 이 상수들을 수정하면 cmd_hygiene_scan, cmd_hygiene_archive,
@@ -13983,6 +14003,76 @@ def _get_git_diff_files(base: str = "origin/main") -> List[str]:
     return []
 
 
+# [Purpose]: REJECT-25 재발 방지 — root-level 실행 산출물 XML(dev_handover_mt*.xml,
+#   integration_report_r*.xml, architect_rca_b985_mt27.xml 등)이 PR diff에 포함된 채
+#   request-accept로 승인 코드가 발급되는 것을 hard gate로 차단한다. (IMP-20260703-B985 MT-32)
+# [Assumptions]: _get_git_diff_files()가 `git diff origin/main...HEAD --name-only` 결과를
+#   반환한다. RUNTIME_XML_PATTERNS SSoT에 root-level runtime XML 접두사가 유지된다.
+#   tests/ 하위 XML(oracle 등), .pipeline/ / .claude/ / .github/ 경로는 별도 게이트가 처리하므로 제외한다.
+# [Vulnerability & Risks]: git 도구 부재 시 _get_git_diff_files()가 빈 목록을 반환하여
+#   검사를 통과(OK)시킨다. 이는 CI(Secrets/Protocol gate 등) 다른 계층에서 재검증되므로
+#   fail-open이 아닌 다층 방어의 일부다. state 인자는 향후 확장을 위해 받되 현재는 미사용.
+# [Improvement]: RUNTIME_XML_PATTERNS를 WORKSPACE_INTERNAL_PATTERNS와 통합하여
+#   단일 SSoT로 관리하면 패턴 중복을 줄일 수 있다.
+def _check_pr_diff_runtime_artifacts(state: Dict[str, Any]) -> Dict[str, Any]:
+    """PR diff에 root-level 실행 산출물 XML이 포함됐는지 검사한다 (hard gate).
+
+    `git diff origin/main...HEAD --name-only` 결과에서 경로 세그먼트가 없는
+    (basename만 존재하는) root-level `*.xml` 파일 중 RUNTIME_XML_PATTERNS 접두사와
+    매칭되는 파일을 감지한다. 하나라도 있으면 BLOCKED를 반환한다.
+
+    `.pipeline/`, `tests/`, `.claude/`, `.github/` 경로의 파일은 별도 게이트에서
+    처리되므로 이 검사에서 제외한다.
+
+    Args:
+        state: 활성 pipeline_state (현재 미사용, 향후 확장용).
+    Returns:
+        {"status": "OK"} 또는
+        {"status": "BLOCKED", "failure_code": "pr_diff_runtime_artifact",
+         "message": str, "offending_files": List[str]}.
+    Raises:
+        없음 (외부 도구 부재 시 빈 목록 → OK).
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    diff_files = _get_git_diff_files(base="origin/main")
+
+    # 별도 게이트에서 처리되는 경로 접두사 (root-level 검사 대상에서 제외).
+    excluded_prefixes = (".pipeline/", "tests/", ".claude/", ".github/")
+
+    offending: List[str] = []
+    for raw in diff_files:
+        normalized = str(raw).replace("\\", "/").strip()
+        if not normalized:
+            continue
+        # 경로 세그먼트가 있으면 root-level 아님 → 제외 (excluded 경로 포함).
+        if "/" in normalized:
+            continue
+        if normalized.startswith(excluded_prefixes):
+            continue
+        if not normalized.lower().endswith(".xml"):
+            continue
+        for pattern in RUNTIME_XML_PATTERNS:
+            if normalized.startswith(pattern):
+                offending.append(normalized)
+                break
+
+    if offending:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_diff_runtime_artifact",
+            "offending_files": offending,
+            "message": (
+                "PR diff에 root-level 실행 산출물 XML이 포함되어 있습니다: "
+                + ", ".join(offending)
+            ),
+        }
+    return {"status": "OK"}
+
+
 def _get_pr_number_from_url(pr_url: str) -> Optional[str]:
     """PR URL에서 PR 번호를 추출한다.
 
@@ -22723,6 +22813,21 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 "[WORKSPACE HYGIENE WARN] cleanup_only 파일 발견: "
                 + ", ".join(str(c) for c in cleanup_items[:5])
             ))
+
+    # IMP-20260703-B985 MT-32 (REJECT-25): PR diff에 root-level 실행 산출물 XML이
+    # 포함됐는지 hard gate로 검사한다. dev_handover_mt*.xml / integration_report_r*.xml /
+    # architect_rca_b985_mt27.xml 등이 다시 PR에 섞이면 nonce 발급 전 즉시 차단한다.
+    rt_check = _check_pr_diff_runtime_artifacts(state)
+    if rt_check.get("status") == "BLOCKED":
+        _rt_files = rt_check.get("offending_files") or []
+        _die(
+            "[BLOCKED] failure_code=pr_diff_runtime_artifact\n"
+            f"  {rt_check.get('message', 'root-level 실행 산출물 XML이 PR diff에 포함됨')}\n"
+            "  해결 방법: 아래 파일을 git rm 후 커밋하고 .gitignore에 패턴이 있는지 확인하세요.\n"
+            + "".join(f"    - {f}\n" for f in _rt_files)
+            + "  (dev_handover*.xml / integration_report*.xml / architect_rca*.xml 등은\n"
+            "   파이프라인 내부 산출물이며 PR diff에 포함될 수 없습니다.)"
+        )
 
     # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
     # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다
