@@ -22,7 +22,6 @@ staging 시점에 단 1회 생성한 frozen bytes/text를 그대로 복사하는
     monkeypatch.setattr(pipeline, "BASE_DIR", tmp_path)로 수행한다(전역 상태 미오염).
 """
 import hashlib
-import json
 import sys
 from pathlib import Path
 
