@@ -2818,6 +2818,20 @@ class TestMT30AcceptancePendingAndShaSync:
         monkeypatch.setattr(pl, "_get_pr_body_text", _spy_get_pr_body_text)
         monkeypatch.setattr(pl, "_codex_review_result_path", lambda: result_path)
         monkeypatch.setattr(pl, "_append_codex_history", lambda entry: None)
+        # MT-33: --approve-pending 경로에서 acceptance_request 스냅샷 필드 복사 테스트
+        # _load_acceptance_request를 mock하여 PENDING acceptance request 상황 simulate
+        monkeypatch.setattr(
+            pl,
+            "_load_acceptance_request",
+            lambda: {
+                "pipeline_id": "IMP-20260703-B985",
+                "status": "PENDING",
+                "snapshot_id": "test-snapshot-id-mt30",
+                "github_canonical_pr_body_sha256": frozen_candidate_sha,
+                "approval_message_sha256": "test-approval-sha256",
+                "pending_comment_sha256": "test-pending-sha256",
+            },
+        )
 
         args = _NS(
             approve_pending=True,
