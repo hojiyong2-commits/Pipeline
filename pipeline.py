@@ -6473,6 +6473,26 @@ TEMPORARY_PR_BODY_PATTERNS: List[str] = [
     "TODO",
 ]
 
+# IMP-20260703-B985 MT-34 (REJECT #27): PR body에 남으면 안 되는 stale acceptance 상태 패턴.
+# PIPELINE_FINAL_PACKET_END 뒤 또는 packet 블록 밖에 acceptance: FAIL/REJECTED가 남으면
+# 사용자가 승인 판단 자료로 잘못 읽으므로 차단한다(SSoT — Rule D1 중복 방지).
+PR_BODY_STALE_PATTERNS: List[str] = [
+    r"acceptance:\s+FAIL",
+    r"acceptance:\s+REJECTED",
+]
+
+# IMP-20260703-B985 MT-34: requirements_summary가 실질적으로 "정보 없음"을 뜻하는 표시값 집합.
+# 이 값 중 하나면 사용자가 요구사항 충족 여부를 판단할 수 없으므로 request-accept를 차단한다.
+_REQUIREMENTS_SUMMARY_NA_VALUES: Set[str] = {
+    "N/A",
+    "N/A (STRUCTURED AC 없음 — LEGACY 파이프라인)",
+    "N/A (STRUCTURED AC 없음 — legacy 파이프라인)",
+    "N/A (structured AC 없음 — LEGACY 파이프라인)",
+    "N/A (structured AC 없음 — legacy 파이프라인)",
+    "N/A (STRUCTURED AC 없음)",
+    "N/A (structured AC 없음)",
+}
+
 # IMP-20260531-BBDB MT-1: User Acceptance Nonce Gate
 # acceptance_request.json 파일명 + ACCEPT/REJECT 코드 정규식.
 # nonce는 8자 base32 uppercase (예: A2B3C4D5). pipeline_id 패턴: TYPE-YYYYMMDD-XXXX.
@@ -6592,6 +6612,148 @@ def _find_temporary_pr_body_pattern(pr_body: str) -> Optional[str]:
             if line.startswith(pattern):
                 return pattern
     return None
+
+
+# [Purpose]: IMP-20260703-B985 MT-34 (REJECT #27) — 사용자 판단 자료(PR body)의 무결성을
+#   검증하여 (1) UTF-8 BOM으로 시작, (2) PIPELINE_FINAL_PACKET_END 뒤 stale acceptance 상태,
+#   (3) requirements_summary N/A 세 케이스를 request-accept 이전에 차단한다.
+# [Assumptions]: pr_body_text는 gh CLI가 반환한 PR 본문 문자열, requirements_summary는
+#   packet 계산값 문자열. 둘 다 None이 아니어야 하며 비문자열이면 TypeError를 던진다.
+# [Vulnerability & Risks]: stale 패턴이 정상 문장 중간에 등장하면 false positive가 될 수 있으나,
+#   PR_BODY_STALE_PATTERNS는 "acceptance: FAIL/REJECTED" 형태의 메타데이터 줄만 매칭한다.
+# [Improvement]: 향후 stale 패턴을 줄-접두 매칭으로 좁혀 오탐 가능성을 더 줄일 수 있다.
+def _check_pr_body_user_facing(pr_body_text: str, requirements_summary: str) -> Dict[str, str]:
+    """사용자 판단 자료(PR body)의 무결성을 검증한다.
+
+    BOM, stale acceptance 상태, requirements_summary N/A를 차단한다. 부수효과 없는 pure 함수.
+
+    Args:
+        pr_body_text: 검사할 PR 본문 문자열. None 금지.
+        requirements_summary: packet의 requirements_summary 표시값. None 금지 (빈 문자열 허용).
+    Returns:
+        status=PASS 또는 status=BLOCKED(+failure_code, message)를 담은 dict.
+    Raises:
+        TypeError: pr_body_text 또는 requirements_summary가 None/비문자열인 경우.
+    """
+    if pr_body_text is None:
+        raise TypeError("pr_body_text must not be None")
+    if not isinstance(pr_body_text, str):
+        raise TypeError(
+            f"pr_body_text must be str, got {type(pr_body_text).__name__}"
+        )
+    if requirements_summary is None:
+        raise TypeError("requirements_summary must not be None")
+    if not isinstance(requirements_summary, str):
+        raise TypeError(
+            f"requirements_summary must be str, got {type(requirements_summary).__name__}"
+        )
+
+    # 1. BOM 검사 — 유니코드 BOM 문자(﻿) 또는 UTF-8 BOM bytes(EF BB BF)로 시작 시 차단.
+    if pr_body_text.startswith("﻿") or pr_body_text.encode("utf-8").startswith(
+        b"\xef\xbb\xbf"
+    ):
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_body_bom_detected",
+            "message": (
+                "PR body가 UTF-8 BOM으로 시작합니다. "
+                "report update-pr-body를 다시 실행하세요."
+            ),
+        }
+
+    # 2. PIPELINE_FINAL_PACKET_END 뒤 stale acceptance 상태 검사.
+    end_marker = PIPELINE_FINAL_PACKET_END_MARKER
+    if end_marker in pr_body_text:
+        after_packet = pr_body_text.split(end_marker, 1)[1]
+        for pattern in PR_BODY_STALE_PATTERNS:
+            if re.search(pattern, after_packet, re.MULTILINE | re.IGNORECASE):
+                return {
+                    "status": "BLOCKED",
+                    "failure_code": "pr_body_stale_metrics_block",
+                    "message": (
+                        "PIPELINE_FINAL_PACKET_END 뒤에 stale acceptance 상태가 있습니다. "
+                        "report update-pr-body를 다시 실행하세요."
+                    ),
+                }
+
+    # 3. packet 블록 외부(앞)에 stale acceptance 상태 검사.
+    start_marker = PIPELINE_FINAL_PACKET_START_MARKER
+    if start_marker in pr_body_text:
+        before_packet = pr_body_text.split(start_marker, 1)[0]
+    else:
+        before_packet = pr_body_text
+    for pattern in PR_BODY_STALE_PATTERNS:
+        if re.search(pattern, before_packet, re.MULTILINE | re.IGNORECASE):
+            return {
+                "status": "BLOCKED",
+                "failure_code": "pr_body_stale_acceptance_fail",
+                "message": (
+                    "PR body에 stale acceptance: FAIL 상태가 있습니다. "
+                    "PR body를 업데이트하세요."
+                ),
+            }
+
+    # 4. requirements_summary N/A 검사.
+    if requirements_summary and requirements_summary.strip() in _REQUIREMENTS_SUMMARY_NA_VALUES:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_body_requirements_summary_na",
+            "message": (
+                "requirements_summary가 N/A입니다. structured AC를 추가하거나 "
+                "legacy_no_ac_reason을 pipeline state에 명시하세요."
+            ),
+        }
+
+    return {"status": "PASS"}
+
+
+# [Purpose]: IMP-20260703-B985 MT-34 — PIPELINE_FINAL_PACKET_END 뒤에 남은 stale metrics
+#   메타데이터 라인(acceptance:/technical:/oracle:/github_ci:/ci_run_id:/pr_head_sha:)을 제거한다.
+# [Assumptions]: text는 PR 본문 문자열. 한국어 섹션(#..######로 시작)이 나오면 이후 내용은 보존.
+# [Vulnerability & Risks]: metrics 라인 형식이 바뀌면 매칭이 깨진다 — 패턴 목록으로 관리.
+# [Improvement]: 향후 마커 기반으로 stale 블록 범위를 명시적으로 감쌀 수 있다.
+def _strip_stale_metrics_block(text: str) -> str:
+    """PIPELINE_FINAL_PACKET_END 뒤의 stale metrics 블록만 제거한다.
+
+    END 마커 앞(신선한 FINAL_PACKET 블록 포함)은 절대 건드리지 않는다. END 마커 뒤에서만
+    stale metrics 라인(acceptance:/technical:/oracle:/github_ci:/ci_run_id:/pr_head_sha:)을
+    제거하며, 한국어/마크다운 섹션 헤더(#로 시작)가 나오면 제거를 멈추고 이후 내용을 보존한다.
+
+    Args:
+        text: PR 본문 문자열. None 금지.
+    Returns:
+        END 마커 뒤 stale metrics 라인이 제거된 문자열. END 마커가 없으면 원본 그대로.
+    Raises:
+        TypeError: text가 None/비문자열인 경우.
+    """
+    if text is None:
+        raise TypeError("text must not be None")
+    if not isinstance(text, str):
+        raise TypeError(f"text must be str, got {type(text).__name__}")
+
+    end_marker = PIPELINE_FINAL_PACKET_END_MARKER
+    if end_marker not in text:
+        return text  # 정리 대상 없음
+
+    _stale_line_patterns = [
+        r"^\s*acceptance:\s+",
+        r"^\s*technical:\s+",
+        r"^\s*oracle:\s+",
+        r"^\s*github_ci:\s+",
+        r"^\s*ci_run_id:\s+",
+        r"^\s*pr_head_sha:\s+",
+    ]
+    head, tail = text.split(end_marker, 1)
+    kept: List[str] = []
+    stripping = True  # END 마커 직후 — stale metrics 제거 모드
+    for line in tail.split("\n"):
+        # 한국어/마크다운 섹션 헤더가 시작되면 제거 모드 종료 후 이후 내용 모두 보존.
+        if re.match(r"^#{1,6}\s+", line):
+            stripping = False
+        if stripping and any(re.match(p, line) for p in _stale_line_patterns):
+            continue  # END 마커 뒤 stale metrics 라인 제거
+        kept.append(line)
+    return head + end_marker + "\n".join(kept)
 
 
 def _acceptance_blocked(
@@ -14216,6 +14378,9 @@ def _collect_packet_evidence(
         "acceptance_display_effective": acceptance_display_effective,
         "oracle_summary": oracle_summary_for_evidence,
         "known_failures": known_failures_for_evidence,
+        # IMP-20260703-B985 MT-34: legacy(structured AC 없음) 파이프라인의 requirements_summary
+        # 폴백에 사용. 값이 없으면 oracle PASS 케이스 수로 폴백한다.
+        "legacy_no_ac_reason": str(state.get("legacy_no_ac_reason", "") or ""),
         # IMP-20260623-7EAA Round 2 (F3): COMPLETE 후 workspace 정리 요약을 packet evidence에
         # 주입하여 final-packet(MD/PR body) 및 verification JSON이 동일 SSoT를 표시하도록 한다.
         "post_complete_cleanup": dict(state.get("post_complete_cleanup") or {}),
@@ -14434,6 +14599,117 @@ def _build_acceptance_display_model(
     }
 
 
+# [Purpose]: IMP-20260703-B985 MT-34 — requirements_summary 표시 문자열을 계산하는 SSoT 헬퍼.
+#   structured AC가 있으면 'P/T PASS', 없으면 legacy_no_ac_reason > oracle PASS 케이스 수 순으로
+#   폴백하여, legacy 파이프라인이 무조건 "N/A"로 표시되어 request-accept가 차단되는 것을 방지한다.
+# [Assumptions]: ac_table은 AC 충족표 리스트 또는 None. oracle_summary는 status/case_count/
+#   passed_count를 담은 dict 또는 None. legacy_no_ac_reason은 문자열.
+# [Vulnerability & Risks]: oracle_summary 필드명이 바뀌면 폴백이 깨진다 — _collect_packet_evidence와
+#   동일 키(status/case_count/passed_count)를 사용한다.
+# [Improvement]: 향후 P1/P2 AC 가중치를 반영한 요약으로 확장 가능.
+def _compute_requirements_summary_str(
+    ac_table: Optional[List[Any]],
+    oracle_summary: Optional[Dict[str, Any]] = None,
+    legacy_no_ac_reason: str = "",
+) -> str:
+    """requirements_summary 표시 문자열을 계산한다 (SSoT — packet/gate 공유).
+
+    Args:
+        ac_table: AC 충족표 리스트 (없으면 None/빈 리스트).
+        oracle_summary: oracle 요약 dict (status/case_count/passed_count). 선택.
+        legacy_no_ac_reason: structured AC 없음 사유 (선택, 빈 문자열 허용).
+    Returns:
+        표시 문자열. structured AC 있으면 'P/T PASS', 없으면 legacy/oracle 폴백, 최종 'N/A'.
+    Raises:
+        TypeError: legacy_no_ac_reason이 None/비문자열인 경우.
+    """
+    if legacy_no_ac_reason is None:
+        raise TypeError("legacy_no_ac_reason must not be None")
+    if not isinstance(legacy_no_ac_reason, str):
+        raise TypeError(
+            f"legacy_no_ac_reason must be str, got {type(legacy_no_ac_reason).__name__}"
+        )
+
+    req_pass = req_total = 0
+    if ac_table:
+        for entry in ac_table:
+            if isinstance(entry, dict):
+                req_total += 1
+                if str(entry.get("result", "") or "").upper() == "PASS":
+                    req_pass += 1
+    if req_total > 0:
+        return f"{req_pass}/{req_total} PASS"
+
+    # structured AC 없음(legacy) — 폴백 순서: legacy 사유 > oracle PASS 케이스 수 > N/A.
+    if legacy_no_ac_reason.strip():
+        return f"legacy (사유: {legacy_no_ac_reason.strip()})"
+    if isinstance(oracle_summary, dict):
+        status = str(oracle_summary.get("status", "") or "").upper()
+        case_count = int(oracle_summary.get("case_count", 0) or 0)
+        passed = int(oracle_summary.get("passed_count", 0) or 0)
+        # oracle gate가 PASS면 requirements가 oracle로 검증된 것이므로 N/A가 아니다.
+        # 케이스 수를 알면 함께 표시하고, oracle_result.json이 없어 수를 모르면 수 없이 표시한다.
+        if status == "PASS":
+            if case_count > 0:
+                return f"oracle 기반 검증 ({passed}개 케이스 PASS — structured AC 없음)"
+            return "oracle 기반 검증 (structured AC 없음)"
+    return "N/A"
+
+
+# [Purpose]: IMP-20260703-B985 MT-34 — state로부터 requirements_summary 표시 문자열을 계산한다.
+#   request-accept의 PR body user-facing 검증이 packet과 동일한 값을 검사하도록 SSoT를 공유한다.
+# [Assumptions]: state는 pipeline_state dict. oracle_result.json은 선택적.
+# [Vulnerability & Risks]: oracle_result.json 파싱 실패 시 oracle 폴백 없이 N/A가 될 수 있다.
+# [Improvement]: oracle_summary 계산을 _collect_packet_evidence와 완전히 공유하도록 추출 가능.
+def _requirements_summary_for_state(state: Dict[str, Any]) -> str:
+    """state 기반으로 requirements_summary 표시 문자열을 계산한다.
+
+    Args:
+        state: 활성 pipeline_state dict. None 금지.
+    Returns:
+        requirements_summary 표시 문자열 (structured AC 있으면 'P/T PASS', 없으면 폴백).
+    Raises:
+        TypeError: state가 None/비dict인 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    ac_table = _build_ac_fulfillment_table(state)
+    legacy_reason = str(state.get("legacy_no_ac_reason", "") or "")
+
+    # oracle_summary — oracle_result.json에서 읽어 case/passed 수를 구한다 (없으면 gate status만).
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+    gate_status_oracle = str(
+        ((state.get("external_gates") or {}).get("oracle") or {}).get("status", "PENDING")
+        or "PENDING"
+    )
+    oracle_summary: Dict[str, Any] = {
+        "status": gate_status_oracle,
+        "case_count": 0,
+        "passed_count": 0,
+    }
+    try:
+        _paths = _contract_paths(pipeline_id)
+        _oracle_result_path = _paths.get("oracle_result")
+        if _oracle_result_path is not None and _oracle_result_path.exists():
+            _oracle_result = json.loads(
+                _oracle_result_path.read_text(encoding="utf-8", errors="replace")
+            )
+            _summary = _oracle_result.get("summary") or {}
+            _results = _oracle_result.get("results") or []
+            oracle_summary = {
+                "status": str(_summary.get("verdict") or gate_status_oracle),
+                "case_count": len(_results),
+                "passed_count": int(_summary.get("passed") or 0),
+            }
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+
+    return _compute_requirements_summary_str(ac_table, oracle_summary, legacy_reason)
+
+
 def _build_final_packet_content(
     evidence: Dict[str, Any],
     acceptance_status_override: Optional[str] = None,
@@ -14554,15 +14830,16 @@ def _build_final_packet_content(
     # (_materialize_acceptance_snapshot가 실제 파일에서 계산)이다. 따라서 이 self-reference
     # 라인을 메타데이터 블록에서 제거하여 REJECT #2(packet_md_sha256 불일치)를 구조적으로 없앤다.
 
-    # requirements_summary: AC 충족표에서 PASS/TOTAL
-    req_pass = req_total = 0
-    if ac_table:
-        for entry in ac_table:
-            if isinstance(entry, dict):
-                req_total += 1
-                if entry.get("result") == "PASS":
-                    req_pass += 1
-    req_summary = f"{req_pass}/{req_total} PASS" if req_total > 0 else "N/A"
+    # requirements_summary: AC 충족표에서 PASS/TOTAL (structured AC 없으면 oracle/legacy 폴백)
+    # IMP-20260703-B985 MT-34: legacy 파이프라인에서 무조건 "N/A"로 표시하던 것을
+    # oracle PASS 케이스 수 또는 legacy_no_ac_reason으로 대체하여 request-accept 차단을 방지한다.
+    req_summary = _compute_requirements_summary_str(
+        ac_table if isinstance(ac_table, list) else None,
+        evidence.get("oracle_summary")
+        if isinstance(evidence.get("oracle_summary"), dict)
+        else None,
+        str(evidence.get("legacy_no_ac_reason", "") or ""),
+    )
 
     # oracle_summary
     oracle_summary_raw = evidence.get("oracle_summary") or {}
@@ -16029,6 +16306,12 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
     if json_one_line is not None:
         new_body = _embed_packet_json_in_final_packet_block(new_body, json_one_line)
         json_embedded = True
+
+    # IMP-20260703-B985 MT-34 (REJECT #27): PR body 무결성 보정 —
+    # (1) UTF-8 BOM 유니코드 문자 제거, (2) PIPELINE_FINAL_PACKET_END 뒤 stale metrics 제거.
+    if new_body.startswith("﻿"):
+        new_body = new_body.lstrip("﻿")
+    new_body = _strip_stale_metrics_block(new_body)
 
     ok = _gh_edit_pr_body(new_body)
     if not ok:
@@ -23024,6 +23307,19 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             msg += "\n  누락 섹션: " + ", ".join(missing)
         msg += "\n  PR 본문을 최신 상태로 갱신한 후 gates request-accept를 다시 실행하세요."
         _die(msg)
+
+    # IMP-20260703-B985 MT-34 (REJECT #27): PR body user-facing 무결성 검증.
+    # (1) UTF-8 BOM 시작, (2) FINAL_PACKET_END 뒤/앞 stale acceptance, (3) requirements_summary N/A.
+    # pr_body는 위에서 fetch됨(fail-closed: None이면 이미 위에서 차단). requirements_summary는
+    # packet과 동일한 SSoT 계산값을 사용한다.
+    _uf_req_summary = _requirements_summary_for_state(state)
+    _uf_check = _check_pr_body_user_facing(pr_body, _uf_req_summary)  # type: ignore[arg-type]
+    if _uf_check.get("status") != "PASS":
+        _die(
+            f"[BLOCKED] failure_code={_uf_check.get('failure_code', 'pr_body_user_facing_invalid')}\n"
+            f"  {_uf_check.get('message', 'PR body user-facing 검증 실패')}\n"
+            "  PR 본문을 최신 상태로 갱신한 후 gates request-accept를 다시 실행하세요."
+        )
 
     # PR/CI 정보 가져오기 (gh CLI 없으면 빈 문자열)
     pr_url = _get_current_pr_url() or ""
