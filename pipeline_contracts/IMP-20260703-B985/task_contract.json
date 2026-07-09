@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260703-B985",
+  "pipeline_type": "IMP",
+  "created_at": "2026-07-03T11:29:23Z",
+  "updated_at": "2026-07-09T10:28:53Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "PR body SHA 계산 기준을 canonical SSoT로 통일 — candidate/github_canonical 필드 분리, 단일 helper 구현, jq/PowerShell stdout SHA 오염 제거",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "M001",
+      "name": "canonical_pr_body_sha256",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-12",
+      "name": "PENDING display-state 단일 helper",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-13",
+      "name": "atomic verification_json_sha256",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-14",
+      "name": "PR diff 실행 산출물 제거",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-15",
+      "name": "gates request-accept 최소 고정 양식 출력",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-16",
+      "name": "gates request-accept --machine-readable 모드 추가",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-17",
+      "name": "approval_request_ready 사전 검증 게이트",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-18",
+      "name": "acceptance display state 단일 helper",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-19",
+      "name": "verification_json_sha256 atomic publish 순서 수정",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-20",
+      "name": "회귀 테스트 추가",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-25",
+      "name": "CI final-check gate + packet auto-commit",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-32",
+      "name": "Root-level runtime XML artifact PR diff hard gate",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-07-04T04:45:19Z",
+  "contract_hash": "1d426e0b2132dcbc88b8d459b82e97c245d187bd062bec6fae454d809de77d36",
+  "test_set_hash": "95a5d7acfe675f6024dc70fdc3d218c3272ab13ce3db228e1a61c266a1854929"
+}
