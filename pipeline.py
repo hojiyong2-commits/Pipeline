@@ -20997,6 +20997,75 @@ def _check_codex_review_freshness_for_reuse(
 # [Improvement]: result 파일에 reviewer 서명/타임스탬프 TTL을 추가하면 위변조/만료 검출이 가능하다.
 
 
+# IMP-20260703-B985 MT-33: codex_review_result.json에 기록되어야 하는 최종 publish
+#   snapshot 필드 목록(SSoT). --approve-pending 경로가 이 필드들을 acceptance_request에서
+#   복사하고, request-accept의 _check_codex_snapshot_fields gate가 존재/일치를 강제한다.
+CODEX_REVIEW_SNAPSHOT_FIELDS = [
+    "snapshot_id",
+    "pr_head_sha",
+    "packet_sha256",
+    "pr_body_candidate_sha256",
+    "github_canonical_pr_body_sha256",
+    "approval_message_sha256",
+    "pending_comment_sha256",
+]
+
+
+def _check_codex_snapshot_fields(
+    state: Dict[str, Any],
+    codex_result: Dict[str, Any],
+    acceptance_request_data: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """MT-33: codex_review_result가 최종 publish snapshot 필드를 모두 가지고 있는지,
+    acceptance_request의 값과 일치하는지 검증합니다.
+
+    Args:
+        state: 활성 pipeline_state (현재 미사용, 미래 확장용).
+        codex_result: codex_review_result.json 내용 dict.
+        acceptance_request_data: acceptance_request.json 내용 dict (없으면 None).
+    Returns:
+        {"status": "PASS"} 또는 {"status": "BLOCKED", "failure_code": ..., "message": ...}
+    """
+    required_fields = [
+        "snapshot_id",
+        "github_canonical_pr_body_sha256",
+        "approval_message_sha256",
+        "pending_comment_sha256",
+    ]
+
+    # 1. 필수 필드 존재 및 비어있지 않은지 확인
+    for field in required_fields:
+        value = codex_result.get(field)
+        if not value:
+            return {
+                "status": "BLOCKED",
+                "failure_code": f"codex_snapshot_{field}_missing",
+                "message": (
+                    f"codex_review_result.{field}가 없거나 비어 있습니다. "
+                    "gates codex-review --approve-pending을 다시 실행하세요."
+                ),
+            }
+
+    # 2. acceptance_request와 일치 확인
+    if acceptance_request_data:
+        for field in required_fields:
+            codex_val = str(codex_result.get(field) or "")
+            req_val = str(acceptance_request_data.get(field) or "")
+            if codex_val and req_val and codex_val != req_val:
+                return {
+                    "status": "BLOCKED",
+                    "failure_code": f"codex_snapshot_{field}_mismatch",
+                    "message": (
+                        f"codex_review_result.{field} != acceptance_request.{field}\n"
+                        f"  codex: {codex_val}\n"
+                        f"  request: {req_val}\n"
+                        "gates codex-review --approve-pending을 다시 실행하세요."
+                    ),
+                }
+
+    return {"status": "PASS"}
+
+
 def _check_codex_pr_body_sha_invariant(
     codex_result: Dict[str, Any], staged_candidate_sha: str
 ) -> Dict[str, Any]:
@@ -21638,7 +21707,38 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "snapshot_identity": snapshot_identity,
         "acceptance_eligible": acceptance_eligible,
         "recorded_at": _now(),
+        # MT-33: snapshot 필드 초기값 (--approve-pending 경로에서 채워짐)
+        "snapshot_id": "",
+        "approval_message_sha256": "",
+        "pending_comment_sha256": "",
     }
+
+    # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
+    # github_canonical_pr_body_sha256 필드는 acceptance_request에서 가져온다 (fail-closed).
+    if bool(getattr(args, "approve_pending", False)):
+        _mt33_req = _load_acceptance_request()
+        if isinstance(_mt33_req, dict) and str(_mt33_req.get("pipeline_id", "") or "") == pipeline_id:
+            _mt33_canonical_sha = str(_mt33_req.get("github_canonical_pr_body_sha256", "") or "")
+            if not _mt33_canonical_sha:
+                _die(
+                    "[BLOCKED] failure_code=codex_approve_pending_canonical_sha_missing\n"
+                    "  acceptance_request.json의 github_canonical_pr_body_sha256이 비어 있습니다.\n"
+                    "  먼저 'gates request-accept --evidence <경로>'를 실행하여 canonical SHA를 기록하세요.\n"
+                    "  그 다음 'gates codex-review --approve-pending'을 재실행하세요."
+                )
+            result["snapshot_id"] = str(_mt33_req.get("snapshot_id", "") or "")
+            result["github_canonical_pr_body_sha256"] = _mt33_canonical_sha
+            result["approval_message_sha256"] = str(_mt33_req.get("approval_message_sha256", "") or "")
+            result["pending_comment_sha256"] = str(_mt33_req.get("pending_comment_sha256", "") or "")
+        else:
+            # acceptance_request가 없으면 fail-closed: --approve-pending은 PENDING request 필요
+            _die(
+                "[BLOCKED] failure_code=codex_approve_pending_no_acceptance_request\n"
+                "  --approve-pending 경로에서 PENDING acceptance_request.json을 찾을 수 없습니다.\n"
+                "  먼저 'gates request-accept --evidence <경로>'를 실행하세요.\n"
+                "  그 다음 'gates codex-review --approve-pending'을 재실행하세요."
+            )
+
     result_path = _codex_review_result_path()
     result_path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(result_path, result)
@@ -23519,6 +23619,25 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                                 f"  {_cx_inv.get('message')}"
                             )
                             return  # unreachable
+                        # IMP-20260703-B985 MT-33: codex_review_result가 최종 publish snapshot
+                        # 필드(snapshot_id/github_canonical_pr_body_sha256/approval_message_sha256/
+                        # pending_comment_sha256)를 모두 가지고 있고 acceptance_request와 일치하는지
+                        # 3자 일치 hard gate. REJECT #26 재발 방지 — 필드 누락/불일치 시 fail-closed.
+                        _snapshot_check = _check_codex_snapshot_fields(
+                            state, _cx_gate, _load_acceptance_request()
+                        )
+                        if _snapshot_check.get("status") != "PASS":
+                            _log_event(
+                                state,
+                                f"request-accept blocked by codex snapshot fields: "
+                                f"{_snapshot_check.get('failure_code')}",
+                            )
+                            _save(state)
+                            _die(
+                                f"[BLOCKED] failure_code={_snapshot_check.get('failure_code')}\n"
+                                f"  {_snapshot_check.get('message')}"
+                            )
+                            return  # unreachable
             except (OSError, json.JSONDecodeError, ValueError, TypeError):
                 # 파일 부재/파싱 실패는 아래 _codex_review_snapshot이 fail-closed로 판정한다.
                 pass
@@ -23559,6 +23678,23 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             return  # unreachable
         if not _machine_readable:
             print("  [CODEX REVIEW APPROVE_TO_USER] staged snapshot 검토 완료 — publish 진행.")
+
+        # MT-33: codex_review_result snapshot 필드 3자 일치 hard gate.
+        # codex_result는 _codex_review_snapshot이 반환한 dict(codex_review_result.json 내용).
+        # acceptance_request_data는 현재 PENDING acceptance_request.json (있으면).
+        _mt33_req_data = _load_acceptance_request()
+        _mt33_snap_check = _check_codex_snapshot_fields(state, codex_result, _mt33_req_data)
+        if _mt33_snap_check["status"] != "PASS":
+            _log_event(
+                state,
+                f"request-accept blocked by codex snapshot field gate: "
+                f"{_mt33_snap_check.get('failure_code')}",
+            )
+            _save(state)
+            _die(
+                f"[BLOCKED] failure_code={_mt33_snap_check.get('failure_code')}\n"
+                f"  {_mt33_snap_check.get('message')}"
+            )
 
         # ── 단계 3: publish_acceptance_request — Codex APPROVED 이후에만 publish. ──
         # 이 시점에 acceptance_request.json(nonce 포함), packet md/json, PR body, pending comment를
