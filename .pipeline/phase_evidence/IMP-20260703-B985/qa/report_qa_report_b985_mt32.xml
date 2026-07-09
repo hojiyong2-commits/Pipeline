@@ -1,0 +1,92 @@
+<qa_report>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <mt_id>MT-32</mt_id>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, .gitignore, tests/test_pr_runtime_artifact_gate_b985.py, tests/oracles/IMP-20260703-B985/TC-RT-gate/expected_blocked.json, tests/oracles/IMP-20260703-B985/TC-RT-gate/expected_ok.json</evidence>
+  </handover>
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. PR diff 검사 로직 추가.</wa>
+    <ui>N-A — GUI 위젯 없음.</ui>
+    <fs>N-A — 파일 I/O 신규 로직 없음. git diff 조회만.</fs>
+    <pd>PASS — RUNTIME_XML_PATTERNS SSoT 상수 분리, _check_pr_diff_runtime_artifacts 함수 독립 구현, _cmd_gates_request_accept 연결. 모듈 경계 준수.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — 패턴 매칭 방어 로직(빈 리스트, None 처리), 블로킹 파일 목록 반환, 조건 분기 완전 검증.</al>
+    <build>N-A — BUILD 태그 없음.</build>
+    <vsce>N-A — VSCE 태그 없음.</vsce>
+  </category_check>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — WA 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — FS 카테고리 미해당</fs>
+    <pd score="10" max="10">RUNTIME_XML_PATTERNS SSoT 분리 5/5, _check_pr_diff_runtime_artifacts 함수 독립 구현 5/5</pd>
+    <al score="20" max="20">패턴 매칭 방어 로직 완전 검증, 빈 리스트/None 처리, 블로킹 파일 목록 반환</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="110" max="120"/>
+    <percentage>91.7</percentage>
+    <numeric_verdict>PASS(≥96/120)</numeric_verdict>
+  </numeric_score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — 9개 테스트 PASS, ruff 0 오류, import OK</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _check_pr_diff_runtime_artifacts가 _cmd_gates_request_accept에 연결되어 실제 pr_diff_runtime_artifact 차단 동작 확인. oracle 파일(expected_blocked.json, expected_ok.json)과 일치하는 출력 검증.</functional_binding_verified>
+  </runtime_functional_check>
+  <c3_cross_verification>
+    <scope_files_declared>5</scope_files_declared>
+    <evidence_files_submitted>5</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <cli_evidence_contract>
+    <real_subprocess>PASS — 9개 테스트 중 subprocess 기반 CLI 검증 포함</real_subprocess>
+    <state_path_isolation>PASS — PIPELINE_STATE_PATH 격리 사용</state_path_isolation>
+    <assertion_type>pr_diff_runtime_artifact 차단 및 통과 케이스 oracle 검증</assertion_type>
+  </cli_evidence_contract>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <test_count>9</test_count>
+  <ruff_errors>0</ruff_errors>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+  <result>[PASS] 모든 카테고리 PASS/N-A, numeric_verdict=PASS (110/120)</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음 — MT-32 RUNTIME_XML_PATTERNS SSoT 상수, _check_pr_diff_runtime_artifacts 함수, _cmd_gates_request_accept 연결이 올바르게 구현됨. 9개 회귀 테스트와 oracle 2개가 차단 및 통과 케이스를 모두 커버.</critical_issues>
+  <improvement_suggestions>없음. SSoT 패턴 상수 분리로 유지보수성 확보.</improvement_suggestions>
+</qa_report>
