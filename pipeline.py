@@ -23682,19 +23682,28 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         # MT-33: codex_review_result snapshot 필드 3자 일치 hard gate.
         # codex_result는 _codex_review_snapshot이 반환한 dict(codex_review_result.json 내용).
         # acceptance_request_data는 현재 PENDING acceptance_request.json (있으면).
+        # 게이트 활성화 조건: 기존 PENDING acceptance_request.json에 snapshot_id가 있을 때.
+        # 첫 request-accept publish (acceptance_request.json 없음 또는 snapshot_id 없음)에는 생략.
         _mt33_req_data = _load_acceptance_request()
-        _mt33_snap_check = _check_codex_snapshot_fields(state, codex_result, _mt33_req_data)
-        if _mt33_snap_check["status"] != "PASS":
-            _log_event(
-                state,
-                f"request-accept blocked by codex snapshot field gate: "
-                f"{_mt33_snap_check.get('failure_code')}",
-            )
-            _save(state)
-            _die(
-                f"[BLOCKED] failure_code={_mt33_snap_check.get('failure_code')}\n"
-                f"  {_mt33_snap_check.get('message')}"
-            )
+        _mt33_has_snapshot = (
+            isinstance(_mt33_req_data, dict)
+            and bool(_mt33_req_data.get("snapshot_id"))
+            and str(_mt33_req_data.get("pipeline_id", "")) == str(state.get("pipeline_id", ""))
+            and str(_mt33_req_data.get("status", "")) == "PENDING"
+        )
+        if _mt33_has_snapshot:
+            _mt33_snap_check = _check_codex_snapshot_fields(state, codex_result, _mt33_req_data)
+            if _mt33_snap_check["status"] != "PASS":
+                _log_event(
+                    state,
+                    f"request-accept blocked by codex snapshot field gate: "
+                    f"{_mt33_snap_check.get('failure_code')}",
+                )
+                _save(state)
+                _die(
+                    f"[BLOCKED] failure_code={_mt33_snap_check.get('failure_code')}\n"
+                    f"  {_mt33_snap_check.get('message')}"
+                )
 
         # ── 단계 3: publish_acceptance_request — Codex APPROVED 이후에만 publish. ──
         # 이 시점에 acceptance_request.json(nonce 포함), packet md/json, PR body, pending comment를
