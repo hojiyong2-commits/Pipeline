@@ -284,6 +284,10 @@ def bootstrap_pipeline_legacy(tmp_path: Path, env: Dict[str, str]) -> str:
     # AC 검사 우회: requirements_tracking.enabled=false
     final_state.setdefault("requirements_tracking", {})
     final_state["requirements_tracking"]["enabled"] = False
+    # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+    final_state.setdefault("external_gates", {})
+    for _g in ("technical", "oracle", "github_ci"):
+        final_state["external_gates"].setdefault(_g, {})["status"] = "PASS"
     with open(state_file, "w", encoding="utf-8") as f:
         json.dump(final_state, f, ensure_ascii=False, indent=2)
     return pid
@@ -418,6 +422,11 @@ def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
 
     # requirements_tracking.enabled=True 설정
     state["requirements_tracking"] = {"enabled": True}
+
+    # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+    state.setdefault("external_gates", {})
+    for _g in ("technical", "oracle", "github_ci"):
+        state["external_gates"].setdefault(_g, {})["status"] = "PASS"
 
     # module_gates.integration.status = PASS 설정 (module integrate 완료 시뮬레이션)
     state.setdefault("module_gates", {})
@@ -672,6 +681,11 @@ def test_tc4_ac_incomplete_no_integrate_cache(tmp_path):
 
     # requirements_tracking 활성화 + ac_completeness 캐시 없음 (integrate 미완료 시뮬레이션)
     state["requirements_tracking"] = {"enabled": True}
+    # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+    # 이 테스트는 그 이후의 AC-incomplete 차단을 검증하므로 상위 게이트를 PASS로 seed한다.
+    state.setdefault("external_gates", {})
+    for _g in ("technical", "oracle", "github_ci"):
+        state["external_gates"].setdefault(_g, {})["status"] = "PASS"
     # ac_completeness 캐시 없음 (키 자체 없음 — module integrate 미실행 상태)
     state.pop("ac_completeness", None)
     # structured_acceptance_criteria에 실제 pending AC 항목 추가
@@ -752,6 +766,12 @@ def test_tc4b_integration_not_pass_with_cache_blocked(tmp_path):
 
     # requirements_tracking 활성화
     state["requirements_tracking"] = {"enabled": True}
+
+    # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+    # 이 테스트는 그 이후의 integration-not-pass 차단을 검증하므로 상위 게이트를 PASS로 seed한다.
+    state.setdefault("external_gates", {})
+    for _g in ("technical", "oracle", "github_ci"):
+        state["external_gates"].setdefault(_g, {})["status"] = "PASS"
 
     # ac_completeness 캐시는 있음 (complete=True) — stale 캐시 시뮬레이션
     state["ac_completeness"] = {

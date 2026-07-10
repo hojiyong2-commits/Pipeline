@@ -141,12 +141,20 @@ class TestVerdict:
     """
 
     def test_approve_to_user_output(self):
-        """APPROVE_TO_USER 입력 시 decision=APPROVE, ACCEPT-pipeline_id 출력, exit 0."""
+        """APPROVE_TO_USER 입력 시 decision=APPROVE, output은 빈 문자열, exit 0.
+
+        IMP-20260703-B985 MT-28(이중 출력 방지): Stop hook의 APPROVE 출력은 이제 빈
+        문자열이다. 승인 요청문은 gates request-accept --machine-readable JSON의
+        approval_request_message로 Pipeline Manager가 1회만 relay하며, hook은 승인 블록을
+        더 이상 출력하지 않는다(사용자 2회 수신 방지).
+        """
         out = cx.process_verdict(
             "APPROVE_TO_USER", "IMP-X", "https://x/pull/1", 0
         )
         assert out["decision"] == "APPROVE"
-        assert "ACCEPT-IMP-X" in out["output"]
+        # MT-28: hook은 승인 블록을 출력하지 않는다 → output 빈 문자열, ACCEPT 코드 미포함.
+        assert out["output"] == ""
+        assert "ACCEPT-IMP-X" not in out["output"]
         assert out["exit_code"] == 0
         # 신규 hook은 PR 댓글 게시/gates accept 자동 실행 키를 두지 않는다 (부재로 안전 보장)
         assert "post_pr_comment" not in out

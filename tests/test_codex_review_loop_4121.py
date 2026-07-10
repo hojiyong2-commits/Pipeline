@@ -447,10 +447,17 @@ def test_approve_output_no_codex_marker():
 # 11. APPROVE 출력에 nonce 미노출 (ACCEPT-pipeline_id 형식만)
 # ---------------------------------------------------------------------------
 def test_approve_output_no_nonce():
-    """APPROVE 출력의 승인 코드는 ACCEPT-{pipeline_id} 형식이며 nonce가 없다."""
+    """APPROVE 출력에는 nonce가 없다.
+
+    IMP-20260703-B985 MT-28(이중 출력 방지): APPROVE 시 hook output은 빈 문자열이므로
+    승인 블록(ACCEPT 코드 포함)을 사용자에게 출력하지 않는다. 승인 요청문은 gates
+    request-accept --machine-readable JSON으로 Pipeline Manager가 1회만 relay한다.
+    핵심 안전 불변식(nonce 미노출)은 빈 출력에서도 그대로 성립한다.
+    """
     out = cx.process_verdict("APPROVE_TO_USER", _PIPELINE_ID, _PR_URL, reject_count=0)
-    assert f"ACCEPT-{_PIPELINE_ID}" in out["output"]
-    # nonce 형식(ACCEPT-<pid>-<8자 base32>)이 노출되면 안 됨
+    # MT-28: APPROVE output은 빈 문자열 (hook은 승인 블록을 출력하지 않는다).
+    assert out["output"] == ""
+    # nonce 형식(ACCEPT-<pid>-<8자 base32>)이 노출되면 안 됨 (빈 출력에서도 성립).
     assert re.search(rf"ACCEPT-{re.escape(_PIPELINE_ID)}-[A-Z2-7]{{8}}", out["output"]) is None
 
 

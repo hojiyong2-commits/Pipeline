@@ -112,3 +112,15 @@ acceptance_request.json
 
 # IMP-20260601-0DF5 oracle 파일 — 해당 파이프라인 전용, 이 브랜치 PR diff에서 제외
 tests/oracles/IMP-20260601-0DF5/
+
+# IMP-20260703-B985 MT-31: scratch 경로는 로컬 임시 산출물 — git 추적 제외
+.pipeline/runs/*/scratch/
+
+# Pipeline runtime artifacts (root-level) — MT-32
+dev_handover*.xml
+qa_report*.xml
+build_report*.xml
+integration_report*.xml
+architect_rca*.xml
+architect_report*.xml
+security_audit*.xml

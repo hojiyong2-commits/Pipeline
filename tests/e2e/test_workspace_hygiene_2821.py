@@ -128,7 +128,15 @@ def bootstrap_state(env: Dict[str, str], pid: str) -> None:
         "description": "workspace hygiene e2e 2821",
         "current_phase": "harness",
         "phases": {},
-        "external_gates": {"enabled": True},
+        # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행
+        # 요구한다. 이 테스트는 그 이후의 workspace hygiene 차단을 검증하므로 상위 게이트를
+        # PASS로 seed한다.
+        "external_gates": {
+            "enabled": True,
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
         "event_log": [],
         "requirements_tracking": {"enabled": False},
     }

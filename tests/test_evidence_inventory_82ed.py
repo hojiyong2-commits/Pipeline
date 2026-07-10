@@ -1761,6 +1761,17 @@ class TestRequestAcceptCLISubprocessBlocked:
             )
             assert final_state.get("pipeline_id") == pid
 
+            # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행
+            # 요구한다. 이 테스트는 그 이후의 inventory-mismatch 차단을 검증하므로, contract
+            # init/add-oracle 이후(state가 최종 확정된 시점)에 상위 게이트를 PASS로 seed하여
+            # 흐름이 inventory 검사까지 도달하게 한다.
+            final_state.setdefault("external_gates", {})
+            for _g in ("technical", "oracle", "github_ci"):
+                final_state["external_gates"].setdefault(_g, {})["status"] = "PASS"
+            Path(env["PIPELINE_STATE_PATH"]).write_text(
+                json.dumps(final_state, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
             # subprocess CLI: oracle_manifest/inventory mismatch → non-zero + failure_code 포함
             result = run_pipeline(
                 ["gates", "request-accept", "--evidence", str(evidence_file)],

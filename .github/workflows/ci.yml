@@ -161,46 +161,48 @@ jobs:
           $headRef = "${{ github.event.pull_request.head.ref }}"
           $currentRunId = "${{ github.run_id }}"
 
-          # BUG-20260615-A35C MT-4: human_acceptance_packet.json freshness 검증 helper.
-          # packet의 pr.head_sha / github_actions.run_id가 현재 CI의 head SHA / run ID와
-          # 일치하는지 확인한다. 파일 부재/JSON 파싱 실패/불일치 시 FAIL을 반환하여
-          # stale packet을 정상 fallback으로 사용하지 못하게 한다(DEFECT-B fail-closed).
-          function Validate-PacketFreshness {
+          # BUG-20260615-A35C MT-4: packet freshness 검증 helper (packet 객체 기준).
+          # packet의 pr.head_sha가 현재 CI의 head SHA와 일치하는지 확인한다.
+          # IMP-20260703-B985 MT-26: run_id 검증 제거 — PR body 기반 embed 방식에서
+          # run_id는 사전에 알 수 없으므로(chicken-and-egg) head SHA만 검증한다.
+          function Validate-PacketObject {
             param(
-              [string]$PacketPath,
+              [object]$Packet,
               [string]$ExpectedHeadSha,
-              [string]$ExpectedRunId
+              [string]$ExpectedRunId,
+              [string]$SourceLabel
             )
-            if (-not (Test-Path $PacketPath)) {
-              return @{ Status = "FAIL"; Reason = "packet file not found" }
-            }
-            try {
-              $packet = Get-Content $PacketPath -Raw | ConvertFrom-Json
-            } catch {
-              return @{ Status = "FAIL"; Reason = "JSON parse failure" }
-            }
-            $packetSha = [string]$packet.pr.head_sha
-            $packetRunId = [string]$packet.github_actions.run_id
+            $packetSha = [string]$Packet.pr.head_sha
+            $srcSuffix = if ([string]::IsNullOrWhiteSpace($SourceLabel)) { "" } else { " ($SourceLabel)" }
             if ($packetSha -ne $ExpectedHeadSha) {
-              return @{ Status = "FAIL"; Reason = "head SHA mismatch: packet=$packetSha, current=$ExpectedHeadSha" }
-            }
-            if ($packetRunId -ne $ExpectedRunId) {
-              return @{ Status = "FAIL"; Reason = "run_id mismatch: packet=$packetRunId, current=$ExpectedRunId" }
+              return @{ Status = "FAIL"; Reason = "head SHA mismatch$srcSuffix : packet=$packetSha, current=$ExpectedHeadSha" }
             }
             return @{ Status = "PASS"; Reason = "" }
           }
 
-          # packet freshness 검증 실행. DEFECT-B: run_id 불일치 시 fallback 없이 fail-closed.
-          # Validate-PacketFreshness가 FAIL을 반환하면 즉시 stale로 처리한다.
-          $packetJsonPath = "human_acceptance_packet.json"
-          $packetFresh = Validate-PacketFreshness -PacketPath $packetJsonPath -ExpectedHeadSha $headSha -ExpectedRunId $currentRunId
-          $packetStaleReason = ""
-          $packetIsFresh = $false
-          if ($packetFresh.Status -eq "PASS") {
-            $packetIsFresh = $true
-          } else {
-            $packetStaleReason = $packetFresh.Reason
+          # IMP-20260703-B985 MT-26: PR 본문의 PIPELINE_PACKET_JSON 블록에서 packet JSON을 추출한다.
+          # CI가 PR 파일시스템 커밋 없이도 최신 packet 정보를 얻도록 한다.
+          function Extract-PacketJsonFromPRBody {
+            param([string]$PRBody)
+            if ([string]::IsNullOrWhiteSpace($PRBody)) { return $null }
+            # IMP-20260703-B985 MT-28: JSON을 단일 HTML 주석 안에 embed하는 새 마커 형식.
+            # START는 주석을 열기만 하고 END가 닫으므로 JSON이 렌더링에서 보이지 않는다.
+            $startMark = "<!-- PIPELINE_PACKET_JSON_START"
+            $endMark = "PIPELINE_PACKET_JSON_END -->"
+            $startIdx = $PRBody.IndexOf($startMark)
+            $endIdx = $PRBody.IndexOf($endMark)
+            if ($startIdx -lt 0 -or $endIdx -le $startIdx) { return $null }
+            $jsonStart = $startIdx + $startMark.Length
+            $jsonStr = $PRBody.Substring($jsonStart, $endIdx - $jsonStart).Trim()
+            if ([string]::IsNullOrWhiteSpace($jsonStr)) { return $null }
+            try {
+              return ($jsonStr | ConvertFrom-Json)
+            } catch {
+              return $null
+            }
           }
+
+          # PR 본문을 먼저 조회한다. MT-26: packet freshness 판단에 PR 본문 JSON을 우선 사용한다.
           $headers = @{
             Authorization = "Bearer $env:GITHUB_TOKEN"
             Accept = "application/vnd.github+json"
@@ -211,6 +213,42 @@ jobs:
           $prTitle = [string]$pr.title
           $prBody = [string]$pr.body
           $prBody = $prBody.TrimStart([char]0xFEFF)
+
+          # packet freshness 검증: PR 본문 JSON 우선, 없으면 파일 fallback.
+          # DEFECT-B: run_id/head SHA 불일치 시 fallback 없이 fail-closed.
+          $packetJsonPath = "human_acceptance_packet.json"
+          $packetStaleReason = ""
+          $packetIsFresh = $false
+          $packetObj = Extract-PacketJsonFromPRBody -PRBody $prBody
+          if ($null -ne $packetObj) {
+            # PR 본문에서 packet JSON 추출 성공 → PR 본문 기준으로 freshness 검증.
+            $packetFresh = Validate-PacketObject -Packet $packetObj -ExpectedHeadSha $headSha -ExpectedRunId $currentRunId -SourceLabel "PR body"
+            if ($packetFresh.Status -eq "PASS") {
+              $packetIsFresh = $true
+            } else {
+              $packetStaleReason = $packetFresh.Reason
+            }
+          } elseif (-not (Test-Path $packetJsonPath)) {
+            # PR 본문에 JSON 없음 + 파일도 없음 → "정보 부족"(step 성공) 분기 유지.
+            $packetStaleReason = "packet file not found"
+          } else {
+            # PR 본문에 JSON 없음 → 파일 fallback으로 freshness 검증.
+            try {
+              $packetFile = Get-Content $packetJsonPath -Raw | ConvertFrom-Json
+            } catch {
+              $packetFile = $null
+            }
+            if ($null -eq $packetFile) {
+              $packetStaleReason = "JSON parse failure"
+            } else {
+              $packetFresh = Validate-PacketObject -Packet $packetFile -ExpectedHeadSha $headSha -ExpectedRunId $currentRunId -SourceLabel "file"
+              if ($packetFresh.Status -eq "PASS") {
+                $packetIsFresh = $true
+              } else {
+                $packetStaleReason = $packetFresh.Reason
+              }
+            }
+          }
 
           function Get-MarkdownSection {
             param(

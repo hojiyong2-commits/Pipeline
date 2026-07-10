@@ -1,0 +1,87 @@
+name: Pipeline Final Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to check'
+        required: true
+        type: string
+
+jobs:
+  final-check:
+    name: 판단 가능 여부 최종 검증
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: 최종 확인 안내 댓글 생성
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        shell: pwsh
+        run: |
+          $prData = gh api "repos/${{ github.repository }}/pulls/$env:PR_NUMBER" | ConvertFrom-Json
+          $prBody = $prData.body
+          $headSha = $prData.head.sha
+          $branchRef = $prData.head.ref
+
+          $runs = gh api "repos/${{ github.repository }}/actions/runs?branch=$branchRef&per_page=10" | ConvertFrom-Json
+          $latestCIRun = $runs.workflow_runs | Where-Object { $_.name -eq "Pipeline CI" -and $_.status -eq "completed" } | Select-Object -First 1
+          $currentRunId = if ($latestCIRun) { [string]$latestCIRun.id } else { "" }
+
+          function Extract-PacketJson {
+            param([string]$Body)
+            # IMP-20260703-B985 MT-28: JSON을 단일 HTML 주석 안에 embed하는 새 마커 형식.
+            # START는 주석을 열기만 하고 END가 닫으므로 JSON이 렌더링에서 보이지 않는다.
+            $s = "<!-- PIPELINE_PACKET_JSON_START"
+            $e = "PIPELINE_PACKET_JSON_END -->"
+            $si = $Body.IndexOf($s)
+            $ei = $Body.IndexOf($e)
+            if ($si -ge 0 -and $ei -gt $si) {
+              $json = $Body.Substring($si + $s.Length, $ei - $si - $s.Length).Trim()
+              try { return $json | ConvertFrom-Json } catch { return $null }
+            }
+            return $null
+          }
+
+          $packet = Extract-PacketJson -Body $prBody
+          $isFresh = $false
+          $staleReason = ""
+
+          if ($null -ne $packet) {
+            $pSha = [string]$packet.pr.head_sha
+            $pRun = [string]$packet.github_actions.run_id
+            if ($pSha -ne $headSha) {
+              $staleReason = "head SHA 불일치: packet=$pSha, current=$headSha"
+            } elseif ($currentRunId -and $pRun -ne $currentRunId) {
+              $staleReason = "run_id 불일치: packet=$pRun, current=$currentRunId"
+            } else {
+              $isFresh = $true
+            }
+          } else {
+            $staleReason = "PR body에 packet JSON 없음 (stale packet - packet JSON not in PR body)"
+          }
+
+          $existing = gh api "repos/${{ github.repository }}/issues/$env:PR_NUMBER/comments" | ConvertFrom-Json |
+            Where-Object { $_.body -like "*pipeline-final-check-packet*" } |
+            Select-Object -First 1
+
+          if ($isFresh) {
+            $body = "<!-- pipeline-final-check-packet -->`n### 판단 정보 상태: **판단 가능**`n`n| 항목 | 값 |`n|------|-----|`n| HEAD SHA | ``$headSha`` |`n| CI Run | $currentRunId |`n`n사용자가 PR 본문을 확인하고 승인 코드를 입력하면 됩니다."
+          } else {
+            $body = "<!-- pipeline-final-check-packet -->`n### 판단 정보 상태: **정보 부족**`n`n사유: $staleReason`n`n해결: ``python pipeline.py report final-packet`` 후 ``python pipeline.py report update-pr-body`` 재실행"
+          }
+
+          if ($existing) {
+            gh api --method PATCH "repos/${{ github.repository }}/issues/comments/$($existing.id)" -f body="$body" | Out-Null
+          } else {
+            gh api --method POST "repos/${{ github.repository }}/issues/$env:PR_NUMBER/comments" -f body="$body" | Out-Null
+          }
+
+          if (-not $isFresh) {
+            Write-Error "final-check FAIL: $staleReason"
+            exit 1
+          }
+          Write-Output "final-check PASS: HEAD=$headSha"
