@@ -15664,11 +15664,37 @@ def _build_verification_json(
         "base_branch": str(evidence.get("base_branch", "") or "main"),
         "head_branch": str(evidence.get("head_branch", "") or ""),
     }
+    # IMP-20260703-B985 MT-35: github_actions.head_sha는 현재 PR head와 일치하는 CI run의 head SHA만
+    # 사용한다. _cmd_report_final_packet이 gh run list로 현재 head 기준 run을 조회하여 evidence에
+    # ci_run_head_resolution을 주입한다. 키가 없으면(단위 테스트/레거시 호출) 기존 동작
+    # (head_sha=pr_head_sha)을 유지하여 하위 호환한다(REJECT #28 구 head run 기록 방지).
+    _ci_head_resolution = evidence.get("ci_run_head_resolution")
+    if isinstance(_ci_head_resolution, dict):
+        _resolved_matched = str(_ci_head_resolution.get("matched", "") or "")
+    else:
+        _resolved_matched = ""
+    if _resolved_matched == "true":
+        _ga_head_sha = pr_head_sha
+        _ga_status = str(
+            _ci_head_resolution.get("status", "")  # type: ignore[union-attr]
+            or evidence.get("ci_status", "") or ""
+        )
+        _ga_run_id = str(_ci_head_resolution.get("run_id", "") or "") or ci_run_id  # type: ignore[union-attr]
+    elif _resolved_matched == "false":
+        # 현재 head 기준 완료 CI run 없음 → 구 head run을 현재 head PASS로 기록하지 않는다.
+        _ga_head_sha = ""
+        _ga_status = "PENDING (현재 head 기준 CI 대기 중)"
+        _ga_run_id = ""
+    else:
+        # unknown(gh 미조회) 또는 evidence에 resolution 없음 → 기존 동작 유지.
+        _ga_head_sha = pr_head_sha
+        _ga_status = str(evidence.get("ci_status", "") or "")
+        _ga_run_id = ci_run_id
     github_actions_obj: Dict[str, Any] = {
-        "run_id": ci_run_id,
-        "run_url": actions_url,
-        "status": str(evidence.get("ci_status", "") or ""),
-        "head_sha": pr_head_sha,  # CI는 PR head SHA 기준
+        "run_id": _ga_run_id,
+        "run_url": (actions_url if _ga_run_id else ""),
+        "status": _ga_status,
+        "head_sha": _ga_head_sha,  # 현재 PR head와 일치하는 run의 head SHA만 (불일치/대기 시 빈 문자열)
     }
     changed_files_count = len(changed_files)
 
@@ -16213,6 +16239,13 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
 
     # IMP-20260614-2821 MT-4: workspace_hygiene를 packet evidence에 전달(SSoT는 state).
     evidence["workspace_hygiene"] = state.get("workspace_hygiene") or {}
+
+    # IMP-20260703-B985 MT-35: 현재 PR head 기준 CI run을 조회하여 evidence에 주입한다.
+    # _build_verification_json이 이 값을 사용해 github_actions.head_sha를 truthful하게 기록한다
+    # (구 head run을 현재 head PASS로 기록하는 REJECT #28 재발 방지).
+    evidence["ci_run_head_resolution"] = _resolve_ci_run_head_for_verification(
+        str(evidence.get("pr_head_sha", "") or "")
+    )
 
     content = _build_final_packet_content(evidence)
     out_path = _write_human_acceptance_packet(content)
@@ -18617,6 +18650,93 @@ def _get_pr_branch_ci_run_id(branch: Optional[str] = None) -> Optional[str]:
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
     return None
+
+
+# [Purpose]: IMP-20260703-B985 MT-35 — 현재 PR head SHA와 headSha가 일치하는 GitHub Actions CI run을
+#            선택한다. 구 head의 run을 현재 head PASS로 기록하는 REJECT #28 재발을 차단하기 위한 SSoT.
+# [Assumptions]: gh CLI(또는 PIPELINE_GH_EXECUTABLE stub)가 `gh run list --branch <br> --json
+#            databaseId,headSha,status,conclusion`을 JSON 배열로 반환한다.
+# [Vulnerability & Risks]: gh 부재/조회 실패/JSON 파싱 실패는 모두 matched="unknown"으로 graceful
+#            degradation하여 호출자가 기존 동작(head_sha=pr_head_sha)을 유지하게 한다(단위 테스트 하위
+#            호환). run 목록은 있으나 현재 head 일치 완료 run이 없으면 matched="false"(stale 차단).
+# [Improvement]: 여러 워크플로 run 중 특정 워크플로 이름만 필터링하면 CI run 선택 정밀도를 높일 수 있다.
+def _resolve_ci_run_head_for_verification(pr_head_sha: str) -> Dict[str, str]:
+    """현재 PR head SHA 기준으로 CI run을 선택한다 (MT-35).
+
+    Args:
+        pr_head_sha: 현재 PR head SHA (gh 조회값).
+    Returns:
+        {"matched": "true"|"false"|"unknown", "run_id": str, "status": str}
+        - "unknown": gh 미설치/조회 실패 (호출자는 기존 pr_head_sha 유지)
+        - "true": 현재 head 일치 completed success run 발견
+        - "false": run 목록은 있으나 현재 head 일치 완료 run 없음 (stale)
+    Raises:
+        TypeError: pr_head_sha가 None이거나 str이 아닌 경우.
+    """
+    if pr_head_sha is None:
+        raise TypeError("pr_head_sha must not be None")
+    if not isinstance(pr_head_sha, str):
+        raise TypeError(f"pr_head_sha must be str, got {type(pr_head_sha).__name__}")
+
+    _unknown = {"matched": "unknown", "run_id": "", "status": ""}
+    if not pr_head_sha:
+        return _unknown
+    if not _gh_available():
+        return _unknown
+
+    # 현재 git 브랜치 자동 조회
+    git_path = shutil.which("git") or "git"
+    branch = ""
+    try:
+        br_res = subprocess.run(
+            [git_path, "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+            encoding="utf-8", errors="replace",
+        )
+        if br_res.returncode == 0:
+            branch = br_res.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return _unknown
+    if not branch or branch == "HEAD":
+        return _unknown
+
+    try:
+        r = subprocess.run(
+            _build_gh_cmd_prefix() + [
+                "run", "list", "--branch", branch, "--limit", "10",
+                "--json", "databaseId,headSha,status,conclusion",
+            ],
+            capture_output=True, text=True, timeout=15,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode != 0:
+            return _unknown
+        out = (r.stdout or "").strip()
+        if not out:
+            return _unknown
+        runs = json.loads(out)
+        if not isinstance(runs, list) or len(runs) == 0:
+            return _unknown
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError, json.JSONDecodeError, ValueError):
+        return _unknown
+
+    _head7 = pr_head_sha[:7]
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        _run_head = str(run.get("headSha", "") or "")
+        if _run_head[:7] != _head7:
+            continue
+        _status = str(run.get("status", "") or "")
+        _conclusion = str(run.get("conclusion", "") or "")
+        if _status == "completed" and _conclusion == "success":
+            return {
+                "matched": "true",
+                "run_id": str(run.get("databaseId", "") or ""),
+                "status": _status,
+            }
+    # run 목록은 있으나 현재 head 기준 완료 success run 없음 → stale.
+    return {"matched": "false", "run_id": "", "status": ""}
 
 
 def _get_latest_ci_run_id() -> Optional[str]:
@@ -21356,6 +21476,177 @@ def _check_codex_snapshot_fields(
     return {"status": "PASS"}
 
 
+# IMP-20260703-B985 MT-35: codex_review_result의 top-level 필드와 중첩 snapshot_identity가
+#   가리키는 검토 대상이 동일한지(3자 identity 일치) 검증하는 cross-check 필드 목록(SSoT).
+CODEX_SNAPSHOT_CROSS_CHECK_FIELDS = [
+    "pr_body_candidate_sha256",
+    "pr_head_sha",
+    "packet_sha256",
+    "github_canonical_pr_body_sha256",
+    "approval_message_sha256",
+    "pending_comment_sha256",
+    "snapshot_id",
+]
+
+# IMP-20260703-B985 MT-35: snapshot_identity 안에 반드시 존재해야 하는 필수 필드(비어 있으면 BLOCKED).
+#   REJECT #28: snapshot_id/github_canonical/approval/pending 필드가 nested에 누락되어
+#   top-level만 최신화되고 snapshot_identity가 stale로 남던 사고를 차단한다.
+CODEX_SNAPSHOT_IDENTITY_REQUIRED = [
+    "snapshot_id",
+    "github_canonical_pr_body_sha256",
+    "approval_message_sha256",
+    "pending_comment_sha256",
+]
+
+
+# [Purpose]: IMP-20260703-B985 MT-35 — codex_review_result의 top-level 필드와 중첩 snapshot_identity가
+#            동일 검토 대상을 가리키는지(3자 identity 일치) 검증한다. REJECT #28의 근본 원인
+#            (top-level만 갱신되고 snapshot_identity가 stale) 재발을 fail-closed로 차단한다.
+# [Assumptions]: codex_result는 codex_review_result.json에서 로드한 dict다. snapshot_identity는
+#            _cmd_gates_codex_review --approve-pending이 top-level과 동일 값으로 기록한다.
+# [Vulnerability & Risks]: codex_result가 None/비dict이면 TypeError. snapshot_identity 부재/필드
+#            누락/top-vs-nested 불일치는 모두 BLOCKED(fail-closed)로 판정한다. 한쪽 값이 비어
+#            있으면(초기화 전) 비교하지 않아 첫 publish 순환을 막지 않는다.
+# [Improvement]: cross-check 필드에 타임스탬프/서명을 추가하면 위변조 검출 강도를 높일 수 있다.
+def _check_codex_identity_consistency(codex_result: Dict[str, Any]) -> Dict[str, Any]:
+    """codex_review_result의 top-level ↔ snapshot_identity 3자 일치를 검증한다 (MT-35).
+
+    Args:
+        codex_result: codex_review_result.json 내용 dict.
+    Returns:
+        {"status": "PASS"} 또는
+        {"status": "BLOCKED", "failure_code": ..., "message": ...}
+    Raises:
+        TypeError: codex_result가 None이거나 dict가 아닌 경우.
+    """
+    if codex_result is None:
+        raise TypeError("codex_result must not be None")
+    if not isinstance(codex_result, dict):
+        raise TypeError(
+            f"codex_result must be dict, got {type(codex_result).__name__}"
+        )
+
+    identity = codex_result.get("snapshot_identity", {})
+    if not isinstance(identity, dict):
+        identity = {}
+
+    # 1. snapshot_identity 존재 확인
+    if not identity:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_snapshot_identity_missing",
+            "message": (
+                "codex_review_result.snapshot_identity가 없습니다. "
+                "gates codex-review --approve-pending을 다시 실행하세요."
+            ),
+        }
+
+    # 2. 필수 필드 존재 + 비어있지 않은지 확인
+    for field in CODEX_SNAPSHOT_IDENTITY_REQUIRED:
+        if not identity.get(field):
+            return {
+                "status": "BLOCKED",
+                "failure_code": f"codex_identity_{field}_missing",
+                "message": (
+                    f"snapshot_identity.{field}가 없거나 비어 있습니다. "
+                    "gates codex-review --approve-pending을 다시 실행하세요."
+                ),
+            }
+
+    # 3. top-level vs snapshot_identity 일치 검사 (양쪽 모두 비어있지 않은 경우에만)
+    for field in CODEX_SNAPSHOT_CROSS_CHECK_FIELDS:
+        top_val = str(codex_result.get(field, "") or "")
+        id_val = str(identity.get(field, "") or "")
+        if top_val and id_val and top_val != id_val:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "codex_identity_field_mismatch",
+                "message": (
+                    f"codex_review_result.{field}({top_val[:12]}) != "
+                    f"snapshot_identity.{field}({id_val[:12]}). "
+                    "gates codex-review --approve-pending을 다시 실행하세요."
+                ),
+            }
+
+    return {"status": "PASS"}
+
+
+# [Purpose]: IMP-20260703-B985 MT-35 — final packet(human_acceptance_packet.json)에 기록된 CI head
+#            SHA가 현재 PR head SHA와 일치하는지(구 head run이 아닌 현재 head 기준 CI 결과인지) 검증한다.
+#            REJECT #28: report final-packet이 최신 PR head가 아닌 구 커밋 CI run을 참조하던 사고를 차단.
+# [Assumptions]: final_packet_data는 _load_verification_json() 반환 dict다. github_actions.head_sha가
+#            현재 PR head 기준 CI run의 head SHA다(_build_verification_json이 truthful하게 기록).
+# [Vulnerability & Risks]: final_packet_data가 None/비dict이면 TypeError. ci_head/current head 부재는
+#            BLOCKED(fail-closed). 7자 prefix 비교로 short/full SHA 혼용을 허용한다.
+# [Improvement]: run conclusion(success/failure)까지 함께 검증하면 실패 CI run 승인 차단이 가능하다.
+def _check_ci_head_sha_current(
+    final_packet_data: Dict[str, Any], current_pr_head_sha: str
+) -> Dict[str, Any]:
+    """final packet의 CI head SHA가 현재 PR head와 일치하는지 검증한다 (MT-35).
+
+    Args:
+        final_packet_data: human_acceptance_packet.json 내용 dict.
+        current_pr_head_sha: 현재 PR head SHA (gh CLI 조회값).
+    Returns:
+        {"status": "PASS"} 또는
+        {"status": "BLOCKED", "failure_code": ..., "message": ...}
+    Raises:
+        TypeError: final_packet_data가 None/비dict이거나 current_pr_head_sha가 None/비str인 경우.
+    """
+    if final_packet_data is None:
+        raise TypeError("final_packet_data must not be None")
+    if not isinstance(final_packet_data, dict):
+        raise TypeError(
+            f"final_packet_data must be dict, got {type(final_packet_data).__name__}"
+        )
+    if current_pr_head_sha is None:
+        raise TypeError("current_pr_head_sha must not be None")
+    if not isinstance(current_pr_head_sha, str):
+        raise TypeError(
+            f"current_pr_head_sha must be str, got {type(current_pr_head_sha).__name__}"
+        )
+
+    # human_acceptance_packet.json의 github_actions.head_sha 확인
+    ci_head = ""
+    _ga = final_packet_data.get("github_actions")
+    if isinstance(_ga, dict):
+        ci_head = str(_ga.get("head_sha", "") or "")
+    if not ci_head:
+        ci_head = str(final_packet_data.get("ci_head_sha", "") or "")
+
+    if not ci_head:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "ci_head_sha_missing",
+            "message": (
+                "final packet의 ci_head_sha가 없습니다. "
+                "report final-packet을 재실행하세요."
+            ),
+        }
+
+    if not current_pr_head_sha:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_head_sha_unavailable",
+            "message": "현재 PR head SHA를 조회할 수 없습니다.",
+        }
+
+    # 7자 prefix 비교 (short/full SHA 혼용 허용)
+    if ci_head[:7] != current_pr_head_sha[:7]:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "ci_head_sha_stale",
+            "message": (
+                f"final packet ci_head_sha({ci_head[:12]})가 "
+                f"current PR head({current_pr_head_sha[:12]})와 다릅니다. "
+                "현재 head 기준 GitHub CI run이 완료된 후 "
+                "report final-packet을 재실행하세요."
+            ),
+        }
+
+    return {"status": "PASS"}
+
+
 def _check_codex_pr_body_sha_invariant(
     codex_result: Dict[str, Any], staged_candidate_sha: str
 ) -> Dict[str, Any]:
@@ -22002,6 +22293,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
     # github_canonical_pr_body_sha256 필드는 acceptance_request에서 가져온다 (fail-closed).
+    # IMP-20260703-B985 MT-35: snapshot_identity를 단일 SSoT로 삼는다. 4개 추가 필드
+    #   (snapshot_id/github_canonical/approval/pending)를 snapshot_identity에 먼저 기록하고,
+    #   top-level 필드는 snapshot_identity에서만 복사한다. 이로써 top-level ↔ snapshot_identity
+    #   drift(REJECT #28 issue 2/3)를 원천 차단한다.
     if bool(getattr(args, "approve_pending", False)):
         _mt33_req = _load_acceptance_request()
         if isinstance(_mt33_req, dict) and str(_mt33_req.get("pipeline_id", "") or "") == pipeline_id:
@@ -22013,10 +22308,31 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     "  먼저 'gates request-accept --evidence <경로>'를 실행하여 canonical SHA를 기록하세요.\n"
                     "  그 다음 'gates codex-review --approve-pending'을 재실행하세요."
                 )
-            result["snapshot_id"] = str(_mt33_req.get("snapshot_id", "") or "")
-            result["github_canonical_pr_body_sha256"] = _mt33_canonical_sha
-            result["approval_message_sha256"] = str(_mt33_req.get("approval_message_sha256", "") or "")
-            result["pending_comment_sha256"] = str(_mt33_req.get("pending_comment_sha256", "") or "")
+            # (1) snapshot_identity(SSoT)에 4개 추가 필드를 먼저 기록한다.
+            snapshot_identity["snapshot_id"] = str(_mt33_req.get("snapshot_id", "") or "")
+            snapshot_identity["github_canonical_pr_body_sha256"] = _mt33_canonical_sha
+            snapshot_identity["approval_message_sha256"] = str(_mt33_req.get("approval_message_sha256", "") or "")
+            snapshot_identity["pending_comment_sha256"] = str(_mt33_req.get("pending_comment_sha256", "") or "")
+            # (2) 필수 필드 검증 — snapshot_identity의 4개 required가 비어 있으면 fail-closed BLOCKED.
+            for _mt35_req_field in CODEX_SNAPSHOT_IDENTITY_REQUIRED:
+                if not snapshot_identity.get(_mt35_req_field):
+                    _die(
+                        f"[BLOCKED] failure_code=codex_snapshot_{_mt35_req_field}_missing\n"
+                        f"  snapshot_identity.{_mt35_req_field} 계산 실패 — 비어 있습니다.\n"
+                        "  먼저 'gates request-accept --evidence <경로>'를 실행한 뒤\n"
+                        "  'gates codex-review --approve-pending'을 재실행하세요."
+                    )
+            # (3) top-level 필드는 snapshot_identity(SSoT)에서만 복사한다 (7개 cross-check 필드 동기화).
+            result["snapshot_id"] = snapshot_identity["snapshot_id"]
+            result["github_canonical_pr_body_sha256"] = snapshot_identity["github_canonical_pr_body_sha256"]
+            result["approval_message_sha256"] = snapshot_identity["approval_message_sha256"]
+            result["pending_comment_sha256"] = snapshot_identity["pending_comment_sha256"]
+            result["pr_head_sha"] = snapshot_identity["pr_head_sha"]
+            result["packet_sha256"] = snapshot_identity["packet_sha256"]
+            result["pr_body_candidate_sha256"] = snapshot_identity["pr_body_candidate_sha256"]
+            result["pr_body_sha256"] = snapshot_identity["pr_body_candidate_sha256"]  # backward compat (= candidate)
+            # snapshot_identity dict 참조를 result에 재확정한다(4개 필드 반영).
+            result["snapshot_identity"] = dict(snapshot_identity)
         else:
             # acceptance_request가 없으면 fail-closed: --approve-pending은 PENDING request 필요
             _die(
@@ -23871,16 +24187,31 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                     and str(_cx_sid.get("pipeline_id", "") or "") == pipeline_id
                 ):
                     _cx_dirty = False
+                    # IMP-20260703-B985 MT-35: top-level과 중첩 snapshot_identity를 동시에 동기화하여
+                    # _check_codex_identity_consistency가 요구하는 3자 identity 일치를 유지한다.
+                    _cx_sid_identity = _cx_sid.get("snapshot_identity")
+                    if not isinstance(_cx_sid_identity, dict):
+                        _cx_sid_identity = {}
                     if str(_cx_sid.get("snapshot_id", "") or "") != _snapshot_id:
                         _cx_sid["snapshot_id"] = _snapshot_id
+                        _cx_dirty = True
+                    if str(_cx_sid_identity.get("snapshot_id", "") or "") != _snapshot_id:
+                        _cx_sid_identity["snapshot_id"] = _snapshot_id
                         _cx_dirty = True
                     if str(_cx_sid.get("approval_message_sha256", "") or "") != _snap_approval_sha:
                         _cx_sid["approval_message_sha256"] = _snap_approval_sha
                         _cx_dirty = True
+                    if str(_cx_sid_identity.get("approval_message_sha256", "") or "") != _snap_approval_sha:
+                        _cx_sid_identity["approval_message_sha256"] = _snap_approval_sha
+                        _cx_dirty = True
                     if str(_cx_sid.get("pending_comment_sha256", "") or "") != _snap_pending_sha:
                         _cx_sid["pending_comment_sha256"] = _snap_pending_sha
                         _cx_dirty = True
+                    if str(_cx_sid_identity.get("pending_comment_sha256", "") or "") != _snap_pending_sha:
+                        _cx_sid_identity["pending_comment_sha256"] = _snap_pending_sha
+                        _cx_dirty = True
                     if _cx_dirty:
+                        _cx_sid["snapshot_identity"] = _cx_sid_identity
                         _cx_sid_path.write_text(
                             json.dumps(_cx_sid, ensure_ascii=False, indent=2),
                             encoding="utf-8",
@@ -24025,6 +24356,43 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                     f"[BLOCKED] failure_code={_mt33_snap_check.get('failure_code')}\n"
                     f"  {_mt33_snap_check.get('message')}"
                 )
+
+            # IMP-20260703-B985 MT-35: (1) codex_review_result top-level ↔ snapshot_identity
+            # 3자 identity 일치 hard gate. REJECT #28 issue 2/3 — nested가 stale이거나 필드가
+            # 누락되면 fail-closed BLOCKED.
+            _mt35_identity_check = _check_codex_identity_consistency(_mt33_codex_result_raw)
+            if _mt35_identity_check["status"] != "PASS":
+                _log_event(
+                    state,
+                    f"request-accept blocked by codex identity consistency gate: "
+                    f"{_mt35_identity_check.get('failure_code')}",
+                )
+                _save(state)
+                _die(
+                    f"[BLOCKED] failure_code={_mt35_identity_check.get('failure_code')}\n"
+                    f"  {_mt35_identity_check.get('message')}"
+                )
+
+            # IMP-20260703-B985 MT-35: (2) final packet CI head SHA 최신성 hard gate. REJECT #28
+            # issue 1 — packet이 구 head 기준 CI run을 참조하면 BLOCKED. gh 조회가 가능하고 현재
+            # head를 확보한 경우에만 발동한다(gh 없는 테스트/환경은 graceful skip).
+            if _gh_available() and current_head_sha:
+                _mt35_packet_data = _load_verification_json()
+                if isinstance(_mt35_packet_data, dict) and _mt35_packet_data:
+                    _mt35_ci_check = _check_ci_head_sha_current(
+                        _mt35_packet_data, str(current_head_sha or "")
+                    )
+                    if _mt35_ci_check["status"] != "PASS":
+                        _log_event(
+                            state,
+                            f"request-accept blocked by CI head SHA currency gate: "
+                            f"{_mt35_ci_check.get('failure_code')}",
+                        )
+                        _save(state)
+                        _die(
+                            f"[BLOCKED] failure_code={_mt35_ci_check.get('failure_code')}\n"
+                            f"  {_mt35_ci_check.get('message')}"
+                        )
 
         # ── 단계 3: publish_acceptance_request — Codex APPROVED 이후에만 publish. ──
         # 이 시점에 acceptance_request.json(nonce 포함), packet md/json, PR body, pending comment를
