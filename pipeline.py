@@ -7918,25 +7918,13 @@ def _run_codex_preflight_checks(
     }
 
 
-# IMP-20260710-DB54 MT-5: preflight 결과 중 "내용 안전성"에 해당하는 hard-block 실패 코드.
-#   이들은 정상 bundle에는 절대 나타나지 않으며(승인코드/nonce/NOT_CONFIGURED/삭제파일 참조),
-#   나타나면 즉시 Codex CLI 호출을 차단한다. gate 상태/계약 동결/reject_count 검사는 codex-review
-#   명령 흐름에서 hard-block하지 않는다(그 게이트들은 별도 경로에서 이미 강제되며, 하위 호환을
-#   위해 여기서 죽이지 않는다). 전체 10개 검사는 `gates codex-preflight` 진단 명령에서 강제된다.
-_CODEX_PREFLIGHT_HARD_BLOCK_CODES = frozenset({
-    "bundle_contains_raw_accept_code",
-    "bundle_contains_nonce",
-    "no_not_configured_fallback",
-    "bundle_references_deleted_file",
-})
-
-
 # IMP-20260710-DB54 rework MT-3/MT-4: Codex 캐시 유효성 판정에 쓰이는 critical file 집합.
 #   이 파일들이 변경되면 이전 Codex verdict를 그대로 신뢰할 수 없으므로, bundle에 이들의 SHA를
 #   기록하고(critical_file_shas) 캐시 조회 시 재검증한다. 정확 매칭 + prefix 매칭을 함께 지원한다.
 _CODEX_CRITICAL_FILE_EXACT = frozenset({
     "pipeline.py",
     "CLAUDE.md",
+    "AGENTS.md",
     ".gitignore",
     ".gitattributes",
     ".claude/settings.json",
@@ -7944,7 +7932,10 @@ _CODEX_CRITICAL_FILE_EXACT = frozenset({
 _CODEX_CRITICAL_FILE_PREFIXES = (
     ".github/workflows/",
     ".claude/agents/",
+    ".claude/commands/",
+    ".claude/hooks/",
     "tests/oracles/",
+    "tests/e2e/test_codex",
 )
 
 
@@ -8014,6 +8005,7 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         "pr_url": "",
         "pr_head_sha": "",
         "packet_sha256": "",
+        "verification_json_sha256": "",
         "pr_body_candidate_sha256": "",
         "contract_sha256": "",
         "changed_files": [],
@@ -8060,13 +8052,40 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         except Exception:  # noqa: BLE001
             bundle["pr_url"] = ""
 
-        # packet_sha256 (현재 디스크 packet)
+        # packet_sha256: 3자 SHA 불변식 — staging이 있으면 staged SHA를 우선 사용한다.
+        # (codex-review가 staged SHA로 기록하므로, bundle도 동일 SHA를 가져야 3자가 일치한다.)
         try:
-            _pkt = _packet_output_path()
-            if _pkt.exists():
-                bundle["packet_sha256"] = _sha256_file(_pkt)
+            _stg_for_pkt = _load_acceptance_staging(pipeline_id)
+            _staged_pkt_sha = (
+                str(_stg_for_pkt.get("staged_packet_sha256", "") or "")
+                if isinstance(_stg_for_pkt, dict) else ""
+            )
+            if _staged_pkt_sha:
+                bundle["packet_sha256"] = _staged_pkt_sha
+            else:
+                _pkt = _packet_output_path()
+                if _pkt.exists():
+                    bundle["packet_sha256"] = _sha256_file(_pkt)
         except Exception:  # noqa: BLE001
             bundle["packet_sha256"] = ""
+
+        # verification_json_sha256: FROZEN staged JSON SHA만 사용한다(3자 SHA 불변식).
+        # 의도적으로 live human_acceptance_packet.json 파일 SHA로 fallback하지 않는다.
+        #   - verification_json은 _codex_live_sha_snapshot의 live 재검증 차원이며(설계상 bundle SHA에
+        #     포함되지 않는 차원), 이 값을 bundle에 넣으면 cache_key가 mutable live json에 종속되어
+        #     "cache_key 일치 + live SHA 불일치" 안전망(cache_live_sha_mismatch)이 무력화된다.
+        #   - staging이 있으면 request-accept가 동결한 staged_json_sha256을 그대로 실어 3자 불변식을
+        #     만족하고, staging이 없으면 빈 값으로 두어 cache_key 결정성과 live 재검증 경로를 보존한다.
+        try:
+            _stg_for_vj = _load_acceptance_staging(pipeline_id)
+            _staged_vj_sha = (
+                str(_stg_for_vj.get("staged_json_sha256", "") or "")
+                if isinstance(_stg_for_vj, dict) else ""
+            )
+            if _staged_vj_sha:
+                bundle["verification_json_sha256"] = _staged_vj_sha
+        except Exception:  # noqa: BLE001
+            bundle["verification_json_sha256"] = ""
 
         # contract_sha256
         try:
@@ -8143,7 +8162,17 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
                 )
                 if _fr.returncode == 0:
                     for _ln in _fr.stdout.splitlines():
-                        if _ln.startswith("+") and not _ln.startswith("+++"):
+                        if _ln.startswith("@@"):
+                            # @@ 컨텍스트 헤더에서 수정된 기존 함수명 추출
+                            _ctx_m = re.search(
+                                r"@@[^@]*@@\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                                _ln
+                            )
+                            if _ctx_m:
+                                _name = _ctx_m.group(1)
+                                if _name not in _incl:
+                                    _incl.append(_name)
+                        elif _ln.startswith("+") and not _ln.startswith("+++"):
                             _m = re.search(r"^\+\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", _ln)
                             if _m:
                                 _name = _m.group(1)
@@ -23253,8 +23282,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "cache_hit": _cache_hit,
         "cache_key": _cache_key_used,
         "cache_reason": _cache_reason if _cache_hit else str(_cache_probe.get("reason", "") or ""),
-        "verification_json_sha256": _codex_live_sha_snapshot(state, pipeline_id).get(
-            "verification_json_sha256", ""
+        "verification_json_sha256": (
+            str(_acceptance_staging.get("staged_json_sha256", "") or "")
+            if isinstance(_acceptance_staging, dict) and _acceptance_staging.get("staged_json_sha256")
+            else _codex_live_sha_snapshot(state, pipeline_id).get("verification_json_sha256", "")
         ),
         "included_functions": list(_preflight_bundle.get("included_functions", []) or []),
         "excluded_files": list(_preflight_bundle.get("excluded_files", []) or []),

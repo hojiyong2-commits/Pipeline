@@ -317,5 +317,37 @@ def test_tc_j_no_accept_code_or_nonce_in_bundle(tmp_path: Path) -> None:
         assert not any(c.isalpha() for c in m), f"bundle에 nonce 유사 토큰 포함: {m}"  # final_state: verified
 
 
+# ---------------------------------------------------------------------------
+# TC-K: 수정된 기존 함수가 bundle included_functions에 포함된다 (@@ 헤더 파싱)
+# ---------------------------------------------------------------------------
+
+def test_tc_k_modified_function_in_included_functions(tmp_path: Path) -> None:
+    """TC-K: 수정된 기존 함수(_cmd_gates_codex_review 등)가 bundle included_functions에 포함된다.
+
+    @@ diff 컨텍스트 헤더에서 함수명을 추출하므로, 함수 본문만 바뀌어도 잡힌다.
+    이 PR은 _cmd_gates_codex_review / _build_codex_review_bundle 등을 수정했으므로
+    이들이 included_functions에 나타나야 한다. bundle의 git diff는 실제 저장소(BASE_DIR)에서
+    origin/main...HEAD로 실행되므로, PIPELINE_STATE_PATH 격리 하에서도 실제 변경 함수를 관측한다.
+    """
+    state_file = setup_workspace(tmp_path)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation injected
+
+    # gates codex-preflight로 격리 workspace에 bundle 생성.
+    r = run_cli(["gates", "codex-preflight", "--dry-run"], env, tmp_path)
+    assert r.returncode == 0, f"codex-preflight 실패: {_combined(r)}"
+
+    # 격리된 codex_review_bundle.json 읽기 (실제 저장소 diff 기반 included_functions 포함).
+    assert bundle_path(state_file).exists(), "codex_review_bundle.json이 생성되지 않음"
+    bundle_data = json.loads(bundle_path(state_file).read_text(encoding="utf-8"))
+    included = bundle_data.get("included_functions", [])
+
+    # _cmd_gates_codex_review는 이 PR에서 수정된 함수이므로 반드시 included_functions에 있어야 함.
+    # (top-level def이므로 git 기본 hunk-header 휴리스틱이 @@ 헤더에 함수명을 표기한다.)
+    assert "_cmd_gates_codex_review" in included, (
+        f"_cmd_gates_codex_review가 included_functions에 없음. "
+        f"포함된 함수: {included}"
+    )  # final_state: verified
+
+
 if __name__ == "__main__":
     sys.exit(subprocess.call([sys.executable, "-m", "pytest", __file__, "-v"]))
