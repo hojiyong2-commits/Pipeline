@@ -20500,9 +20500,16 @@ def _materialize_acceptance_snapshot(
         verification_json = _build_verification_json(evidence_payload)
         _pre_vj_str = json.dumps(verification_json, ensure_ascii=False, indent=2)
         _pre_json_sha = _pre_hashlib.sha256(_pre_vj_str.encode("utf-8")).hexdigest()
+        # IMP-20260703-B985 MT-34 수정: post-accept 경로(acceptance_request=CONSUMED/ACCEPT)에서는
+        # PENDING override가 아니라 ACCEPTED 표시를 사용해야 step 7 PR 재조회 검증이 통과된다.
+        # request-accept 경로(acceptance_request=PENDING)에서는 기존대로 PENDING 강제.
+        _mat_display = _resolve_acceptance_display_state(acceptance_request)
+        _mat_override = (
+            _mat_display if _mat_display in {"ACCEPTED", "REJECTED"} else "승인 대기 중 (PENDING)"
+        )
         content = _build_final_packet_content(
             evidence_payload,
-            acceptance_status_override="승인 대기 중 (PENDING)",
+            acceptance_status_override=_mat_override,
             verification_json_sha256=_pre_json_sha,  # MT-13: 미리 계산한 SHA 주입
         )
         _vj_write_str = _pre_vj_str  # MT-21: pre-computed string으로 SHA 일관성 보장
