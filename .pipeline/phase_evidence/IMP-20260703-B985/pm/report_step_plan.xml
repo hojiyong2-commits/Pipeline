@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PM Planner Agent Output for IMP-20260703-B985 -->
+<!-- PR body SHA 계산 기준을 canonical SSoT로 통일 -->
+
+<decomposition_audit>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>8</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <boundary_type>function_level</boundary_type>
+  <split_reason>
+    pipeline.py의 PR body SHA 계산 경로를 단일 canonical helper로 통일하는 작업은 8개 micro_task로 분해됩니다:
+    MT-1: _canonical_pr_body_sha256 (신규) — CRLF→LF 정규화 + UTF-8 인코딩 + sha256 반환하는 단일 SSoT helper
+    MT-2: _prepare_acceptance_snapshot_candidate (수정) — 직접 hashlib 호출을 canonical helper로 교체
+    MT-3: _verify_published_canonical_pr_body (수정) — 직접 hashlib 호출을 canonical helper로 교체
+    MT-4: _fetch_canonical_pr_body_sha256 (수정) — inline hashlib 호출을 canonical helper로 교체
+    MT-5: _cmd_gates_request_accept (수정) — _new_pr_body_sha256 직접 hashlib 호출을 canonical helper로 교체
+    MT-6: _cmd_codex_record (수정) — codex record 경로의 SHA 계산을 canonical helper 사용으로 통일
+    MT-7: acceptance_request.json 스키마 확장 — pr_body_candidate_sha256/github_canonical_pr_body_sha256 필드 분리
+    MT-8: tests/test_canonical_pr_body_sha256_b985.py (신규) — TC-1~TC-11 테스트 구현
+  </split_reason>
+  <file_count>2</file_count>
+  <function_count>8</function_count>
+  <line_estimate>280</line_estimate>
+  <mt_coverage>
+    <mt id="MT-1" files="pipeline.py" functions="_canonical_pr_body_sha256" />
+    <mt id="MT-2" files="pipeline.py" functions="_prepare_acceptance_snapshot_candidate" />
+    <mt id="MT-3" files="pipeline.py" functions="_verify_published_canonical_pr_body" />
+    <mt id="MT-4" files="pipeline.py" functions="_fetch_canonical_pr_body_sha256" />
+    <mt id="MT-5" files="pipeline.py" functions="_cmd_gates_request_accept" />
+    <mt id="MT-6" files="pipeline.py" functions="_cmd_codex_record" />
+    <mt id="MT-7" files="pipeline.py" functions="_prepare_acceptance_snapshot_candidate,_publish_acceptance_request" />
+    <mt id="MT-8" files="tests/test_canonical_pr_body_sha256_b985.py" functions="test_tc1_*...test_tc11_*" />
+  </mt_coverage>
+  <grep_validation>
+    <item pattern="hashlib\.sha256.*pr_body.*encode|pr_body.*encode.*sha256" count="3" executed="true" />
+    <item pattern="jq.*\.body|--json body" count="10" executed="true" />
+    <item pattern="pr_body_candidate_sha256|github_canonical_pr_body_sha256" count="25" executed="true" />
+    <item pattern="def _fetch_canonical_pr_body_sha256" count="1" executed="true" />
+  </grep_validation>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <title>PR body SHA 계산 기준을 canonical SSoT로 통일</title>
+  <description>
+    BUG-20260702-E69E Architect 후속 이슈: pr_body_candidate_sha256 계산 방식 불일치 해결.
+    현재 pipeline.py에는 PR body SHA를 여러 경로로 계산하는 코드가 분산되어 있음:
+    - _get_pr_body_text(): --jq .body stdout 사용 (trailing newline 추가 가능)
+    - _fetch_canonical_pr_body_sha256(): JSON parse + CRLF→LF 정규화 (canonical SSoT)
+    - _prepare_acceptance_snapshot_candidate (line 20422): 직접 hashlib 호출
+    - _verify_published_canonical_pr_body (line 20718): 직접 hashlib 호출
+    - _new_pr_body_sha256 (line 20884): 직접 hashlib 호출
+
+    이 때문에 Codex Review, request-accept, gates accept가 서로 다른 SHA를 계산하여
+    pr_body_stale 또는 Codex Review stale 순환이 재발할 수 있음.
+
+    해결책: 단일 canonical helper _canonical_pr_body_sha256(text)를 도입하고
+    모든 PR body SHA 계산 경로가 이 helper를 통과하도록 리팩토링.
+  </description>
+
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py 신뢰 루트 파일 수정, 다수 함수의 SHA 계산 경로 변경, acceptance/codex/gates 간 불변식 영향</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>280</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 이미 A안(단일 canonical helper)을 명시적으로 선택함. P2 내부 구현 질문(변수명, 함수명 등)은 유지보수성 기준으로 정리함.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>PR body SHA 계산을 단일 canonical helper로 통일할까요, 아니면 용도별로 분리된 helper를 유지할까요?</user_facing_question>
+        <evidence>현재 3곳에서 직접 hashlib.sha256(pr_body.encode(...)) 호출 (line 20422, 20718, 20884). 각 호출이 CRLF/LF 정규화, trailing newline 처리를 다르게 하면 SHA 불일치 발생.</evidence>
+        <why_it_matters>Codex/request-accept/gates accept 간 SHA 불일치는 stale 순환을 유발하여 파이프라인 완료 불가능.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>단일 canonical helper _canonical_pr_body_sha256(text) 도입</label>
+            <benefit>모든 SHA 경로가 동일 정규화 규칙 적용, 불일치 원천 차단</benefit>
+            <cost>기존 3곳 직접 호출 모두 리팩토링 필요</cost>
+          </option>
+          <option id="B">
+            <label>용도별 helper 유지 (candidate용, canonical용 분리)</label>
+            <benefit>기존 코드 변경 최소화</benefit>
+            <cost>candidate/canonical SHA 의미가 계속 혼재, stale 순환 재발 가능성 잔존</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 명시적으로 A안 선택함: "단일 canonical helper _canonical_pr_body_sha256 도입"</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="module_split" mt_id="MT-7">
+        <user_facing_question>pr_body_candidate_sha256과 github_canonical_pr_body_sha256을 별도 필드로 분리할까요?</user_facing_question>
+        <evidence>현재 pr_body_sha256 필드가 candidate(로컬 계산)와 canonical(GitHub fetch 후 계산)을 혼용. 의미가 모호하여 비교 시 혼란.</evidence>
+        <why_it_matters>candidate SHA는 publish 전 로컬에서 계산한 값, canonical SHA는 GitHub에서 fetch 후 계산한 값. 둘을 구분하지 않으면 검증 로직이 잘못된 비교를 수행.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>필드 분리: pr_body_candidate_sha256, github_canonical_pr_body_sha256</label>
+            <benefit>의미 명확화, 검증 로직에서 올바른 필드 비교 가능</benefit>
+            <cost>acceptance_request.json 스키마 변경</cost>
+          </option>
+          <option id="B">
+            <label>단일 pr_body_sha256 필드 유지</label>
+            <benefit>기존 acceptance_request.json 스키마 변경 없이 호환성 유지</benefit>
+            <cost>필드 의미 모호성 지속, 잘못된 비교 가능성 잔존</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 명시적으로 A안 선택함: "의미별 SHA 필드 분리"</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="R-1">PR body SHA는 반드시 단일 canonical helper _canonical_pr_body_sha256(text)를 통해서만 계산</requirement>
+    <requirement id="R-2">canonical 규칙: CRLF→LF 정규화, trailing newline 유지 (strip 금지), UTF-8 인코딩</requirement>
+    <requirement id="R-3">pr_body_candidate_sha256과 github_canonical_pr_body_sha256 필드 분리</requirement>
+    <requirement id="R-4">jq stdout, PowerShell stdout을 SHA 계산 입력으로 사용 금지</requirement>
+    <requirement id="R-5">GitHub fetch 실패 시 fail-closed BLOCKED (best-effort PASS 금지)</requirement>
+    <requirement id="R-6">Codex Review, request-accept, gates accept, final packet이 모두 동일 canonical helper 사용</requirement>
+    <requirement id="R-7">기존 E69E/F52C 테스트 비파괴 (staged snapshot, ERROR/REJECT 상태 모델 유지)</requirement>
+    <requirement id="R-8">직접 hashlib.sha256(pr_body.encode(...)) 호출 제거 (canonical helper 외부)</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_canonical_pr_body_sha256 (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_prepare_acceptance_snapshot_candidate</site>
+        <site>_verify_published_canonical_pr_body</site>
+        <site>_fetch_canonical_pr_body_sha256</site>
+        <site>_cmd_codex_record</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>hashlib\.sha256.*pr_body.*encode|pr_body.*encode.*sha256</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>단일 canonical helper _canonical_pr_body_sha256(text: str) 신규 생성 - CRLF→LF 정규화 + UTF-8 인코딩 + sha256 반환</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_prepare_acceptance_snapshot_candidate</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>pr_body_sha256_for_req = hashlib\.sha256</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>line 20422의 직접 hashlib 호출을 _canonical_pr_body_sha256(pr_body) 호출로 교체</change_summary>
+      <line_estimate>5</line_estimate>
+      <covers_ac>AC-3, AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>_verify_published_canonical_pr_body</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_publish_acceptance_request</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>recompute_sha = hashlib\.sha256\(current_pr_body</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>line 20718의 직접 hashlib 호출을 _canonical_pr_body_sha256(current_pr_body) 호출로 교체</change_summary>
+      <line_estimate>5</line_estimate>
+      <covers_ac>AC-7, AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>_fetch_canonical_pr_body_sha256</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_publish_acceptance_request</site>
+        <site>_cmd_gates_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _fetch_canonical_pr_body_sha256</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>line 17211의 inline hashlib 호출을 _canonical_pr_body_sha256(body) 호출로 교체 - 동일 정규화 경로 보장</change_summary>
+      <line_estimate>5</line_estimate>
+      <covers_ac>AC-3, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>_cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>hashlib\.sha256\(pr_body\.encode</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>line 20884의 직접 hashlib 호출을 _canonical_pr_body_sha256(pr_body) 호출로 교체</change_summary>
+      <line_estimate>5</line_estimate>
+      <covers_ac>AC-5, AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>_cmd_codex_record</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>pr_body_candidate_sha256.*codex</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>codex record 경로의 pr_body SHA 계산을 _canonical_pr_body_sha256 helper 사용으로 통일, github_canonical_pr_body_sha256 필드 분리 유지</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-4, AC-5, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-7">
+      <affected_function>acceptance_request.json 스키마 확장</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_prepare_acceptance_snapshot_candidate</site>
+        <site>_publish_acceptance_request</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>pr_body_candidate_sha256|github_canonical_pr_body_sha256</pattern>
+        <match_count>25</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>acceptance_request.json에 pr_body_candidate_sha256(candidate)와 github_canonical_pr_body_sha256(publish 후) 필드 분리, 기존 pr_body_sha256은 backward compat 유지</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-4, AC-5, AC-6, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-8">
+      <affected_function>tests/test_canonical_pr_body_sha256_b985.py (신규)</affected_function>
+      <target_files>
+        <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_canonical_pr_body</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TC-1~TC-11 테스트 구현: CRLF/LF 정규화, trailing newline, JSON parse vs jq, direct hashlib regression, E69E/F52C 비파괴 검증</change_summary>
+      <line_estimate>200</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-7, AC-8, AC-9, AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>TC-1: 동일 PR body 문자열을 canonical helper로 계산하면 CRLF/LF 차이에도 같은 SHA가 나온다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>TC-2: trailing newline 유무가 정의된 canonical 규칙대로 처리된다 (strip 금지, 원문 유지)</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>TC-3: gh pr view --json body 결과를 Python JSON parser로 읽은 값과 내부 PR body 문자열이 helper 통과 후 같은 SHA이다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>TC-4: jq stdout 또는 PowerShell stdout에 추가 개행이 붙어도 SHA 기준이 흔들리지 않는다 (canonical helper가 내부 정규화 수행)</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>TC-5: request-accept 직후 codex_review_result.pr_body_candidate_sha256 == acceptance_request.pr_body_candidate_sha256</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>TC-6: PR body publish 후 GitHub에서 fetch한 canonical SHA == acceptance_request.github_canonical_pr_body_sha256</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>TC-7: gates accept가 동일 canonical helper로 current PR body stale 검증을 수행한다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>TC-8: candidate SHA와 github canonical SHA를 의도적으로 다르게 만든 경우 올바른 필드에서만 차이를 보고, 잘못된 stale로 오판하지 않는다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>TC-9: 직접 hashlib.sha256(pr_body.encode(...)) 호출이 PR body SHA 경로에 남아 있지 않다 (canonical helper 외부)</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>TC-10/11: 기존 E69E Codex CLI ERROR/REJECT 상태 모델 테스트 및 F52C staged snapshot/packet SHA 검증 테스트가 깨지지 않는다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_spec>
+    <storage_root>tests/oracles/IMP-20260703-B985</storage_root>
+    <cases>
+      <case id="TC-1_crlf_lf_normalization" kind="normal">
+        <description>TC-1: CRLF/LF 정규화 테스트 - 동일 논리 본문, 다른 줄바꿈 형식</description>
+        <input_file>tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/input.json</input_file>
+        <expected_file>tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="TC-2_trailing_newline" kind="edge">
+        <description>TC-2: trailing newline 처리 테스트 - canonical 규칙 적용 여부</description>
+        <input_file>tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/input.json</input_file>
+        <expected_file>tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="TC-3_json_parse_vs_jq" kind="edge">
+        <description>TC-3: gh --json body JSON parse vs jq stdout 비교</description>
+        <input_file>tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/input.json</input_file>
+        <expected_file>tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="TC-9_direct_hashlib_regression" kind="error">
+        <description>TC-9: 직접 hashlib.sha256(pr_body.encode(...)) 호출 회귀 테스트</description>
+        <input_file>tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/input.json</input_file>
+        <expected_file>tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+    </cases>
+  </oracle_spec>
+
+  <python_version>3.10 — pipeline.py 기존 버전 유지</python_version>
+
+  <forbidden>
+    <item>stale가 나면 현재 값을 codex_review_result.json에 덮어써서 통과시키기 금지</item>
+    <item>candidate SHA와 GitHub canonical SHA를 같은 필드에 섞어 쓰기 금지</item>
+    <item>jq stdout, PowerShell stdout을 그대로 SHA 입력으로 쓰기 금지</item>
+    <item>except/pass, best-effort PASS 금지</item>
+    <item>dummy/TODO/placeholder/hardcoding 금지</item>
+    <item>E69E의 ERROR/REJECT 상태 모델, F52C의 staged snapshot 구조를 되돌리기 금지</item>
+    <item>_canonical_pr_body_sha256 helper 외부에서 직접 hashlib.sha256(pr_body.encode(...)) 호출 금지</item>
+  </forbidden>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
