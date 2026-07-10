@@ -89,7 +89,7 @@ def setup_workspace(tmp_path: Path, gates_ok: bool = True) -> Path:
             "oracle": {"status": "PASS"},
             "github_ci": {"status": "PASS"},
         }
-    state = {
+    state: dict = {
         "version": "1.2.0",
         "pipeline_id": PID,
         "type": "IMP",
