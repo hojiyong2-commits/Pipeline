@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-10T13:21:23Z",
+  "pipeline_id": "IMP-20260710-DB54",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "81aba3b76fac3fea69087d2eda691d48ddea7ee9",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-07-10T13:21:07Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/test_codex_preflight_db54.py,tests/test_codex_bundle_db54.py,tests/test_codex_cache_db54.py,tests/test_codex_rate_limit_db54.py,codex_review_optimization_report.md"
+  },
+  "agent_run": {
+    "run_id": "dev-2d1b4e090081defd",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "c7b04bbae057e31f736d5bdd9e2e2e45f6672c8cc600d011db32738b61498a3d",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260710-DB54/dev/agent_receipt_dev-2d1b4e090081defd.json",
+    "receipt_sha256": "14e9124614ac25c1b60a7130bf984f52b41d46dba8bdb05d9e31520d73632fb1",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260710-DB54\\dev\\dev-2d1b4e090081defd.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260710-DB54\\dev\\dev-2d1b4e090081defd.json",
+      "path": ".pipeline/phase_evidence/IMP-20260710-DB54/dev/agent_receipt_dev-2d1b4e090081defd.json",
+      "sha256": "14e9124614ac25c1b60a7130bf984f52b41d46dba8bdb05d9e31520d73632fb1",
+      "size_bytes": 515,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260710-DB54/dev/report_dev_handover.xml",
+      "sha256": "c7b04bbae057e31f736d5bdd9e2e2e45f6672c8cc600d011db32738b61498a3d",
+      "size_bytes": 1770,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260710-DB54/dev/scope_manifest_scope_manifest.json",
+      "sha256": "5cb78900757c74fdc48372c516b024d96b9d5c67b85135d19e7c4123ec791889",
+      "size_bytes": 1204,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "bdc9f04fc2d3d3593fbe1f9615f829ea0da1edb6d61f170da69e56048294914f",
+      "size_bytes": 1538471
+    },
+    {
+      "path": "tests/test_codex_preflight_db54.py",
+      "sha256": "ac5318ddd3cc092bc57cb9305881730f5eaf7c098aef8fb6992fb32419da17df",
+      "size_bytes": 6954
+    },
+    {
+      "path": "tests/test_codex_bundle_db54.py",
+      "sha256": "2410af8aadb5d7521d5dcfce7e1045ede26619c31fc7b09180557f754677fe96",
+      "size_bytes": 5071
+    },
+    {
+      "path": "tests/test_codex_cache_db54.py",
+      "sha256": "f2cbf8cc9d5defa0b790697da9e0ebd83baabfd8c6e0774aae5c3c2a7fa457ce",
+      "size_bytes": 7148
+    },
+    {
+      "path": "tests/test_codex_rate_limit_db54.py",
+      "sha256": "bcf259b56424c2156388663947a80bd95d340a5da0ab83544386e2f95835b4f7",
+      "size_bytes": 5008
+    },
+    {
+      "path": "codex_review_optimization_report.md",
+      "sha256": "0906c132b5ad25463e6c61cf98d7f1e4c28f74bf94bbe9dbdc5c1c284d6a9abe",
+      "size_bytes": 7094
+    }
+  ],
+  "local_only_files": []
+}

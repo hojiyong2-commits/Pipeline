@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260710-DB54",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-2d1b4e090081defd",
+  "status": "COMPLETED",
+  "started_at": "2026-07-10T13:10:16Z",
+  "completed_at": "2026-07-10T13:10:30Z",
+  "output_file": "dev_handover.xml",
+  "output_sha256": "c7b04bbae057e31f736d5bdd9e2e2e45f6672c8cc600d011db32738b61498a3d",
+  "evidence_files": [],
+  "commit_sha": "868ec1e2395e1c6aa2e57eb59ded4bf8aee5d681"
+}
