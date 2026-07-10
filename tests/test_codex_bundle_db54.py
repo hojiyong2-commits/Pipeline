@@ -115,6 +115,113 @@ class TestBundle_TC9_TypeGuards:
         assert sha == "" and path == ""
 
 
+class TestBundle_Rework_RequiredFields:
+    """rework MT-3: 신규 필수 필드 존재 + 누락 감지 헬퍼."""
+
+    def test_all_new_fields_present(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sha, path, bundle = _build_in_isolation(tmpdir)
+            assert bundle is not None
+            for field in [
+                "included_functions", "excluded_files", "excluded_files_reason",
+                "critical_file_shas", "critical_function_shas", "changed_critical_files",
+                "test_summary", "oracle_summary",
+            ]:
+                assert field in bundle, f"신규 필드 누락: {field}"
+            assert isinstance(bundle["included_functions"], list)
+            assert isinstance(bundle["excluded_files"], list)
+            assert isinstance(bundle["critical_file_shas"], dict)
+            assert isinstance(bundle["test_summary"], dict)
+
+    def test_required_fields_missing_helper(self):
+        # 4개 필수 필드가 모두 있으면 빈 리스트.
+        good = {
+            "included_functions": [], "excluded_files": [],
+            "critical_file_shas": {}, "test_summary": {},
+        }
+        assert pipeline._codex_bundle_required_fields_missing(good) == []
+        # 하나 빠지면 그 이름이 반환된다.
+        bad = dict(good)
+        del bad["critical_file_shas"]
+        assert "critical_file_shas" in pipeline._codex_bundle_required_fields_missing(bad)
+
+    def test_required_fields_missing_type_guard(self):
+        try:
+            pipeline._codex_bundle_required_fields_missing(None)
+            assert False, "None should raise"
+        except TypeError:
+            pass
+
+    def test_excluded_files_no_raw_originals(self):
+        """excluded_files는 원문이 아니라 제외 항목 식별자만 담는다."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sha, path, bundle = _build_in_isolation(tmpdir)
+            assert bundle is not None
+            raw = json.dumps(bundle, ensure_ascii=False)
+            # raw ACCEPT 코드/nonce가 bundle 값에 들어가면 안 된다.
+            assert not re.search(r"ACCEPT-[A-Z0-9]+-\d{8}-[A-Z0-9]+-[A-Z2-7]{8}", raw)
+
+
+class TestBundle_Rework_OracleGateStatus:
+    """rework MT-3 문제4: oracle gate 상태를 state SSoT/summary.verdict에서 읽는다."""
+
+    def test_oracle_status_from_state(self):
+        state = {
+            "pipeline_id": "IMP-20260710-DB54",
+            "external_gates": {"oracle": {"status": "PASS"}},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sha, path, bundle = _build_in_isolation(tmpdir, state=state)
+            assert bundle is not None
+            assert bundle["oracle_gate_status"] == "PASS"
+            # 기존 버그: oracle이 UNKNOWN이 되면 안 된다.
+            assert bundle["oracle_gate_status"] != "UNKNOWN"
+
+    def test_oracle_status_from_summary_verdict_fallback(self, monkeypatch):
+        """state에 oracle이 없으면 oracle_result.json의 summary.verdict를 읽는다."""
+        pid = "IMP-20260710-DB54"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_contracts = Path(tmpdir) / "contracts"
+            gates_dir = fake_contracts / pid / "gates"
+            gates_dir.mkdir(parents=True, exist_ok=True)
+            (gates_dir / "oracle_result.json").write_text(
+                json.dumps({"summary": {"verdict": "PASS"}}), encoding="utf-8"
+            )
+            monkeypatch.setattr(pipeline, "CONTRACTS_DIR", fake_contracts)
+            state_path = os.path.join(tmpdir, "state.json")
+            # external_gates에 oracle 없음 → 파일 fallback 유도.
+            state = {"pipeline_id": pid, "external_gates": {}}
+            Path(state_path).write_text(json.dumps(state), encoding="utf-8")
+            os.makedirs(os.path.join(tmpdir, ".pipeline"), exist_ok=True)
+            with patch.dict(os.environ, {"PIPELINE_STATE_PATH": state_path}):
+                sha, path = pipeline._build_codex_review_bundle(state, pid)
+                bundle = json.loads(Path(path).read_text(encoding="utf-8"))
+            assert bundle["oracle_gate_status"] == "PASS"
+
+
+class TestBundle_Rework_CriticalFile:
+    """rework MT-4: critical file 판정 헬퍼."""
+
+    def test_pipeline_py_is_critical(self):
+        assert pipeline._is_codex_critical_file("pipeline.py") is True
+
+    def test_workflow_is_critical(self):
+        assert pipeline._is_codex_critical_file(".github/workflows/ci.yml") is True
+
+    def test_codex_test_is_critical(self):
+        assert pipeline._is_codex_critical_file("tests/test_codex_cache_db54.py") is True
+
+    def test_regular_file_not_critical(self):
+        assert pipeline._is_codex_critical_file("core/foo.py") is False
+
+    def test_none_raises(self):
+        try:
+            pipeline._is_codex_critical_file(None)
+            assert False, "None should raise"
+        except TypeError:
+            pass
+
+
 if __name__ == "__main__":
     import subprocess
 

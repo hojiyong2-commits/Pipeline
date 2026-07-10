@@ -162,6 +162,114 @@ class TestCachePath:
                 assert str(Path(tmpdir).resolve()) in str(p.resolve())
 
 
+def _write_cache(tmpdir, entry):
+    pd = Path(tmpdir) / ".pipeline"
+    pd.mkdir(exist_ok=True)
+    (pd / "codex_review_cache.json").write_text(json.dumps(entry), encoding="utf-8")
+
+
+class TestCache_Rework_ExcludedCritical:
+    """rework MT-4 문제5: excluded_files에 critical 파일 → cache 사용 금지(BLOCKED)."""
+
+    def test_current_bundle_excluded_critical_blocks(self):
+        state = {"pipeline_id": "IMP-20260710-DB54"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PIPELINE_STATE_PATH": os.path.join(tmpdir, "state.json")}):
+                (Path(tmpdir) / ".pipeline").mkdir(exist_ok=True)
+                bundle = {"excluded_files": ["pipeline.py"]}
+                result = pipeline._check_codex_cache(
+                    "abc", "bun", state, "IMP-20260710-DB54", current_bundle=bundle
+                )
+                assert result["hit"] is False
+                assert result["blocked"] is True
+
+    def test_cached_excluded_critical_blocks(self):
+        state = {"pipeline_id": "IMP-20260710-DB54"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PIPELINE_STATE_PATH": os.path.join(tmpdir, "state.json")}):
+                _write_cache(tmpdir, {
+                    "cache_key": pipeline._codex_cache_key("abc", "bun"),
+                    "contract_sha256": "abc", "review_bundle_sha256": "bun",
+                    "verdict": "APPROVE", "critical_file_shas": {},
+                    "excluded_files": [".github/workflows/ci.yml"],
+                })
+                result = pipeline._check_codex_cache("abc", "bun", state, "IMP-20260710-DB54")
+                assert result["blocked"] is True
+
+
+class TestCache_Rework_CriticalShasMissing:
+    """rework MT-4 문제5: critical 변경 + critical_file_shas 없음 → cache miss."""
+
+    def test_changed_critical_but_empty_shas_miss(self):
+        state = {"pipeline_id": "IMP-20260710-DB54"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PIPELINE_STATE_PATH": os.path.join(tmpdir, "state.json")}):
+                _write_cache(tmpdir, {
+                    "cache_key": pipeline._codex_cache_key("abc", "bun"),
+                    "contract_sha256": "abc", "review_bundle_sha256": "bun",
+                    "verdict": "APPROVE", "critical_file_shas": {},
+                    "changed_critical_files": ["pipeline.py"],
+                })
+                result = pipeline._check_codex_cache("abc", "bun", state, "IMP-20260710-DB54")
+                assert result["hit"] is False
+                assert result["blocked"] is False
+                assert "critical_file_shas" in result["reason"]
+
+
+class TestCache_Rework_LiveShaSnapshot:
+    """rework MT-4 문제2: hit 시 live_sha_snapshot 반환 + 재검증 헬퍼."""
+
+    def test_hit_returns_live_sha_snapshot(self):
+        state = {"pipeline_id": "IMP-20260710-DB54"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PIPELINE_STATE_PATH": os.path.join(tmpdir, "state.json")}):
+                _write_cache(tmpdir, {
+                    "cache_key": pipeline._codex_cache_key("abc", "bun"),
+                    "contract_sha256": "abc", "review_bundle_sha256": "bun",
+                    "verdict": "APPROVE", "critical_file_shas": {},
+                    "live_sha_snapshot": {"packet_sha256": "XYZ"},
+                })
+                result = pipeline._check_codex_cache("abc", "bun", state, "IMP-20260710-DB54")
+                assert result["hit"] is True
+                assert result["live_sha_snapshot"] == {"packet_sha256": "XYZ"}
+
+    def test_verify_live_shas_mismatch(self):
+        state = {"pipeline_id": "IMP-20260710-DB54"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PIPELINE_STATE_PATH": os.path.join(tmpdir, "state.json")}):
+                (Path(tmpdir) / ".pipeline").mkdir(exist_ok=True)
+                # 캐시 시점 packet_sha256=DEADBEEF, 현재는 관측 불가(빈 값) → 불일치.
+                chk = pipeline._verify_codex_cache_live_shas(
+                    {"packet_sha256": "DEADBEEF"}, state, "IMP-20260710-DB54"
+                )
+                assert chk["ok"] is False
+                assert "packet_sha256" in chk["mismatched"]
+
+    def test_verify_live_shas_empty_cached_ok(self):
+        """캐시 시점 미관측(빈 값) 차원은 비교에서 제외되어 ok=True."""
+        state = {"pipeline_id": "IMP-20260710-DB54"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PIPELINE_STATE_PATH": os.path.join(tmpdir, "state.json")}):
+                (Path(tmpdir) / ".pipeline").mkdir(exist_ok=True)
+                chk = pipeline._verify_codex_cache_live_shas(
+                    {"packet_sha256": "", "pr_head_sha": ""}, state, "IMP-20260710-DB54"
+                )
+                assert chk["ok"] is True
+
+    def test_live_sha_snapshot_has_7_fields(self):
+        state = {"pipeline_id": "IMP-20260710-DB54"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PIPELINE_STATE_PATH": os.path.join(tmpdir, "state.json")}):
+                (Path(tmpdir) / ".pipeline").mkdir(exist_ok=True)
+                snap = pipeline._codex_live_sha_snapshot(state, "IMP-20260710-DB54")
+                for k in (
+                    "pr_head_sha", "packet_sha256", "verification_json_sha256",
+                    "pr_body_candidate_sha256", "github_canonical_pr_body_sha256",
+                    "approval_message_sha256", "pending_comment_sha256",
+                ):
+                    assert k in snap
+
+
 if __name__ == "__main__":
     import subprocess
 

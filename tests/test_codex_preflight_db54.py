@@ -184,6 +184,28 @@ class TestPreflight_TC7_NonceNoFalsePositive:
         assert "bundle_contains_nonce" in result["failure_codes"]
 
 
+class TestPreflight_Rework_FailClosedAggregation:
+    """rework 문제1: codex-review 흐름은 모든 failure_code를 hard-block하므로,
+    preflight가 gate 실패를 failure_codes로 정확히 집계하는지 확인한다."""
+
+    def test_all_failures_aggregated(self):
+        state = _make_state(tech="FAIL", oracle="FAIL", ci="FAIL", frozen=False, reject=5)
+        bundle = _make_bundle()
+        result = _run_codex_preflight_checks(bundle, state, "IMP-20260710-DB54")
+        assert result["blocked"] is True
+        for code in (
+            "technical_gate_not_pass", "oracle_gate_not_pass",
+            "github_ci_not_pass", "contract_not_frozen", "reject_count_below_limit",
+        ):
+            assert code in result["failure_codes"], f"{code} 누락"
+
+    def test_soft_fail_still_produces_failure_code(self):
+        """gate 실패 하나만 있어도 failure_codes가 비어있지 않다 (CLI가 hard-block 가능)."""
+        state = _make_state(oracle="FAIL")
+        result = _run_codex_preflight_checks(_make_bundle(), state, "IMP-20260710-DB54")
+        assert result["failure_codes"], "gate 실패 시 failure_codes가 비면 CLI가 차단할 수 없음"
+
+
 if __name__ == "__main__":
     import subprocess
 

@@ -7931,6 +7931,54 @@ _CODEX_PREFLIGHT_HARD_BLOCK_CODES = frozenset({
 })
 
 
+# IMP-20260710-DB54 rework MT-3/MT-4: Codex 캐시 유효성 판정에 쓰이는 critical file 집합.
+#   이 파일들이 변경되면 이전 Codex verdict를 그대로 신뢰할 수 없으므로, bundle에 이들의 SHA를
+#   기록하고(critical_file_shas) 캐시 조회 시 재검증한다. 정확 매칭 + prefix 매칭을 함께 지원한다.
+_CODEX_CRITICAL_FILE_EXACT = frozenset({
+    "pipeline.py",
+    "CLAUDE.md",
+    ".gitignore",
+    ".gitattributes",
+    ".claude/settings.json",
+})
+_CODEX_CRITICAL_FILE_PREFIXES = (
+    ".github/workflows/",
+    ".claude/agents/",
+    "tests/oracles/",
+)
+
+
+def _is_codex_critical_file(path: str) -> bool:
+    """주어진 상대 경로가 Codex 캐시 무효화 대상 critical file인지 판정한다.
+
+    Args:
+        path: 저장소 상대 경로 문자열 (슬래시/역슬래시 혼용 허용).
+    Returns:
+        critical file이면 True, 아니면 False.
+    Raises:
+        TypeError: path가 None이거나 str이 아닌 경우 (외부 입력 타입 가드).
+    """
+    if path is None:
+        raise TypeError("path must not be None")
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    norm = path.replace("\\", "/").strip()
+    # 선행 "./"만 제거한다. lstrip("./")는 ".github"의 선행 "."까지 지우므로 사용 금지.
+    while norm.startswith("./"):
+        norm = norm[2:]
+    if not norm:
+        return False
+    if norm in _CODEX_CRITICAL_FILE_EXACT:
+        return True
+    for _pref in _CODEX_CRITICAL_FILE_PREFIXES:
+        if norm.startswith(_pref):
+            return True
+    # 이번 IMP 관련 codex 테스트 파일도 critical set에 포함(tests/test_codex_*.py).
+    if norm.startswith("tests/test_codex_") and norm.endswith(".py"):
+        return True
+    return False
+
+
 # [Purpose]: BUG-20260702-E69E — gates codex-review 시작 시 Codex에게 전달할 입력 bundle을
 #            codex_review_bundle.json으로 명시적으로 materialize하고 그 SHA256을 반환한다.
 #            그동안 bundle을 생성하는 코드가 없어 _codex_snapshot_identity의 review_bundle_sha256이
@@ -7982,6 +8030,15 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         "review_bundle_sha256": "",
         "changed_files_count": 0,
         "oracle_count": 0,
+        # IMP-20260710-DB54 rework MT-3: 필수 최소 컨텍스트 필드 (원문 제외, 개수/SHA/식별자만).
+        "included_functions": [],       # 이번 PR에서 추가/수정된 pipeline.py 함수명 목록.
+        "excluded_files": [],           # bundle에서 의도적으로 제외한 항목 목록.
+        "excluded_files_reason": "",    # 제외 사유(PR body 원문/packet 원문/oracle 원문/raw ACCEPT 등).
+        "critical_file_shas": {},       # {상대경로: SHA} — 변경된 critical 파일의 현재 SHA.
+        "critical_function_shas": {},   # {함수식별자: SHA} — 핵심 함수 식별자/SHA(best-effort).
+        "changed_critical_files": [],   # 이번 PR에서 변경된 critical 파일 경로 목록.
+        "test_summary": {},             # {테스트파일: [테스트함수...]} — 원문 없이 요약만.
+        "oracle_summary": [],           # oracle case 요약(case_id/case_kind/SHA/result) — 원문 제외.
     }
 
     try:
@@ -8055,18 +8112,116 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
                 cf = [f.strip() for f in dr.stdout.strip().splitlines() if f.strip()]
                 bundle["changed_files"] = cf
                 bundle["changed_files_count"] = len(cf)
-                _crit = {"pipeline.py", "CLAUDE.md"}
                 bundle["critical_file_summary"] = {
-                    f: bool(
-                        f in _crit
-                        or f.startswith(".github/")
-                        or f.startswith(".claude/agents/")
-                    )
-                    for f in cf
+                    f: _is_codex_critical_file(f) for f in cf
                 }
+                # IMP-20260710-DB54 rework MT-3/MT-4: 변경된 critical 파일 목록 + 현재 SHA.
+                _changed_crit = [f for f in cf if _is_codex_critical_file(f)]
+                bundle["changed_critical_files"] = _changed_crit
+                _crit_shas: Dict[str, str] = {}
+                for _cf in _changed_crit:
+                    try:
+                        _cfp = BASE_DIR / _cf
+                        if _cfp.exists():
+                            _crit_shas[_cf] = _sha256_file(_cfp)
+                    except Exception:  # noqa: BLE001 — 개별 파일 SHA 실패는 건너뜀
+                        continue
+                bundle["critical_file_shas"] = _crit_shas
         except Exception:  # noqa: BLE001
             bundle["changed_files"] = []
             bundle["changed_files_count"] = 0
+
+        # IMP-20260710-DB54 rework MT-3: included_functions — 이번 PR에서 추가/수정된
+        #   pipeline.py 함수명(diff의 추가 라인 중 `def NAME(` 패턴). 원문 diff는 담지 않는다.
+        try:
+            _incl: List[str] = []
+            if "pipeline.py" in bundle.get("changed_files", []):
+                _fr = subprocess.run(
+                    ["git", "diff", "origin/main...HEAD", "--unified=0", "--", "pipeline.py"],
+                    capture_output=True, text=True, timeout=30,
+                    cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+                )
+                if _fr.returncode == 0:
+                    for _ln in _fr.stdout.splitlines():
+                        if _ln.startswith("+") and not _ln.startswith("+++"):
+                            _m = re.search(r"^\+\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", _ln)
+                            if _m:
+                                _name = _m.group(1)
+                                if _name not in _incl:
+                                    _incl.append(_name)
+            bundle["included_functions"] = _incl
+        except Exception:  # noqa: BLE001
+            bundle["included_functions"] = []
+
+        # IMP-20260710-DB54 rework MT-3: excluded_files — bundle에서 의도적으로 제외한 항목.
+        #   실제 원문(대형 diff/PR body/packet/oracle/raw ACCEPT)을 payload에 넣지 않았음을 명시한다.
+        bundle["excluded_files"] = [
+            "pr_body_full_text",
+            "human_acceptance_packet_full_text",
+            "oracle_input_expected_raw",
+            "raw_accept_code_and_nonce",
+            "large_test_file_full_diff",
+        ]
+        bundle["excluded_files_reason"] = (
+            "비용/보안: PR body 원문·packet 원문·oracle 원문·raw ACCEPT 코드/nonce·"
+            "대형 테스트 파일 전체 diff는 Codex payload에서 제외하고 개수/SHA/식별자만 포함한다."
+        )
+
+        # IMP-20260710-DB54 rework MT-3: critical_function_shas — 핵심 함수 식별자/SHA(best-effort).
+        #   함수 본문 원문은 담지 않고, 함수명::SHA(변경된 pipeline.py 파일 SHA prefix) 매핑만 둔다.
+        try:
+            _cfn_shas: Dict[str, str] = {}
+            _pyp = BASE_DIR / "pipeline.py"
+            if "pipeline.py" in bundle.get("changed_files", []) and _pyp.exists():
+                _py_sha = _sha256_file(_pyp)
+                for _fn in bundle.get("included_functions", []):
+                    _cfn_shas[f"pipeline.py::{_fn}"] = _py_sha
+            bundle["critical_function_shas"] = _cfn_shas
+        except Exception:  # noqa: BLE001
+            bundle["critical_function_shas"] = {}
+
+        # IMP-20260710-DB54 rework MT-3: test_summary — 테스트 파일별 테스트 함수 목록(원문 제외).
+        try:
+            _tsum: Dict[str, List[str]] = {}
+            for _tf in bundle.get("changed_files", []):
+                _tfn = _tf.replace("\\", "/")
+                if not (_tfn.startswith("tests/") and _tfn.endswith(".py")):
+                    continue
+                _tfp = BASE_DIR / _tfn
+                if not _tfp.exists():
+                    continue
+                try:
+                    _funcs: List[str] = []
+                    for _tl in _tfp.read_text(encoding="utf-8", errors="replace").splitlines():
+                        _tm = re.match(r"\s*def\s+(test_[A-Za-z0-9_]*)\s*\(", _tl)
+                        if _tm:
+                            _funcs.append(_tm.group(1))
+                    _tsum[_tfn] = _funcs
+                except Exception:  # noqa: BLE001
+                    continue
+            bundle["test_summary"] = _tsum
+        except Exception:  # noqa: BLE001
+            bundle["test_summary"] = {}
+
+        # IMP-20260710-DB54 rework MT-3: oracle_summary — oracle case 요약(원문 제외).
+        try:
+            _osum: List[Dict[str, str]] = []
+            _odir2 = BASE_DIR / "tests" / "oracles" / pipeline_id
+            if _odir2.exists() and _odir2.is_dir():
+                for _cdir in sorted(p for p in _odir2.iterdir() if p.is_dir()):
+                    _in_p = _cdir / "input.json"
+                    _exp_p = _cdir / "expected.json"
+                    _entry = {
+                        "case_id": _cdir.name,
+                        "case_kind": "unknown",
+                        "input_sha256": _sha256_file(_in_p) if _in_p.exists() else "",
+                        "expected_sha256": _sha256_file(_exp_p) if _exp_p.exists() else "",
+                        "result": "recorded",
+                    }
+                    _osum.append(_entry)
+            bundle["oracle_summary"] = _osum
+        except Exception:  # noqa: BLE001
+            bundle["oracle_summary"] = []
 
         # IMP-20260710-DB54 MT-3: oracle_count — oracle 원문을 bundle에 넣지 않고 개수만 기록한다.
         #   우선순위: contract oracle_manifest 길이 → tests/oracles/<pid>/ 하위 케이스 디렉토리 수.
@@ -8084,21 +8239,56 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         except Exception:  # noqa: BLE001
             bundle["oracle_count"] = 0
 
-        # gate statuses (pipeline_contracts/<pid>/gates/*.json)
-        _gdir = CONTRACTS_DIR / pipeline_id / "gates"
-        for _fname, _key in (
-            ("technical_result.json", "technical_gate_status"),
-            ("oracle_result.json", "oracle_gate_status"),
-            ("github_ci_result.json", "github_ci_gate_status"),
-        ):
-            _gp = _gdir / _fname
+        # IMP-20260710-DB54 rework MT-3(문제4): gate 상태는 state["external_gates"](SSoT)를
+        #   1순위로 읽는다. state에 없을 때만 pipeline_contracts/<pid>/gates/*.json으로 fallback한다.
+        #   fallback 시 oracle_result.json은 top-level status가 아니라 summary.verdict가 실제
+        #   신뢰 필드이므로(기존 버그: 항상 UNKNOWN), summary.verdict를 먼저 읽는다.
+        _eg = state.get("external_gates") if isinstance(state, dict) else None
+        _eg = _eg if isinstance(_eg, dict) else {}
+
+        def _resolve_gate_status(_gate_name: str, _fname: str) -> str:
+            # 1순위: state external_gates SSoT
+            _g = _eg.get(_gate_name)
+            if isinstance(_g, dict):
+                _s = str(_g.get("status", "") or "")
+                if _s:
+                    return _s
+            # 2순위: gates/*.json 파일 (summary.verdict 우선, 없으면 top-level status)
+            _gp = CONTRACTS_DIR / pipeline_id / "gates" / _fname
             if _gp.exists():
                 try:
                     _gj = json.loads(_gp.read_text(encoding="utf-8"))
                     if isinstance(_gj, dict):
-                        bundle[_key] = str(_gj.get("status", "UNKNOWN"))
+                        _summary = _gj.get("summary")
+                        if isinstance(_summary, dict) and _summary.get("verdict"):
+                            return str(_summary.get("verdict"))
+                        if _gj.get("status"):
+                            return str(_gj.get("status"))
                 except Exception:  # noqa: BLE001
                     pass
+            return "UNKNOWN"
+
+        bundle["technical_gate_status"] = _resolve_gate_status(
+            "technical", "technical_result.json"
+        )
+        bundle["oracle_gate_status"] = _resolve_gate_status(
+            "oracle", "oracle_result.json"
+        )
+        bundle["github_ci_gate_status"] = _resolve_gate_status(
+            "github_ci", "github_ci_result.json"
+        )
+
+        # IMP-20260710-DB54 rework: 테스트 전용 block-only seam. 프로덕션 경로를 우회하는 데
+        #   쓸 수 없다(필드를 누락/무력화하여 하위 guard가 BLOCKED되게만 만든다). QA 검증용.
+        _test_drop = os.environ.get("PIPELINE_CODEX_TEST_DROP_BUNDLE_FIELD")
+        if _test_drop and _test_drop in bundle:
+            bundle.pop(_test_drop, None)
+        if os.environ.get("PIPELINE_CODEX_TEST_EMPTY_CRITICAL_SHAS") == "1":
+            bundle["critical_file_shas"] = {}
+        if os.environ.get("PIPELINE_CODEX_TEST_EXCLUDE_CRITICAL") == "1":
+            _ex = list(bundle.get("excluded_files", []))
+            _ex.append("pipeline.py")
+            bundle["excluded_files"] = _ex
 
         # materialize — _codex_snapshot_identity가 읽는 동일 경로에 쓴다(SSoT 불변식).
         #   PIPELINE_STATE_PATH 격리 시 state 파일 옆 .pipeline/에 위치한다(테스트 오염 방지).
@@ -8187,6 +8377,7 @@ def _check_codex_cache(
     review_bundle_sha256: str,
     state: Dict[str, Any],
     pipeline_id: str,
+    current_bundle: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """contract+bundle SHA 조합으로 캐시된 Codex verdict를 조회한다 (critical file SHA 재검증).
 
@@ -8195,8 +8386,13 @@ def _check_codex_cache(
         review_bundle_sha256: 현재 review bundle SHA-256.
         state: 활성 pipeline_state (인터페이스 일관성; 직접 미사용).
         pipeline_id: 현재 파이프라인 ID (인터페이스 일관성; 직접 미사용).
+        current_bundle: 이번 리뷰의 현재 bundle dict(선택). 제공 시 excluded_files에 critical
+            파일이 있으면 cache 사용을 BLOCKED하고, critical 변경 대비 critical_file_shas 정보
+            부재를 cache miss로 처리한다 (IMP-20260710-DB54 rework MT-4 문제5).
     Returns:
-        {"hit": bool, "cached_verdict": str|None, "cache_key": str, "reason": str}.
+        {"hit": bool, "cached_verdict": str|None, "cache_key": str, "reason": str,
+         "blocked": bool, "block_reason": str, "live_sha_snapshot": dict,
+         "excluded_files": list}.
     Raises:
         TypeError: contract_sha256/review_bundle_sha256가 None/비str이거나 pipeline_id가
             None/비str인 경우.
@@ -8224,7 +8420,29 @@ def _check_codex_cache(
         "cached_verdict": None,
         "cache_key": cache_key,
         "reason": "",
+        "blocked": False,
+        "block_reason": "",
+        "live_sha_snapshot": {},
+        "excluded_files": [],
     }
+
+    # IMP-20260710-DB54 rework MT-4(문제5): 현재 bundle의 excluded_files에 critical 파일이 있으면
+    #   Codex가 그 파일을 못 본 것이므로 캐시 사용 자체를 금지한다(BLOCKED). 캐시 유무와 무관.
+    if isinstance(current_bundle, dict):
+        _cur_excl = current_bundle.get("excluded_files")
+        if isinstance(_cur_excl, list):
+            for _e in _cur_excl:
+                try:
+                    if _is_codex_critical_file(str(_e)):
+                        blocked = dict(miss)
+                        blocked["blocked"] = True
+                        blocked["block_reason"] = (
+                            f"excluded_files에 critical 파일 포함: {_e} — 캐시 사용 금지 (BLOCKED)"
+                        )
+                        blocked["reason"] = blocked["block_reason"]
+                        return blocked
+                except TypeError:
+                    continue
 
     cache_path = _codex_review_cache_path()
     if not cache_path.exists():
@@ -8252,6 +8470,34 @@ def _check_codex_cache(
         miss["reason"] = "review_bundle_sha256 불일치 (cache miss)"
         return miss
 
+    # IMP-20260710-DB54 rework MT-4(문제5): 캐시 생성 당시 excluded_files에 critical 파일이
+    #   있었다면 그 캐시 verdict는 critical 파일을 보지 못하고 산출된 것이므로 사용 금지(BLOCKED).
+    _cached_excl = cached.get("excluded_files")
+    if isinstance(_cached_excl, list):
+        for _e in _cached_excl:
+            try:
+                if _is_codex_critical_file(str(_e)):
+                    blocked = dict(miss)
+                    blocked["blocked"] = True
+                    blocked["block_reason"] = (
+                        f"캐시 excluded_files에 critical 파일 포함: {_e} — 캐시 사용 금지 (BLOCKED)"
+                    )
+                    blocked["reason"] = blocked["block_reason"]
+                    return blocked
+            except TypeError:
+                continue
+
+    # IMP-20260710-DB54 rework MT-4(문제5): critical 파일이 변경 범위에 있는데 캐시에 그 SHA
+    #   정보(critical_file_shas)가 비어 있으면 검증할 수 없으므로 cache miss(BLOCKED 아님).
+    _cached_changed_crit = cached.get("changed_critical_files")
+    if isinstance(_cached_changed_crit, list) and _cached_changed_crit:
+        _cfs = cached.get("critical_file_shas")
+        if not (isinstance(_cfs, dict) and _cfs):
+            miss["reason"] = (
+                "critical 파일이 변경됐으나 캐시에 critical_file_shas 정보가 없음 (cache miss)"
+            )
+            return miss
+
     # critical file SHA 재검증 — 하나라도 현재 SHA와 다르면 캐시 무효화(safe cache).
     critical_file_shas = cached.get("critical_file_shas")
     if isinstance(critical_file_shas, dict):
@@ -8272,12 +8518,155 @@ def _check_codex_cache(
                     ),
                 }
 
+    _live_snap = cached.get("live_sha_snapshot")
     return {
         "hit": True,
         "cached_verdict": str(cached.get("verdict", "") or "") or None,
         "cache_key": cache_key,
         "reason": "cache hit — Codex CLI 호출 없이 캐시된 verdict 재사용",
+        "blocked": False,
+        "block_reason": "",
+        "live_sha_snapshot": _live_snap if isinstance(_live_snap, dict) else {},
+        "excluded_files": _cached_excl if isinstance(_cached_excl, list) else [],
     }
+
+
+# [Purpose]: IMP-20260710-DB54 rework MT-4(문제2/6) — cache hit 재사용 전에 재검증할 7개 live SHA를
+#            현재 디스크/artifact에서 best-effort로 관측한다. bundle SHA에 포함되지 않는 차원
+#            (verification_json/canonical/approval/pending)까지 포함하여, 캐시가 산출된 시점 대비
+#            현재 검토 대상이 실제로 동일한지 확인하는 데 쓴다.
+# [Assumptions]: 각 필드는 조회 실패 시 빈 문자열로 대체한다(BLOCK 아님). acceptance_request가 없으면
+#            canonical/approval/pending은 빈 문자열이 된다(비교에서 자연히 제외됨).
+# [Vulnerability & Risks]: 관측 실패를 빈 문자열로 대체하므로, 캐시 시점에도 빈 값이었던 차원은
+#            비교에서 제외된다. 이는 "관측 가능한 차원만 검증"하는 fail-safe 방향이라 안전하다.
+# [Improvement]: acceptance_request 스키마 변경 시 필드명을 상수 테이블로 추출하면 drift를 막을 수 있다.
+def _codex_live_sha_snapshot(state: Dict[str, Any], pipeline_id: str) -> Dict[str, str]:
+    """cache 재검증용 7개 live SHA를 현재 상태에서 관측하여 dict로 반환한다.
+
+    Args:
+        state: 활성 pipeline_state.
+        pipeline_id: 현재 파이프라인 ID.
+    Returns:
+        {pr_head_sha, packet_sha256, verification_json_sha256, pr_body_candidate_sha256,
+         github_canonical_pr_body_sha256, approval_message_sha256, pending_comment_sha256}
+        — 모두 str(관측 실패 시 빈 문자열).
+    Raises:
+        TypeError: pipeline_id가 None/비str인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+
+    snap = {
+        "pr_head_sha": "",
+        "packet_sha256": "",
+        "verification_json_sha256": "",
+        "pr_body_candidate_sha256": "",
+        "github_canonical_pr_body_sha256": "",
+        "approval_message_sha256": "",
+        "pending_comment_sha256": "",
+    }
+    try:
+        snap["pr_head_sha"] = _get_current_pr_head_sha() or ""
+    except Exception:  # noqa: BLE001
+        snap["pr_head_sha"] = ""
+    try:
+        _pkt = _packet_output_path()
+        if _pkt.exists():
+            snap["packet_sha256"] = _sha256_file(_pkt)
+    except Exception:  # noqa: BLE001
+        snap["packet_sha256"] = ""
+    try:
+        _vj = _packet_json_output_path()
+        if _vj.exists():
+            snap["verification_json_sha256"] = _sha256_file(_vj)
+    except Exception:  # noqa: BLE001
+        snap["verification_json_sha256"] = ""
+    try:
+        _ident = _codex_snapshot_identity(pipeline_id)
+        snap["pr_body_candidate_sha256"] = str(
+            _ident.get("pr_body_candidate_sha256", "") or ""
+        )
+    except Exception:  # noqa: BLE001
+        snap["pr_body_candidate_sha256"] = ""
+    try:
+        _req = _load_acceptance_request()
+        if isinstance(_req, dict) and str(_req.get("pipeline_id", "") or "") == pipeline_id:
+            snap["github_canonical_pr_body_sha256"] = str(
+                _req.get("github_canonical_pr_body_sha256", "") or ""
+            )
+            snap["approval_message_sha256"] = str(
+                _req.get("approval_message_sha256", "") or ""
+            )
+            snap["pending_comment_sha256"] = str(
+                _req.get("pending_comment_sha256", "") or ""
+            )
+    except Exception:  # noqa: BLE001
+        pass
+    return snap
+
+
+# [Purpose]: IMP-20260710-DB54 rework MT-4(문제2) — 캐시 생성 시 저장한 live SHA snapshot과 현재
+#            live SHA snapshot을 비교하여, cache hit 재사용이 안전한지 판정한다. 하나라도 관측된
+#            (non-empty) 캐시 값이 현재와 다르면 재검증 실패로 BLOCKED되게 한다.
+# [Assumptions]: cached_snapshot은 캐시 파일의 live_sha_snapshot이다. 빈 값(캐시 시점 미관측)은
+#            비교에서 제외한다(관측 가능한 차원만 검증하는 fail-safe).
+# [Vulnerability & Risks]: 캐시 시점 빈 값이었던 차원은 검증을 건너뛴다. 그러나 이 차원들은 캐시
+#            생성 시에도 관측 불가였으므로, 검증 생략이 stale verdict 재사용을 허용하지 않는다.
+# [Improvement]: 필드별 가중치를 두어 일부 차원 불일치는 경고, 핵심 차원은 BLOCKED로 세분화 가능.
+def _verify_codex_cache_live_shas(
+    cached_snapshot: Optional[Dict[str, Any]], state: Dict[str, Any], pipeline_id: str
+) -> Dict[str, Any]:
+    """캐시에 저장된 live SHA snapshot과 현재 live SHA를 비교한다.
+
+    Args:
+        cached_snapshot: 캐시 파일의 live_sha_snapshot(없으면 빈 dict 취급).
+        state: 활성 pipeline_state.
+        pipeline_id: 현재 파이프라인 ID.
+    Returns:
+        {"ok": bool, "mismatched": list[str], "current": dict}.
+    Raises:
+        TypeError: pipeline_id가 None/비str인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    cached = cached_snapshot if isinstance(cached_snapshot, dict) else {}
+    current = _codex_live_sha_snapshot(state, pipeline_id)
+    mismatched: List[str] = []
+    for _k, _cv in cached.items():
+        _cvs = str(_cv or "")
+        if not _cvs:
+            continue  # 캐시 시점 미관측 차원은 비교 제외(fail-safe)
+        if str(current.get(_k, "") or "") != _cvs:
+            mismatched.append(str(_k))
+    return {"ok": not mismatched, "mismatched": mismatched, "current": current}
+
+
+# [Purpose]: IMP-20260710-DB54 rework MT-3(문제3) — bundle이 Codex payload로 유효한 최소 필수
+#            필드를 갖췄는지 검사한다. 하나라도 없으면 호출자가 fail-closed BLOCKED 처리한다.
+# [Assumptions]: bundle은 _build_codex_review_bundle이 만든 dict(또는 그 파일 로드 결과)다.
+# [Vulnerability & Risks]: 필드가 존재하지만 빈 값인 경우(빈 list/dict)는 "존재"로 간주한다.
+#            필수 필드의 존재 자체가 계약이며, 내용 채움은 best-effort이기 때문이다.
+# [Improvement]: 필드별 타입 검증(list/dict/str)까지 확장하면 더 강한 스키마 계약을 만들 수 있다.
+def _codex_bundle_required_fields_missing(bundle: Dict[str, Any]) -> List[str]:
+    """bundle에서 누락된 필수 필드 목록을 반환한다(없으면 빈 list).
+
+    Args:
+        bundle: 검사할 bundle dict.
+    Returns:
+        누락된 필수 필드명 목록.
+    Raises:
+        TypeError: bundle이 None/비dict인 경우.
+    """
+    if bundle is None:
+        raise TypeError("bundle must not be None")
+    if not isinstance(bundle, dict):
+        raise TypeError(f"bundle must be dict, got {type(bundle).__name__}")
+    required = ("included_functions", "excluded_files", "critical_file_shas", "test_summary")
+    return [f for f in required if f not in bundle]
 
 
 # ---------------------------------------------------------------------------
@@ -22359,59 +22748,125 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "  수정 후 다시 gates codex-review를 실행하세요."
         )
 
-    # IMP-20260710-DB54 MT-5: preflight 검사 — bundle을 읽어 결정적 검사를 수행한다.
-    #   내용 안전성(승인코드/nonce/NOT_CONFIGURED/삭제파일 참조) 실패는 즉시 hard-block한다.
-    #   gate 상태/계약 동결/reject_count 검사는 codex-review 흐름에서 die하지 않고(하위 호환)
-    #   경고만 출력한다 — 그 게이트들은 request-accept/accept 경로에서 별도로 강제된다.
+    # IMP-20260710-DB54 rework MT-3(문제3): bundle을 로드하고 필수 필드(included_functions/
+    #   excluded_files/critical_file_shas/test_summary)를 검증한다. 하나라도 없으면 fail-closed BLOCKED.
     _contract_sha256_for_cache = ""
     try:
         _preflight_bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
         if not isinstance(_preflight_bundle, dict):
-            _preflight_bundle = {}
-        _contract_sha256_for_cache = str(
-            _preflight_bundle.get("contract_sha256", "") or ""
+            raise ValueError("bundle이 dict가 아닙니다")
+    except (OSError, json.JSONDecodeError, ValueError) as _bl_exc:
+        _die(
+            "[BLOCKED] failure_code=codex_review_bundle_load_failed\n"
+            f"  review bundle 로드 실패: {_bl_exc} — Codex CLI를 호출하지 않습니다 (fail-closed)."
         )
+    _contract_sha256_for_cache = str(_preflight_bundle.get("contract_sha256", "") or "")
+    _missing_fields = _codex_bundle_required_fields_missing(_preflight_bundle)
+    if _missing_fields:
+        _die(
+            "[BLOCKED] failure_code=codex_bundle_missing_required_field\n"
+            f"  bundle 필수 필드 누락: {', '.join(_missing_fields)}\n"
+            "  Codex CLI를 호출하지 않습니다 (fail-closed). bundle 생성 로직을 확인하세요."
+        )
+
+    # IMP-20260710-DB54 rework MT-5(문제1): preflight 검사 — bundle을 읽어 결정적 검사를 수행하고,
+    #   codex-review 흐름에서는 gate 상태/계약 동결/reject_count/내용안전성 중 어느 하나라도 실패하면
+    #   즉시 fail-closed BLOCKED한다(경고 후 진행 금지). preflight 예외도 BLOCKED로 처리한다.
+    try:
         _preflight = _run_codex_preflight_checks(_preflight_bundle, state, pipeline_id)
-        _hard_fails = [
-            _fc for _fc in _preflight["failure_codes"]
-            if _fc in _CODEX_PREFLIGHT_HARD_BLOCK_CODES
-        ]
-        if _hard_fails:
-            _die(
-                "[BLOCKED] failure_code=codex_preflight_content_unsafe\n"
-                f"  bundle 내용 안전성 검사 실패: {', '.join(_hard_fails)}\n"
-                "  Codex CLI를 호출하지 않습니다 (fail-closed). bundle을 수정 후 재실행하세요."
-            )
-        _soft_fails = [
-            _fc for _fc in _preflight["failure_codes"]
-            if _fc not in _CODEX_PREFLIGHT_HARD_BLOCK_CODES
-        ]
-        if _soft_fails:
-            print(
-                "  [PREFLIGHT 경고] 비차단 검사 미충족(참고): "
-                + ", ".join(_soft_fails)
-            )
     except SystemExit:
         raise
-    except Exception as _pf_exc:  # noqa: BLE001 — preflight 관측 실패는 경고만(기존 흐름 보존)
-        print(f"  [PREFLIGHT 경고] preflight 검사 수행 실패(무시): {_pf_exc}")
+    except Exception as _pf_exc:  # noqa: BLE001 — preflight 관측 실패는 관측 불가 → fail-closed
+        _die(
+            "[BLOCKED] failure_code=codex_preflight_exception\n"
+            f"  preflight 검사 수행 실패: {_pf_exc} — Codex CLI를 호출하지 않습니다 (fail-closed)."
+        )
+    if _preflight.get("failure_codes"):
+        _die(
+            "[BLOCKED] failure_code=codex_preflight_failed\n"
+            f"  preflight 검사 실패: {', '.join(_preflight['failure_codes'])}\n"
+            "  모든 preflight 검사가 통과해야 Codex Review를 진행할 수 있습니다 (fail-closed).\n"
+            "  Codex CLI를 호출하지 않았습니다."
+        )
 
-    # IMP-20260710-DB54 MT-5: cache check — 동일 contract+bundle SHA의 이전 verdict를 조회한다.
-    #   cache hit은 정보성으로 로그하고, 기존 snapshot 기록 흐름(B985/F52C/E69E)은 그대로 진행한다.
-    #   verdict 기록 후 아래에서 캐시를 갱신한다(safe cache).
+    # IMP-20260710-DB54 rework MT-3(문제4): bundle의 gate 상태가 state external_gates(final packet
+    #   SSoT)와 불일치하면 BLOCKED. bundle이 stale/다른 소스에서 만들어진 경우를 차단한다.
+    _eg_state = state.get("external_gates") if isinstance(state, dict) else {}
+    _eg_state = _eg_state if isinstance(_eg_state, dict) else {}
+    for _bkey, _gname in (
+        ("technical_gate_status", "technical"),
+        ("oracle_gate_status", "oracle"),
+        ("github_ci_gate_status", "github_ci"),
+    ):
+        _bundle_val = str(_preflight_bundle.get(_bkey, "") or "")
+        _g_entry = _eg_state.get(_gname)
+        _state_val = str(_g_entry.get("status", "") or "") if isinstance(_g_entry, dict) else ""
+        if _state_val and _bundle_val != _state_val:
+            _die(
+                "[BLOCKED] failure_code=codex_bundle_gate_status_mismatch\n"
+                f"  bundle {_bkey}={_bundle_val or '(없음)'} != state external_gates.{_gname}={_state_val}\n"
+                "  bundle을 재생성하여 final packet 상태와 일치시킨 뒤 다시 실행하세요 (fail-closed)."
+            )
+
+    # IMP-20260710-DB54 rework MT-4(문제2): cache check — 동일 contract+bundle SHA의 이전 verdict.
+    #   현재 bundle을 함께 넘겨 excluded critical/critical_file_shas 부재를 판정한다.
+    #   excluded_files에 critical 파일이 있으면 캐시 사용 금지(BLOCKED).
+    _cache_hit = False
+    _cache_verdict_from_cache = ""
+    _cache_key_used = ""
+    _cache_reason = ""
+    _explicit_verdict = getattr(args, "verdict", None) is not None
+    _explicit_cli = getattr(args, "codex_cli_exit_code", None) is not None
     try:
         _cache_probe = _check_codex_cache(
-            _contract_sha256_for_cache, _review_bundle_sha256, state, pipeline_id
+            _contract_sha256_for_cache, _review_bundle_sha256, state, pipeline_id,
+            current_bundle=_preflight_bundle,
         )
-        if _cache_probe.get("hit"):
-            print(
-                f"  [CACHE HIT] cache_key={_cache_probe.get('cache_key')} "
-                f"cached_verdict={_cache_probe.get('cached_verdict')} — {_cache_probe.get('reason')}"
+    except SystemExit:
+        raise
+    except Exception as _cache_exc:  # noqa: BLE001 — 캐시 조회 실패는 miss로 간주(fail-safe)
+        _cache_probe = {"hit": False, "reason": f"캐시 조회 실패(무시): {_cache_exc}",
+                        "blocked": False, "cache_key": "", "live_sha_snapshot": {}}
+    _cache_key_used = str(_cache_probe.get("cache_key", "") or "")
+    if _cache_probe.get("blocked"):
+        _die(
+            "[BLOCKED] failure_code=cache_excluded_critical_file\n"
+            f"  {_cache_probe.get('block_reason') or _cache_probe.get('reason')}\n"
+            "  critical 파일이 리뷰 대상에서 제외되어 캐시를 신뢰할 수 없습니다 (fail-closed)."
+        )
+    if _cache_probe.get("hit"):
+        print(
+            f"  [CACHE HIT] cache_key={_cache_probe.get('cache_key')} "
+            f"cached_verdict={_cache_probe.get('cached_verdict')} — {_cache_probe.get('reason')}"
+        )
+        # 명시적 --verdict/--codex-cli-*가 없을 때만 캐시 verdict를 재사용한다(비용 절감).
+        # 재사용 대상은 APPROVE에 한정한다(REJECT는 항상 새 검토 요구 — rate-limit 무력화 방지).
+        _cached_v = str(_cache_probe.get("cached_verdict", "") or "").upper()
+        if not _explicit_verdict and not _explicit_cli and _cached_v == "APPROVE":
+            # cache hit 재사용 전 7개 live SHA 재검증(문제2). 하나라도 다르면 BLOCKED.
+            _live_chk = _verify_codex_cache_live_shas(
+                _cache_probe.get("live_sha_snapshot"), state, pipeline_id
             )
-        else:
-            print(f"  [CACHE MISS] {_cache_probe.get('reason')}")
-    except Exception as _cache_exc:  # noqa: BLE001 — 캐시 조회 실패는 흐름에 영향 없음
-        print(f"  [CACHE] 조회 실패(무시): {_cache_exc}")
+            if not _live_chk["ok"]:
+                _die(
+                    "[BLOCKED] failure_code=cache_live_sha_mismatch\n"
+                    f"  cache hit이지만 live SHA 재검증 실패: {', '.join(_live_chk['mismatched'])}\n"
+                    "  검토 대상이 캐시 생성 시점과 달라졌습니다 — 캐시를 사용하지 않습니다 (fail-closed).\n"
+                    "  gates request-accept를 재실행한 뒤 gates codex-review를 다시 실행하세요."
+                )
+            _cache_hit = True
+            _cache_verdict_from_cache = "APPROVE_TO_USER"
+            _cache_reason = str(_cache_probe.get("reason", "") or "")
+            print("  [CACHE REUSE] Codex CLI 호출 없이 캐시된 APPROVE verdict를 재사용합니다.")
+    else:
+        print(f"  [CACHE MISS] {_cache_probe.get('reason')}")
+        # 명시적 verdict/CLI 결과가 없고 cache도 miss면 재사용 근거가 없으므로 BLOCKED.
+        if not _explicit_verdict and not _explicit_cli:
+            _die(
+                "[BLOCKED] failure_code=codex_verdict_required\n"
+                f"  cache miss({_cache_probe.get('reason')})이고 --verdict/--codex-cli-exit-code도 없습니다.\n"
+                "  --verdict APPROVE_TO_USER|REJECT 또는 --codex-cli-exit-code로 CLI 결과를 넘기세요."
+            )
 
     # BUG-20260702-E69E REJECT-1: attempt 단위 상태 모델 — 이번 시도의 고유 식별자를 발급한다.
     attempt_id = _generate_attempt_id()
@@ -22470,9 +22925,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # BUG-20260702-E69E MT-2: Codex CLI 실행 원시값(exit_code/stdout/stderr)이 주어지면
     #   _run_codex_cli_review로 분류한다. CLI 실행 실패는 절대 REJECT로 fallback하지 않고 ERROR로
     #   기록한다. 원시값이 없으면 기존 --verdict 경로(외부 리뷰어 판정 직접 입력)를 사용한다.
-    _cli_exit_arg = getattr(args, "codex_cli_exit_code", None)
+    # IMP-20260710-DB54 rework MT-4(문제2): cache hit 재사용 경로에서는 Codex CLI를 호출하지 않고
+    #   캐시된 APPROVE verdict를 그대로 사용한다. cli_run은 None으로 두어 CLI 미호출을 보장한다.
+    _cli_exit_arg = None if _cache_hit else getattr(args, "codex_cli_exit_code", None)
     cli_run: Optional[Dict[str, Any]] = None
-    if _cli_exit_arg is not None:
+    if _cache_hit:
+        verdict = _cache_verdict_from_cache
+    elif _cli_exit_arg is not None:
         try:
             _cli_exit = int(_cli_exit_arg)
         except (TypeError, ValueError):
@@ -22508,8 +22967,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             return  # unreachable (_finish_codex_review_error가 sys.exit)
         # ERROR가 아니면 verdict를 CLI 결과에서 도출하여 아래 정상 기록 경로로 이어간다.
         verdict = str(cli_run.get("verdict", "") or "")
-    else:
+    elif not _cache_hit:
         verdict = str(getattr(args, "verdict", "") or "").strip()
+    # else: _cache_hit → verdict는 위에서 캐시(_cache_verdict_from_cache)로 이미 설정됨.
 
     if verdict not in ("APPROVE_TO_USER", "REJECT"):
         _die(
@@ -22789,6 +23249,24 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "snapshot_id": "",
         "approval_message_sha256": "",
         "pending_comment_sha256": "",
+        # IMP-20260710-DB54 rework MT-4/MT-5(문제6): 비용 최적화 증거 필드.
+        "cache_hit": _cache_hit,
+        "cache_key": _cache_key_used,
+        "cache_reason": _cache_reason if _cache_hit else str(_cache_probe.get("reason", "") or ""),
+        "verification_json_sha256": _codex_live_sha_snapshot(state, pipeline_id).get(
+            "verification_json_sha256", ""
+        ),
+        "included_functions": list(_preflight_bundle.get("included_functions", []) or []),
+        "excluded_files": list(_preflight_bundle.get("excluded_files", []) or []),
+        # Codex CLI 실제 호출 정보. cache hit이면 CLI 미호출을 명시한다. CLI 버전/모델을 결정적으로
+        # 확인할 수 없는 경우 gpt-5.5 등 특정 모델을 기록하지 않고 "unknown"으로 남긴다(허위 기록 금지).
+        "codex_cli_command": (
+            "N/A (cache hit)" if _cache_hit
+            else ("codex exec -" if cli_run is not None else "N/A (external verdict)")
+        ),
+        "codex_cli_version": "unknown",
+        "codex_model": "unknown",
+        "model_source": "unknown",
     }
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
@@ -22871,25 +23349,32 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   함께 저장하여, 이후 조회 시 critical file이 바뀌면 자동 무효화되게 한다. 캐시 write 실패는
     #   판정에 영향을 주지 않으므로 조용히 무시한다(기존 흐름 보존).
     try:
+        # bundle이 이미 critical_file_shas/excluded_files/changed_critical_files를 계산해두었으므로
+        # 그대로 사용한다(SSoT). 없으면 critical_file_summary로 fallback 계산.
         _cache_critical_shas: Dict[str, str] = {}
-        try:
-            _bundle_for_cache = json.loads(
-                Path(_bundle_path).read_text(encoding="utf-8")
-            )
-            _crit_map = _bundle_for_cache.get("critical_file_summary", {}) \
-                if isinstance(_bundle_for_cache, dict) else {}
-        except Exception:  # noqa: BLE001
-            _crit_map = {}
-        if isinstance(_crit_map, dict):
-            for _cf, _is_crit in _crit_map.items():
-                if not _is_crit:
-                    continue
-                try:
-                    _cfp = BASE_DIR / str(_cf)
-                    if _cfp.exists():
-                        _cache_critical_shas[str(_cf)] = _sha256_file(_cfp)
-                except Exception:  # noqa: BLE001
-                    continue
+        _cache_excluded: List[str] = []
+        _cache_changed_crit: List[str] = []
+        _bundle_crit_shas = _preflight_bundle.get("critical_file_shas")
+        if isinstance(_bundle_crit_shas, dict):
+            _cache_critical_shas = {str(k): str(v) for k, v in _bundle_crit_shas.items()}
+        else:
+            _crit_map = _preflight_bundle.get("critical_file_summary", {})
+            if isinstance(_crit_map, dict):
+                for _cf, _is_crit in _crit_map.items():
+                    if not _is_crit:
+                        continue
+                    try:
+                        _cfp = BASE_DIR / str(_cf)
+                        if _cfp.exists():
+                            _cache_critical_shas[str(_cf)] = _sha256_file(_cfp)
+                    except Exception:  # noqa: BLE001
+                        continue
+        _b_excl = _preflight_bundle.get("excluded_files")
+        if isinstance(_b_excl, list):
+            _cache_excluded = [str(x) for x in _b_excl]
+        _b_cc = _preflight_bundle.get("changed_critical_files")
+        if isinstance(_b_cc, list):
+            _cache_changed_crit = [str(x) for x in _b_cc]
         _cache_entry = {
             "cache_key": _codex_cache_key(
                 _contract_sha256_for_cache, _review_bundle_sha256
@@ -22899,6 +23384,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "verdict": "APPROVE" if verdict == "APPROVE_TO_USER" else "REJECT",
             "status": review_status,
             "critical_file_shas": _cache_critical_shas,
+            "excluded_files": _cache_excluded,
+            "changed_critical_files": _cache_changed_crit,
+            # cache hit 재사용 전 재검증할 7개 live SHA snapshot(문제2).
+            "live_sha_snapshot": _codex_live_sha_snapshot(state, pipeline_id),
             "cached_at": _now(),
         }
         _cache_path = _codex_review_cache_path()
