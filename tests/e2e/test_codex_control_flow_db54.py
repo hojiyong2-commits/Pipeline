@@ -22,9 +22,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-import pytest
+from typing import Any, Dict, List
 
 PIPELINE_PY = Path(__file__).resolve().parent.parent.parent / "pipeline.py"
 PID = "IMP-20260710-DB54"

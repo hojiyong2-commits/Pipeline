@@ -8415,7 +8415,7 @@ def _check_codex_cache(
         raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
 
     cache_key = _codex_cache_key(contract_sha256, review_bundle_sha256)
-    miss = {
+    miss: dict = {
         "hit": False,
         "cached_verdict": None,
         "cache_key": cache_key,
