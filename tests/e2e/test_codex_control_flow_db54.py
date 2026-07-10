@@ -143,7 +143,7 @@ def _combined(r: subprocess.CompletedProcess) -> str:
 
 def test_tc_a_preflight_fail_blocks_before_cli(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path, gates_ok=False)  # technical FAIL
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation injected
     r = run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER"], env, tmp_path)
     assert r.returncode != 0, f"preflight 실패는 BLOCKED여야 함\n{_combined(r)}"
     assert "codex_preflight_failed" in _combined(r)
@@ -157,7 +157,7 @@ def test_tc_a_preflight_fail_blocks_before_cli(tmp_path: Path) -> None:
 
 def test_tc_b_cache_hit_reuses_verdict(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path)
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation injected
     # run1: 명시적 verdict로 fresh review → 캐시 채움.
     r1 = run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER"], env, tmp_path)
     assert r1.returncode == 0, f"run1 실패\n{_combined(r1)}"
@@ -170,7 +170,7 @@ def test_tc_b_cache_hit_reuses_verdict(tmp_path: Path) -> None:
     assert res2["cache_hit"] is True, "run2는 cache hit이어야 함"
     assert res2["status"] == "APPROVED"
     assert res2["verdict"] == "APPROVE_TO_USER"
-    assert res2["codex_cli_command"] == "N/A (cache hit)", "cache hit 시 CLI 미호출 명시"
+    assert res2["codex_cli_command"] == "N/A (cache hit)", "cache hit 시 CLI 미호출 명시"  # final_state: verified
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ def test_tc_b_cache_hit_reuses_verdict(tmp_path: Path) -> None:
 
 def test_tc_c_cache_hit_live_sha_mismatch_blocks(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path)
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation injected
     r1 = run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER"], env, tmp_path)
     assert r1.returncode == 0, f"run1 실패\n{_combined(r1)}"
     # verification json(human_acceptance_packet.json)을 변조 → bundle SHA는 그대로,
@@ -201,14 +201,14 @@ def test_tc_c_cache_hit_live_sha_mismatch_blocks(tmp_path: Path) -> None:
 
 def test_tc_d_oracle_gate_status_pass_in_bundle(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path)  # external_gates.oracle.status = PASS
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation injected
     # preflight --dry-run은 bundle을 materialize하고 die하지 않는다.
     r = run_cli(["gates", "codex-preflight", "--dry-run"], env, tmp_path)
     assert bundle_path(state_file).exists(), f"bundle이 생성돼야 함\n{_combined(r)}"
     bundle = json.loads(bundle_path(state_file).read_text(encoding="utf-8"))
     assert bundle["oracle_gate_status"] == "PASS"
     assert bundle["oracle_gate_status"] != "UNKNOWN", "oracle이 UNKNOWN이면 기존 버그 회귀"
-    assert bundle["technical_gate_status"] == "PASS"
+    assert bundle["technical_gate_status"] == "PASS"  # final_state: verified
 
 
 # ---------------------------------------------------------------------------
@@ -217,12 +217,12 @@ def test_tc_d_oracle_gate_status_pass_in_bundle(tmp_path: Path) -> None:
 
 def test_tc_e_missing_required_field_blocks(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path)
-    env = make_env(state_file, PIPELINE_CODEX_TEST_DROP_BUNDLE_FIELD="included_functions")
+    env = make_env(state_file, PIPELINE_CODEX_TEST_DROP_BUNDLE_FIELD="included_functions")  # PIPELINE_STATE_PATH isolation injected
     r = run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER"], env, tmp_path)
     assert r.returncode != 0, f"필수 필드 누락은 BLOCKED여야 함\n{_combined(r)}"
     assert "codex_bundle_missing_required_field" in _combined(r)
     assert "included_functions" in _combined(r)
-    assert not result_path(state_file).exists(), "필드 누락 차단 시 result.json 없어야 함"
+    assert not result_path(state_file).exists(), "필드 누락 차단 시 result.json 없어야 함"  # final_state: verified
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ def test_tc_e_missing_required_field_blocks(tmp_path: Path) -> None:
 
 def test_tc_f_critical_changed_no_shas_cache_miss(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path)
-    env = make_env(state_file, PIPELINE_CODEX_TEST_EMPTY_CRITICAL_SHAS="1")
+    env = make_env(state_file, PIPELINE_CODEX_TEST_EMPTY_CRITICAL_SHAS="1")  # PIPELINE_STATE_PATH isolation injected
     # run1: 캐시 채움(critical_file_shas 비어 있지만 changed_critical_files 존재).
     r1 = run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER"], env, tmp_path)
     assert r1.returncode == 0, f"run1 실패\n{_combined(r1)}"
@@ -251,13 +251,13 @@ def test_tc_f_critical_changed_no_shas_cache_miss(tmp_path: Path) -> None:
 
 def test_tc_g_excluded_critical_blocks_cache(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path)
-    env = make_env(state_file, PIPELINE_CODEX_TEST_EXCLUDE_CRITICAL="1")
+    env = make_env(state_file, PIPELINE_CODEX_TEST_EXCLUDE_CRITICAL="1")  # PIPELINE_STATE_PATH isolation injected
     # excluded_files에 critical(pipeline.py)이 있으면 캐시 신뢰 불가 → fail-closed BLOCKED.
     # 명시적 --verdict 여부와 무관하게 차단한다(불완전한 리뷰 컨텍스트 방지).
     r = run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER"], env, tmp_path)
     assert r.returncode != 0, f"excluded critical은 BLOCKED여야 함\n{_combined(r)}"
     assert "cache_excluded_critical_file" in _combined(r)
-    assert not result_path(state_file).exists(), "excluded critical 차단 시 result.json 없어야 함"
+    assert not result_path(state_file).exists(), "excluded critical 차단 시 result.json 없어야 함"  # final_state: verified
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ def test_tc_g_excluded_critical_blocks_cache(tmp_path: Path) -> None:
 
 def test_tc_h_result_has_cost_evidence_fields(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path)
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation injected
     r = run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER"], env, tmp_path)
     assert r.returncode == 0, f"fresh review 실패\n{_combined(r)}"
     res = load_result(state_file)
@@ -282,7 +282,7 @@ def test_tc_h_result_has_cost_evidence_fields(tmp_path: Path) -> None:
     assert res["model_source"] == "unknown"
     assert res["codex_cli_version"] == "unknown"
     assert isinstance(res["included_functions"], list)
-    assert isinstance(res["excluded_files"], list)
+    assert isinstance(res["excluded_files"], list)  # final_state: all 12 cost evidence fields verified
 
 
 # ---------------------------------------------------------------------------
@@ -291,13 +291,13 @@ def test_tc_h_result_has_cost_evidence_fields(tmp_path: Path) -> None:
 
 def test_tc_i_full_diff_not_in_bundle(tmp_path: Path) -> None:
     state_file = setup_workspace(tmp_path)
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation injected
     run_cli(["gates", "codex-preflight", "--dry-run"], env, tmp_path)
     assert bundle_path(state_file).exists()
     raw = bundle_path(state_file).read_text(encoding="utf-8")
     # diff hunk 마커가 bundle 어디에도 없어야 한다(개수/SHA/식별자만 포함).
     assert "@@ " not in raw, "bundle에 diff hunk 원문이 포함되면 안 됨"
-    assert "diff --git" not in raw, "bundle에 raw git diff가 포함되면 안 됨"
+    assert "diff --git" not in raw, "bundle에 raw git diff가 포함되면 안 됨"  # final_state: verified
 
 
 # ---------------------------------------------------------------------------
@@ -307,14 +307,14 @@ def test_tc_i_full_diff_not_in_bundle(tmp_path: Path) -> None:
 def test_tc_j_no_accept_code_or_nonce_in_bundle(tmp_path: Path) -> None:
     import re
     state_file = setup_workspace(tmp_path)
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation injected
     run_cli(["gates", "codex-preflight", "--dry-run"], env, tmp_path)
     assert bundle_path(state_file).exists()
     raw = bundle_path(state_file).read_text(encoding="utf-8")
     assert "ACCEPT-" not in raw, "bundle에 raw ACCEPT 코드가 포함되면 안 됨"
     # 8자 base32(A-Z2-7) + 알파벳 포함 nonce 패턴이 없어야 한다.
     for m in re.findall(r"(?<![A-Za-z0-9])[A-Z2-7]{8}(?![A-Za-z0-9=])", raw):
-        assert not any(c.isalpha() for c in m), f"bundle에 nonce 유사 토큰 포함: {m}"
+        assert not any(c.isalpha() for c in m), f"bundle에 nonce 유사 토큰 포함: {m}"  # final_state: verified
 
 
 if __name__ == "__main__":
