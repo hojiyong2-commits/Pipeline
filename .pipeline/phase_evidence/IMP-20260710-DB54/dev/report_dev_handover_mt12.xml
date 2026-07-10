@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260710-DB54</pipeline_id>
+  <handover>
+    <from>dev-agent</from>
+    <run_id>dev-77a0bc6f5422deec</run_id>
+    <commit_sha>c054e363</commit_sha>
+    <to>qa-agent</to>
+    <summary>MT-12 rework: Codex 2차 REJECT 5개 문제 수정 — bundle staged SHA 불변식, included_functions @@ 헤더 파싱, critical file SSoT 보강(AGENTS.md/.claude/commands/.claude/hooks/tests/e2e/test_codex*), stale 상수(_CODEX_PREFLIGHT_HARD_BLOCK_CODES) 제거, TC-K 회귀 테스트 추가. MT-1~MT-12 모두 PASS.</summary>
+  </handover>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_control_flow_db54.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_id>MT-12</mt_id>
+    <target_function>_build_codex_review_bundle</target_function>
+    <change>staged_packet_sha256 우선 사용, verification_json_sha256 staged 전용, @@ 헤더 파싱으로 수정 함수 포함, AGENTS.md/.claude/commands/.claude/hooks/tests/e2e/test_codex critical files 추가, _CODEX_PREFLIGHT_HARD_BLOCK_CODES 제거</change>
+    <target_function>_cmd_gates_codex_review</target_function>
+    <change>verification_json_sha256 staged 우선 사용</change>
+    <state_mutations>codex_review_bundle.json packet_sha256 및 verification_json_sha256 필드 변경, _CODEX_CRITICAL_FILE_EXACT/_CODEX_CRITICAL_FILE_PREFIXES 확장</state_mutations>
+    <risk_assessment>LOW</risk_assessment>
+  </impact_analysis>
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_control_flow_db54.py</file>
+  </implemented_files>
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <scope_lock_check>
+      <extra_files>없음</extra_files>
+      <trust_root_violation>false</trust_root_violation>
+      <verdict>PASS</verdict>
+    </scope_lock_check>
+  </self_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_control_flow_db54.py</file>
+    <file>scope_manifest_MT-12.json</file>
+  </evidence>
+</dev_handover>
