@@ -1,0 +1,10 @@
+{
+  "case_id": "TC-error-split",
+  "case_kind": "exception",
+  "description": "CLI ERROR vs REJECT 분리 케이스 — CLI 오류는 reject_count 증가시키지 않음",
+  "codex_cli_exit_code": 1,
+  "codex_cli_stderr": "rate limit exceeded",
+  "is_cli_error": true,
+  "is_reject": false,
+  "reject_count_before": 1
+}

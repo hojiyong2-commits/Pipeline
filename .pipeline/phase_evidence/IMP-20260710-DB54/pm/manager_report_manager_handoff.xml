@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260710-DB54</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-aa576481206fef17</planner_run_id>
+  <manager_run_id>pipeline_manager-c6234b93df00ad80</manager_run_id>
+  <step_plan_sha256>14f1cbf41fccca54e8dd375bb0381ded799adbdd116f67deabeddaec8bdbd57f</step_plan_sha256>
+  <micro_tasks_count>10</micro_tasks_count>
+  <status>READY_FOR_DEV</status>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+
+  <task_summary>
+    Codex Review 비용 최적화 — deterministic preflight + minimal review bundle + safe cache 구조로 재설계.
+    현재 gates codex-review의 모든 정보를 무조건 Codex CLI에 전달하는 구조를 개선.
+    10개 micro-task: pipeline.py 함수 5개 신규/수정 + 테스트 파일 4개 + 최적화 보고서 1개.
+  </task_summary>
+
+  <pm_planning_verified>true</pm_planning_verified>
+  <planning_notes>decomposition 및 design_confirmation은 step_plan.xml에 기록됨</planning_notes>
+
+  <execution_profile>STANDARD</execution_profile>
+  <risk_flags>
+    <pipeline_protocol>true</pipeline_protocol>
+    <reason>pipeline.py 핵심 로직 수정 — Codex Review 게이트 구조 변경</reason>
+  </risk_flags>
+
+  <phase_plan>
+    <phase id="pm" status="completing" />
+    <phase id="dev" status="pending" />
+    <phase id="qa" status="pending" />
+    <phase id="sec" status="skip" reason="외부 Codex API 호출 있으나 기존 게이트 구조 내 처리" />
+    <phase id="build" status="pending" skip_reason="meta-task" />
+  </phase_plan>
+
+  <execution_plan>
+    <phase name="PM">완료 — oracle 6개 등록, phase attestation 진행</phase>
+    <phase name="Dev">MT-1~MT-10 순차 구현 (Incremental Module Gate)</phase>
+    <phase name="QA">7개 카테고리 검증 후 96점 이상 PASS</phase>
+    <phase name="SEC">skip — 신규 외부 API 없음</phase>
+    <phase name="Build">N/A skip-reason=meta-task</phase>
+    <phase name="ExternalGates">Technical/Oracle/GitHub CI/User Acceptance</phase>
+    <phase name="Architect">RCA 완료</phase>
+  </execution_plan>
+
+  <micro_tasks>
+    <mt id="MT-1" target="pipeline.py" function="_run_codex_preflight_checks" type="new" />
+    <mt id="MT-2" target="pipeline.py" function="_cmd_gates_codex_preflight" type="new" />
+    <mt id="MT-3" target="pipeline.py" function="_build_codex_review_bundle" type="modify" />
+    <mt id="MT-4" target="pipeline.py" function="_check_codex_cache" type="new" />
+    <mt id="MT-5" target="pipeline.py" function="_cmd_gates_codex_review" type="modify" />
+    <mt id="MT-6" target="tests/test_codex_preflight_db54.py" function="test_tc1_*~test_tc6_*" type="new" />
+    <mt id="MT-7" target="tests/test_codex_bundle_db54.py" function="test_tc7_*~test_tc10_*" type="new" />
+    <mt id="MT-8" target="tests/test_codex_cache_db54.py" function="test_tc11_*~test_tc13_*" type="new" />
+    <mt id="MT-9" target="tests/test_codex_rate_limit_db54.py" function="test_tc14_*~test_tc21_*" type="new" />
+    <mt id="MT-10" target="codex_review_optimization_report.md" function="N/A" type="new" />
+  </micro_tasks>
+
+  <user_response>NO_ASKUSER_REQUIRED</user_response>
+</manager_handoff>
