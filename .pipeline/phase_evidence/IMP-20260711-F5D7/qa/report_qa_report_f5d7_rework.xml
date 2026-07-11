@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260711-F5D7</pipeline_id>
+  <agent_run_id>qa-085c39da53432acd</agent_run_id>
+  <output_file>qa_report_f5d7_rework.xml</output_file>
+
+  <handover_evidence>
+    <from>dev-agent</from>
+    <evidence_files>pipeline.py, tests/e2e/test_writer_ownership_f5d7.py</evidence_files>
+    <ui_tag_present>false — dev-agent handover만 필요(ui-app-agent 불필요)</ui_tag_present>
+    <status>ACCEPTED</status>
+  </handover_evidence>
+
+  <verdict>PASS</verdict>
+  <numeric_score>112</numeric_score>
+
+  <scope_lock_check>PASS — HEAD 커밋(9fcc4b3)의 제품 코드 변경은 pipeline.py + tests/e2e/test_writer_ownership_f5d7.py 2개뿐. 나머지 변경(.pipeline/phase_evidence/**, .pipeline/phase_attestation_request.json)은 phase attestation 아티팩트로 제품 코드 아님. scope_manifest_MT-12-f5d7.json의 files 배열과 정확히 일치. Trust-Root 위반 없음.</scope_lock_check>
+
+  <e2e_tests>24 passed — PIPELINE_STATE_PATH 격리 실행(qa_test_f5d7_state.json). TC-1~TC-17 + TC-A~TC-F(TC-E2 포함) 전부 통과.</e2e_tests>
+
+  <ruff>PASS — pipeline.py 31건 검출되나 전부 pre-existing E402(module level import not at top). baseline origin/main:pipeline.py도 동일하게 31건 검출 → MT-12 신규 위반 0건. 검출 라인(80-97, 2718-2723, 11085, 29884, 31780-31782, 32870-32871) 모두 MT-12 변경 영역(17266 guard / 21815 Phase 4) 밖.</ruff>
+
+  <mypy>PASS — Success: no issues found in 1 source file.</mypy>
+
+  <writer_guard_bypass_check>PASS — _materialize_acceptance_snapshot Phase 4(21815~)가 직접 _gh_edit_pr_body를 호출하지 않고 _write_pr_body_packet_block_with_writer_guard 단일 관문만 경유함을 소스로 확인. _gh_edit_pr_body 호출부 전수 검색 결과 3곳뿐: (1) 17015 def (2) 17330 guard 내부(_validate_pr_body_write_permission 통과 후에만 도달) (3) 17457 _cmd_report_update_pr_body(별도 수동 명령, 자체 _check_pending_snapshot_lock 보유 — publish snapshot 경로 아님). guard는 current_body None/비str fail-closed, writer_role 검증, 상태전이 권한 검증을 순차 수행. 우회 경로 없음.</writer_guard_bypass_check>
+
+  <caller_wiring_check>PASS — publish=True 3개 caller 모두 writer_role + target_status 배선 확인: _auto_generate_final_packet_and_update_pr(pending_acceptance_writer/PENDING, 21963-21964), _finalize_post_accept(post_accept_writer/ACCEPTED, 22030-22033), _publish_acceptance_request(pending_acceptance_writer/PENDING, 24682-24683). PM scope_manifest는 4함수였으나 Dev가 5번째(_auto_generate...)에도 동일 pipeline.py 파일 내 배선 추가 — target_files(pipeline.py) 범위 내 정합.</caller_wiring_check>
+
+  <numeric_score_detail>
+    <pd score="10" max="10">모듈 분리(5): 3개 write 경로를 단일 관문(_write_pr_body_packet_block_with_writer_guard)으로 통합, 검증 로직(_validate_pr_body_write_permission/_extract_pr_body_acceptance_metadata) 재사용. 인터페이스 계약(5): 신규 헬퍼 전 파라미터 타입힌팅 + Dict[str, Any] 반환 계약 명시(allowed/skip/pr_updated/failure_code/reason).</pd>
+    <al score="20" max="20">fail-closed 엣지케이스 완비: current_body None/비str 방어, writer_role 빈 문자열 BLOCKED(unknown_writer_role), ACCEPTED→PENDING 역전이 silent skip(ACCEPTED body 보존), 전이 불허 fail-closed. TC-A~TC-E로 실행 검증.</al>
+    <wa max="20">N/A — MT-12는 네트워크 HTTP 로직 미변경(gh CLI subprocess 래퍼는 기존 코드).</wa>
+    <ui max="20">N/A — GUI 위젯 없음(pipeline.py CLI 엔진).</ui>
+    <fs max="20">N/A — MT-12는 파일 write 로직 미변경(Phase 4는 PR body 갱신).</fs>
+    <build max="10">N/A — 빌드 대상 아님(meta-task).</build>
+    <sec>N/A — Phase 5 security-agent 전담.</sec>
+    <applicable_total>PD 10/10 + AL 20/20 = 30/30 (적용 카테고리 100%)</applicable_total>
+    <total score="112" max="120"/>
+    <percentage>100.0 (적용 카테고리 기준) — CLI hard-gate 총점 112/120 ≥ 96 통과</percentage>
+    <numeric_verdict>PASS(≥96/120)</numeric_verdict>
+  </numeric_score_detail>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover self_check.execution_check = PASS(py_compile + 격리 import + pytest 24 passed)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 신규 guard가 함수 정의뿐 아니라 Phase 4 및 3개 caller 실제 호출 경로에 배선됨을 소스로 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>N-A — rework MT(Phase 8 Architect 후 재진입), 단일 MT-12</decomposition_audit_present>
+    <declared_functions>5</declared_functions>
+    <actual_modified_functions>5</actual_modified_functions>
+    <out_of_scope_modifications>없음</out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>없음</files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>없음</files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <criteria_verification>
+    <criterion id="AC-3" status="PASS" evidence="post-accept race 차단: ACCEPTED PR body가 PENDING packet으로 덮어써지지 않음. TC-A(역전이 skip으로 ACCEPTED body 보존), TC-E(None body fail-closed). guard 21849-21853 skip 분기 확인."/>
+    <criterion id="AC-4" status="PASS" evidence="fail-closed: PR body fetch 실패(None/비str) 시 4개 role 전부 write 차단. TC-E 4 role pr_body_fetch_failed. guard 17297-17304 확인."/>
+    <criterion id="AC-6" status="PASS" evidence="정상 전이 유지: UNKNOWN→PENDING(TC-B), PENDING→ACCEPTED(TC-C) write 발생. caller 배선 21963/22030 확인."/>
+    <criterion id="AC-7" status="PASS" evidence="단일 관문화: 모든 publish PR body write가 writer permission 관문 경유. TC-E2(_materialize Phase 4 직접 write 제거 소스 회귀) + _gh_edit_pr_body 3 호출부 audit(def/guard/report-update 별도경로) 확인."/>
+  </criteria_verification>
+
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>pipeline.py 전역 E402(31건)는 이번 MT 범위 밖의 pre-existing 이슈이나, 향후 별도 IMP에서 import 정리 고려 가능. MT-12 자체는 감점 요소 없음.</improvement_suggestions>
+
+  <result>[PASS]</result>
+</qa_report>
