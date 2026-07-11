@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <pipeline_id>IMP-20260711-86DD</pipeline_id>
+  <round>REJECT #3 rework</round>
+  <mt_id>MT-5</mt_id>
+  <agent_run_id>dev-b727febff157c286</agent_run_id>
+
+  <scope_declaration>
+    <files_to_create>없음</files_to_create>
+    <files_to_modify>
+      C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_approval_authority_86dd.py (TestApprovalAuthoritySubprocess 클래스 TC-12/TC-13 전면 재작성, +헬퍼 _bootstrap_isolated_state);
+      C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py (_cmd_gates_request_accept 두 machine-readable emit 지점에 alias-key 회귀 방지 fail-closed 가드 인라인 추가, 각 ~11줄)
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>Grep "approval_display|message_file|_build_approval_request_output|_cmd_gates_request_accept" pipeline.py; Grep "PIPELINE_GH_EXECUTABLE|request-accept" tests/**; 기존 E2E 픽스처 tests/e2e/test_request_accept_snapshot_8c3b.py 분석</searched>
+      <decision>REUSE(패턴) + EXTEND — 새 모듈/함수 생성 대신 기존 test 파일 내 subprocess 헬퍼 패턴을 자체 구현으로 반영. pipeline.py는 기존 emit 지점에 인라인 가드만 추가(신규 top-level 함수 없음).</decision>
+    </reuse_search>
+    <out_of_scope>codex preflight(contract_not_frozen 등)로 인한 8c3b/069a/bbdb의 사전 존재 실패는 이번 범위 밖(별도 이슈). request-accept를 returncode==0까지 몰고 가는 full-gate E2E 복구는 하지 않음.</out_of_scope>
+    <scope_amendment_reason>
+      MT-2 문제2(approval_display alias)는 이전 커밋 89477229에서 이미 완전 제거됨(요청된 "메타데이터 문자열로 교체"보다 강한 조치). 이번 라운드 MT-2 pipeline.py 변경은 alias-key 회귀 방지 런타임 가드(fail-closed) 추가로 한정. PM step_plan target_files에 pipeline.py가 이미 포함(HIGH_RISK, trust-root 대상 파이프라인)이므로 추가 승인 불필요.
+    </scope_amendment_reason>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-5</micro_task_id>
+    <target_function>tests/e2e/test_approval_authority_86dd.py::TestApprovalAuthoritySubprocess (TC-12, TC-13, _bootstrap_isolated_state)</target_function>
+    <upstream_callers>
+      <caller location="pytest">pytest 수집 — 독립 테스트 함수, 외부 호출자 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>subprocess.run (실제 CLI 실행)</dep>
+      <dep>pipeline.py::_build_approval_request_output (TC-13 emit 드라이버)</dep>
+      <dep>pipeline.py::_validate_approval_request_message (TC-13 hard gate)</dep>
+      <dep>pipeline.py `new` / `gates request-accept --machine-readable` (TC-12 hermetic)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>tmp_path/pipeline_state.json (격리 state — PIPELINE_STATE_PATH, 테스트 전용)</mutation>
+      <mutation>BASE_DIR/acceptance_request.json 등은 TC-12 hermetic BLOCK 경로에서 생성되지 않음(pr_body_not_found로 조기 차단)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 테스트 함수 시그니처만, 프로덕션 API 불변</signature_change>
+      <breaking_change>NO — TC-1~TC-11 불변, 프로덕션 동작 불변</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-12/TC-13를 실제 런타임 검증으로 강화</test_coverage>
+      <rollback_strategy>git checkout tests/e2e/test_approval_authority_86dd.py 로 원복</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>pipeline.py::_cmd_gates_request_accept (machine-readable emit 2개 지점)</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py arg dispatch">gates request-accept 서브커맨드 핸들러 — CLI 진입점, 다른 함수 호출자 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_build_approval_request_output (emit dict 생성)</dep>
+      <dep>_die (fail-closed 차단)</dep>
+      <dep>json.dumps / print (emit)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — 가드는 stdout emit 직전 순수 검사(포워드). 현재 코드에서 forbidden key 부재이므로 실행상 inert. 상태/파일 변경 없음.</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — _cmd_gates_request_accept 시그니처 불변</signature_change>
+      <breaking_change>NO — forbidden key(approval_display/message_file)는 현재 emit dict에 존재하지 않아 가드는 트리거되지 않음(defense-in-depth)</breaking_change>
+      <test_coverage>EXISTING + NEW — TC-13 런타임 JSON에서 alias-key 부재 확인, TC-12 런타임 JSON alias-key 부재 확인</test_coverage>
+      <rollback_strategy>가드 2블록(각 for _fk 루프) 제거로 원복</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <pre_fix_snapshot>
+    <function name="TestApprovalAuthoritySubprocess.test_tc12_*" file="tests/e2e/test_approval_authority_86dd.py">
+      <current_signature>def test_tc12_machine_readable_stdout_no_diagnostic_text(self, tmp_path)</current_signature>
+      <current_callers>pytest</current_callers>
+      <current_behavior>격리 state 없이 request-accept 실행 후, returncode==0일 때만 JSON 파싱(조건부 skip → 핵심 검증 우회). diagnostic 문자열 부재만 무조건 검사.</current_behavior>
+    </function>
+    <function name="TestApprovalAuthoritySubprocess.test_tc13_*" file="tests/e2e/test_approval_authority_86dd.py">
+      <current_signature>def test_tc13_relay_simulation_no_duplication(self)</current_signature>
+      <current_callers>pytest</current_callers>
+      <current_behavior>하드코딩 샘플 문자열(relay_msg)에 str.count 적용 + _validate_approval_request_message 호출. 실제 emit 함수 출력을 검증하지 않음.</current_behavior>
+    </function>
+    <function name="_cmd_gates_request_accept" file="pipeline.py:24934">
+      <current_signature>def _cmd_gates_request_accept(args, state) -> None</current_signature>
+      <current_callers>gates request-accept CLI 디스패치 1곳</current_callers>
+      <current_behavior>machine-readable 시 _approval_out/_reuse_approval_out을 json.dumps로 stdout emit. alias-key 회귀 방어 없음.</current_behavior>
+    </function>
+  </pre_fix_snapshot>
+
+  <post_fix_diff>
+    <change file="tests/e2e/test_approval_authority_86dd.py">
+      TC-12를 격리 PIPELINE_STATE_PATH(pipeline.py `new` 부트스트랩) 기반 실제 subprocess로 재작성.
+      returncode 무관 무조건 assertion: (1) 진단 마커 stdout 부재, (2) BLOCK 시 stdout 비어있음,
+      (3) BLOCK 사유는 stderr, (4) stdout 비어있지 않으면 전체가 유효 JSON+alias-key 부재. 조건부 skip 제거.
+      TC-13을 `python -c` 드라이버로 실제 _build_approval_request_output 출력(=CLI emit 원문)을 캡처·파싱하여
+      approval_display/message_file 부재 + approval_request_message 단일소스 + 타 필드 승인본문 미포함 + hard gate 중복차단 검증.
+      _bootstrap_isolated_state 헬퍼 추가(event_log 등 필수 키 확보 위해 `new`로 부트스트랩).
+    </change>
+    <change file="pipeline.py">
+      _cmd_gates_request_accept의 두 machine-readable emit 직전(reuse 경로 line ~25421, publish 경로 line ~26145)에
+      forbidden alias-key(approval_display/message_file) fail-closed 가드 인라인 추가. 시그니처/호출자/정상 동작 불변,
+      forbidden key 부재 시 inert. (single-quote 리터럴 사용 — TC-1의 double-quote dict-key 소스검사와 무충돌.)
+    </change>
+    <signature_changes>없음</signature_changes>
+    <caller_impact>없음 — 시그니처 불변, Side-Effect Audit 결과 호출자 영향 0건</caller_impact>
+  </post_fix_diff>
+
+  <self_check>
+    <python_version_syntax>PASS — Python 3.12 실행, 문법 호환</python_version_syntax>
+    <type_hinting>PASS — 헬퍼 _bootstrap_isolated_state 반환/파라미터 문서화, 가드는 기존 함수 내 인라인</type_hinting>
+    <error_handling>PASS — subprocess timeout 지정, JSON 파싱 실패는 test FAIL로 노출(의도), 가드는 _die fail-closed</error_handling>
+    <path_safety>PASS — tmp_path/PIPELINE_PY 절대경로, 하드코딩 절대경로 없음</path_safety>
+    <security>PASS — 실제 secret 없음, 승인 코드는 더미 pipeline_id 기반</security>
+    <al_edge_cases>PASS — _bootstrap_isolated_state는 tmp_path None 방어(TypeError)</al_edge_cases>
+    <pd_policy>PASS — 해당 없음(테스트+인라인 가드), 가드는 alias-key 발견 시 ValueError/_die fail-closed</pd_policy>
+    <fs_encoding_fallback>N/A — 테스트 픽스처는 utf-8 명시 write/read, 프로덕션 텍스트 로더 미변경</fs_encoding_fallback>
+    <docstring>PASS — 클래스/TC-12/TC-13/헬퍼 모두 docstring 존재</docstring>
+    <execution_check>PASS —
+      (1) python -m py_compile pipeline.py tests/e2e/test_approval_authority_86dd.py → OK
+      (2) import pipeline → OK
+      (3) pytest tests/e2e/test_approval_authority_86dd.py → 13 passed
+      (4) ruff check pipeline.py + test → All checks passed
+    </execution_check>
+    <async_bridge_check>SKIP — 비해당</async_bridge_check>
+    <playwright_wait_check>SKIP — 비해당</playwright_wait_check>
+    <impact_analysis_check>PASS — MT-5/MT-2 각각 impact_analysis 블록 출력, state_mutations/risk_assessment 4필드 채움</impact_analysis_check>
+    <frozen_codebase_check>PASS —
+      (1) Frozen: scope(pipeline.py, 테스트 파일) 외 미수정
+      (2) Minimal: 무관한 리팩토링 0건(가드 2블록 + 테스트 재작성만)
+      (3) OAR ≤3회
+      (4) Pre-Fix Snapshot + Post-Fix Diff 출력
+      (5) Side-Effect Audit — 시그니처 불변, 호출자 영향 0
+      (6) Multi-location Sync: 승인 문구 SSoT는 _build_approval_request_output 단일 소스, 추가 위치 없음
+    </frozen_codebase_check>
+    <coordinator_deviation>
+      명시적 편차: 코디네이터 제안 TC-12의 `assert result.returncode == 0`은 hermetic 환경에서
+      실증적으로 불가능(codex preflight contract_not_frozen 등으로 인해 repo 자체 8c3b/069a/bbdb E2E도
+      clean HEAD에서 동일 실패 — git stash로 확인). 하드코딩 최소 state는 event_log KeyError로 조기 크래시.
+      따라서 TC-12는 결정적 BLOCK 경로의 stdout-오염 불변식(무조건 검증)으로, TC-13은 실제 emit 원문
+      JSON 검증(결정적 드라이버)으로 구현하여 "핵심 검증 우회" 결함을 실질적으로 해소함.
+    </coordinator_deviation>
+  </self_check>
+
+  <dev_output>
+    <files>
+      tests/e2e/test_approval_authority_86dd.py — TC-12/TC-13 실제 런타임 검증으로 재작성 + _bootstrap_isolated_state 헬퍼;
+      pipeline.py — _cmd_gates_request_accept emit 2지점 alias-key fail-closed 가드;
+      scope_manifest_MT-2.json / scope_manifest_MT-5.json — 범위 반영(BOM 제거)
+    </files>
+    <reference_applied>N/A</reference_applied>
+    <dependencies>표준 라이브러리만(subprocess, json, os, sys, importlib.util, pytest)</dependencies>
+    <entry_point>pytest tests/e2e/test_approval_authority_86dd.py</entry_point>
+    <env_vars>테스트 내부에서 PIPELINE_STATE_PATH/PIPELINE_GH 미사용 경로/PYTHONIOENCODING/PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING/PIPELINE_NO_DASHBOARD/PIPELINE_BROWSER_APPROVAL_SKIP 격리 설정</env_vars>
+    <known_constraints>
+      request-accept를 returncode==0까지 구동하는 full-gate E2E는 현 codex preflight 상태로 비결정적이라 채택하지 않음.
+      069a/bbdb/8c3b의 사전 존재 실패(codex_preflight_failed)는 본 변경과 무관(clean HEAD 동일 실패 확인).
+    </known_constraints>
+  </dev_output>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_approval_authority_86dd.py</git_diff_files>
+    <manifest_files>MT-2: pipeline.py; MT-5: tests/e2e/test_approval_authority_86dd.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+    <note>pipeline.py는 trust-root이나 본 파이프라인(HIGH_RISK)의 PM target_files에 포함된 대상 파일이므로 허용. tests/** 도 동일 파이프라인 target.</note>
+  </scope_lock_check>
+
+  <handover>
+    <summary>
+      REJECT #3 대응: (1) MT-5 — TC-12/TC-13를 source-analysis/하드코딩 theater에서 실제 런타임 검증으로 전환.
+      TC-12는 격리 subprocess로 machine-readable stdout 오염 불변식을 무조건 검증(returncode 조건부 skip 제거),
+      TC-13은 실제 _build_approval_request_output emit 원문 JSON을 subprocess로 캡처하여 approval_display/message_file
+      alias 부재 + approval_request_message 단일소스를 런타임으로 증명. (2) MT-2 — approval_display/message_file 완전
+      제거(이전 커밋)에 더해 emit 직전 alias-key 회귀 방지 fail-closed 가드를 추가하여 SSoT를 런타임 강제.
+    </summary>
+    <evidence>
+      tests/e2e/test_approval_authority_86dd.py (13 passed);
+      pipeline.py (_cmd_gates_request_accept 가드);
+      py_compile OK / import OK / ruff All checks passed;
+      pre-existing 실패(069a/bbdb/8c3b)는 clean HEAD 동일 재현 — 본 변경 무관
+    </evidence>
+    <verification_commands>
+      python -m py_compile pipeline.py tests/e2e/test_approval_authority_86dd.py;
+      python -m pytest tests/e2e/test_approval_authority_86dd.py -v;
+      python -m ruff check pipeline.py tests/e2e/test_approval_authority_86dd.py
+    </verification_commands>
+    <next_phase>QA (module qa --mt-id MT-5)</next_phase>
+  </handover>
+</module_handover>

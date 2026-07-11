@@ -1,0 +1,36 @@
+{
+  "pipeline_id": "IMP-20260711-86DD",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "cleanup_report_86dd.md",
+        "tests/oracles/IMP-20260711-86DD/case_edge_dead_code_deleted/expected.txt",
+        "tests/oracles/IMP-20260711-86DD/case_edge_dead_code_deleted/input.txt",
+        "tests/oracles/IMP-20260711-86DD/case_normal_relay_section/expected.txt",
+        "tests/oracles/IMP-20260711-86DD/case_normal_relay_section/input.txt"
+      ],
+      "affected_functions": ["cleanup_report_86dd.md (비코드 산출물)"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_cmd_gates_request_accept", "_build_approval_request_output"]
+    },
+    {
+      "id": "MT-3",
+      "files": [".claude/agents/pipeline-manager-agent.md"],
+      "affected_functions": ["승인 요청 relay 섹션 (pipeline-manager-agent.md)"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["tests/test_codex_review_hook_cd3c.py", "tests/test_codex_review_loop_4121.py"],
+      "affected_functions": ["test_codex_review_hook_cd3c.py", "test_codex_review_loop_4121.py (삭제)"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["tests/e2e/test_approval_authority_86dd.py"],
+      "affected_functions": ["test_approval_authority_86dd.py (신규)"]
+    }
+  ]
+}
