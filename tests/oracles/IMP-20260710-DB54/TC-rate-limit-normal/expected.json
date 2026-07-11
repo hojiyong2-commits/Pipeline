@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-rate-limit-normal",
+  "result": "APPROVE",
+  "reject_count_at_completion": 2,
+  "rate_limit_applied_to": "reject_count_only",
+  "cli_error_not_counted_as_reject": true,
+  "final_verdict": "APPROVE"
+}

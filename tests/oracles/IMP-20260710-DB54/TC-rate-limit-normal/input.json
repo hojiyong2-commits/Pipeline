@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-rate-limit-normal",
+  "case_kind": "edge",
+  "description": "rate-limit 케이스 — REJECT 2회 후 rate-limit 발동, 3회째 재시도",
+  "reject_count": 2,
+  "rate_limit_threshold": 3,
+  "codex_responses": ["REJECT", "REJECT", "APPROVE"]
+}

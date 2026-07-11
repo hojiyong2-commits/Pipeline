@@ -103,6 +103,9 @@ def _base_state_data():
             "sec": {"status": "SKIPPED"},
             "build": {"status": "DONE"},
         },
+        # IMP-20260710-DB54 rework 문제1: codex-review는 preflight에서 contract_frozen을 요구한다.
+        #   이 fixture는 "codex-review 실행 전제조건 충족 state"이므로 frozen 계약을 명시한다.
+        "contract": {"frozen": True},
         "external_gates": {
             "technical": {"status": "PASS"},
             "oracle": {"status": "PASS"},

@@ -1,0 +1,19 @@
+{
+  "case_id": "TC-preflight-edge",
+  "case_kind": "edge",
+  "description": "preflight FAIL 케이스 — bundle에 raw ACCEPT 코드 포함 시도",
+  "state": {
+    "pipeline_id": "IMP-20260710-DB54",
+    "external_gates": {
+      "technical": {"status": "PASS"},
+      "oracle": {"status": "PASS"},
+      "github_ci": {"status": "PASS"}
+    },
+    "contract": {"frozen": true, "contract_sha256": "abc123"},
+    "codex_review_loop_state": {"status": "IDLE", "reject_count": 0}
+  },
+  "bundle_content": {
+    "raw_accept_code_present": true,
+    "accept_code_value": "ACCEPT-IMP-20260710-DB54-deadbeef"
+  }
+}

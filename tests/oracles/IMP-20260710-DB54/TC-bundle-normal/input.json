@@ -1,0 +1,12 @@
+{
+  "case_id": "TC-bundle-normal",
+  "case_kind": "normal",
+  "description": "bundle 정상 생성 케이스 — 최소 필드만 포함, 대형 diff 제외",
+  "state": {
+    "pipeline_id": "IMP-20260710-DB54",
+    "contract": {"frozen": true, "contract_sha256": "def456"}
+  },
+  "pr_diff_lines": 2000,
+  "oracle_count": 6,
+  "include_full_diff": false
+}

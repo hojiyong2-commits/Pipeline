@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-preflight-normal",
+  "result": "PASS",
+  "preflight_checks_passed": 10,
+  "preflight_checks_failed": 0,
+  "blocked": false,
+  "failure_codes": []
+}

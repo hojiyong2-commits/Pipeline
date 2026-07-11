@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-preflight-edge",
+  "result": "BLOCKED",
+  "preflight_checks_passed": 9,
+  "preflight_checks_failed": 1,
+  "blocked": true,
+  "failure_codes": ["bundle_contains_raw_accept_code"]
+}

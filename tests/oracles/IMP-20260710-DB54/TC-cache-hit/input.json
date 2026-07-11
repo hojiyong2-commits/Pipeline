@@ -1,0 +1,15 @@
+{
+  "case_id": "TC-cache-hit",
+  "case_kind": "normal",
+  "description": "cache hit 케이스 — 동일 contract_sha256 + review_bundle_sha256 조합",
+  "cached_result": {
+    "contract_sha256": "abc123",
+    "review_bundle_sha256": "bun456",
+    "verdict": "APPROVE",
+    "cached_at": "2026-07-10T10:00:00Z"
+  },
+  "current_bundle": {
+    "contract_sha256": "abc123",
+    "review_bundle_sha256": "bun456"
+  }
+}

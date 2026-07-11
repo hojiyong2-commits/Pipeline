@@ -1,0 +1,23 @@
+{
+  "case_id": "TC-preflight-normal",
+  "case_kind": "normal",
+  "description": "preflight PASS 케이스 — 모든 필수 조건 충족",
+  "state": {
+    "pipeline_id": "IMP-20260710-DB54",
+    "external_gates": {
+      "technical": {"status": "PASS"},
+      "oracle": {"status": "PASS"},
+      "github_ci": {"status": "PASS"}
+    },
+    "contract": {"frozen": true, "contract_sha256": "abc123"},
+    "codex_review_loop_state": {"status": "IDLE", "reject_count": 0}
+  },
+  "checks": [
+    "technical_gate_pass",
+    "oracle_gate_pass",
+    "github_ci_pass",
+    "contract_frozen",
+    "no_raw_accept_code_in_bundle",
+    "reject_count_below_limit"
+  ]
+}

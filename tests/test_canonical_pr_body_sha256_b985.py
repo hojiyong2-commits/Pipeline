@@ -2795,9 +2795,23 @@ class TestMT30AcceptancePendingAndShaSync:
             return "should not be called (frozen SHA must be used)"
 
         monkeypatch.setattr(pl, "_load_acceptance_staging", lambda pid: dict(staging))
-        monkeypatch.setattr(
-            pl, "_build_codex_review_bundle", lambda state, pid: ("BUNDLESHA", str(tmp_path / "b.json"))
-        )
+
+        # IMP-20260710-DB54 rework: codex-review는 이제 bundle 파일을 로드하여 필수 필드/gate 상태를
+        #   검증한다. 실제 bundle 파일을 써서 새 전제조건(필수 필드 + gate 상태 일치)을 충족시킨다.
+        #   (이 테스트의 검증 대상은 pr_body_candidate_sha256 동기화이며, 그 assertion은 그대로 유지된다.)
+        def _fake_build_bundle(_state, _pid):
+            _bp = tmp_path / "b.json"
+            _bp.write_text(json.dumps({
+                "pipeline_id": _pid, "contract_sha256": "csha",
+                "technical_gate_status": "PASS", "oracle_gate_status": "PASS",
+                "github_ci_gate_status": "PASS",
+                "included_functions": [], "excluded_files": [],
+                "critical_file_shas": {}, "test_summary": {},
+                "changed_critical_files": [],
+            }), encoding="utf-8")
+            return ("BUNDLESHA", str(_bp))
+
+        monkeypatch.setattr(pl, "_build_codex_review_bundle", _fake_build_bundle)
         monkeypatch.setattr(
             pl, "_check_codex_rate_limit",
             lambda *a, **k: {"status": "OK", "reason": ""},
@@ -2843,7 +2857,16 @@ class TestMT30AcceptancePendingAndShaSync:
             packet_sha256="",
             reason="",
         )
-        state = {"pipeline_id": "IMP-20260703-B985", "event_log": []}
+        # IMP-20260710-DB54 rework: preflight는 gate PASS + frozen contract를 요구한다.
+        state = {
+            "pipeline_id": "IMP-20260703-B985", "event_log": [],
+            "external_gates": {
+                "technical": {"status": "PASS"},
+                "oracle": {"status": "PASS"},
+                "github_ci": {"status": "PASS"},
+            },
+            "contract": {"frozen": True},
+        }
 
         with pytest.raises(SystemExit) as exc:
             pl._cmd_gates_codex_review(args, state)

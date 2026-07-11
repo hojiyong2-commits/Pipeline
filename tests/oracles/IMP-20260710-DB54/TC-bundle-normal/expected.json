@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-bundle-normal",
+  "result": "PASS",
+  "bundle_fields_present": ["contract_sha256", "review_bundle_sha256", "pipeline_id", "changed_files_count", "oracle_count"],
+  "full_diff_excluded": true,
+  "oracle_raw_excluded": true,
+  "bundle_size_under_limit": true
+}

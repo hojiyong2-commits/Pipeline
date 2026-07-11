@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-error-split",
+  "result": "CLI_ERROR",
+  "reject_count_after": 1,
+  "reject_count_unchanged": true,
+  "status": "CLI_ERROR",
+  "error_message": "Codex CLI 오류 — reject_count 증가 없음"
+}
