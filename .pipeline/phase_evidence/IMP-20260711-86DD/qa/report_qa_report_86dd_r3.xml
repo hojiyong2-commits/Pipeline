@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260711-86DD</pipeline_id>
+  <round>REJECT #3 rework final QA</round>
+  <verdict>PASS</verdict>
+  <numeric_score>112</numeric_score>
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 카테고리 아님 (approval 출력 권한 SSoT 정리 meta-task)</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>N-A — scratch 저장은 non-fatal 내부 저장 전용, FS 카테고리 주 대상 아님</fs>
+    <pd>PASS — approval_request_message 단일 소스(SSoT). _build_approval_request_output이 유일 조립 지점, 이중 relay 경로(approval_display/message_file) 제거로 출력 권한 분리 달성</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — fail-closed 방어 완비: None/비str TypeError, 빈 문자열/count!=1 ValueError, alias-key membership 가드로 emit 직전 즉시 차단</al>
+    <build>N-A — meta-task (pipeline.py + agent MD + tests), EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 네트워크 카테고리 아님</wa>
+    <ui score="0" max="20">N/A — GUI 없음</ui>
+    <fs score="0" max="20">N/A</fs>
+    <pd score="10" max="10">모듈분리 5/5 (approval 출력 SSoT 단일화) / 인터페이스계약 5/5 (_build_approval_request_output -> Dict[str, Any] 타입 계약 + fail-closed 입력 검증)</pd>
+    <al score="20" max="20">0나눗셈 N/A / 범위 N/A / 타입가드 5 (isinstance TypeError) / 빈데이터 5 + 구조 count 검증 fail-closed 10</al>
+    <total score="112" max="120"/>
+    <percentage>93.3</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+  </numeric_score_detail>
+  <criteria_verification>
+    <criterion id="AC-1" status="PASS" evidence="TC-1/TC-8/TC-10: _build_approval_request_output 반환 dict 및 req_candidate에서 approval_display 키 완전 제거. grep no matches로 실행 코드 부재 재확인. 이중 relay dead code 제거 완료"/>
+    <criterion id="AC-2" status="PASS" evidence="TC-2: machine-readable JSON stdout에 _approval_out[&quot;message_file&quot;] 할당 부재. 라인 25411/26147 주석으로 message_file 미추가 명시. grep no matches 재확인"/>
+    <criterion id="AC-3" status="PASS" evidence="TC-3/TC-12: 진단 메시지([PR 본문 SHA 재기록]/[CODEX CANONICAL SHA 기록]) print()->sys.stderr.write()+flush 전환 확인(라인 24758/24784). TC-12 실제 subprocess에서 machine-readable stdout 오염 불변식 exit code 무관 검증"/>
+    <criterion id="AC-4" status="PASS" evidence="TC-9/TC-11/TC-13: _validate_approval_request_message가 4요소 count==1 fail-closed 검증. TC-11/TC-13이 실제 import 호출로 정상 통과 + 중복 relay(count!=1) ValueError BLOCKED + None TypeError 검증"/>
+    <criterion id="AC-5" status="PASS" evidence="라인 25425/26160: 두 emit 지점 모두 ('approval_display','message_file') membership fail-closed 가드로 emit 직전 alias 키 회귀 시 _die 차단(failure_code=approval_json_forbidden_key). inert defense-in-depth"/>
+  </criteria_verification>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover에 13 tests PASS + ruff PASS 실행 증거</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — 가드가 실제 emit 분기 내부에 배치되어 매 machine-readable 출력 시 실행됨. 함수 정의만 존재하는 dead code 아님</functional_binding_verified>
+  </runtime_functional_check>
+  <test_results>
+    <command>python -m pytest tests/e2e/test_approval_authority_86dd.py -v</command>
+    <total>13</total>
+    <passed>13</passed>
+    <failed>0</failed>
+    <ruff>PASS (All checks passed)</ruff>
+    <detail>TC-1~TC-11 source-analysis + import-level, TC-12 격리 PIPELINE_STATE_PATH subprocess(stdout 오염 불변식), TC-13 python -c 드라이버 실제 emit JSON 4요소 단일소스 검증 — 모두 PASS</detail>
+  </test_results>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - 두 emit 지점의 alias-key 가드 로직이 동일 패턴으로 중복되어 있음. 향후 _emit_approval_json(out) 헬퍼로 추출하면 가드 로직 SSoT화 가능(현재는 중복이나 각각 다른 분기 컨텍스트라 FAIL 사유 아님).
+    - _validate_approval_request_message의 forbidden_phrases 목록은 하드코딩 상수. 향후 모듈 상수로 승격하면 테스트 가시성 향상.
+  </improvement_suggestions>
+</qa_report>
