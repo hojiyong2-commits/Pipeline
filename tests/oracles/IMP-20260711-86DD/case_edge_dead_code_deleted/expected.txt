@@ -1,0 +1,4 @@
+hook_test_exists: false
+loop_test_exists: false
+verdict: PASS
+description: MT-4 dead code 테스트 파일 2개가 삭제되어 존재하지 않는다 (AC-3)
