@@ -214,6 +214,25 @@ jobs:
           $prBody = [string]$pr.body
           $prBody = $prBody.TrimStart([char]0xFEFF)
 
+          # IMP-20260711-F5D7 MT-8 (rework): PR body가 이미 ACCEPTED 상태면 final-check writer를 skip한다.
+          # (post-accept race condition 방지 — ACCEPTED PR body를 PENDING packet으로 덮어쓰지 않음)
+          # 이전 버전은 comment 전용 marker(pipeline-human-acceptance-packet-accepted)를 PR body에서
+          # 찾았으나 그 marker는 PR body에 없어 skip이 절대 발동하지 않았다. 이제 post-accept가 PR body의
+          # PIPELINE_FINAL_PACKET 블록 안에 남기는 실제 metadata를 기준으로 ACCEPTED를 판정한다:
+          #   (1) writer-meta comment: pipeline-writer-meta ... acceptance_status=ACCEPTED
+          #   (2) embed된 packet JSON: "acceptance": { ... "status": "ACCEPTED" }
+          $bodyAccepted = $false
+          if ($prBody -match "pipeline-writer-meta[^\r\n]*acceptance_status=ACCEPTED") {
+            $bodyAccepted = $true
+          } elseif ($prBody -match '"acceptance"\s*:\s*\{[^{}]*"status"\s*:\s*"ACCEPTED"') {
+            $bodyAccepted = $true
+          }
+          if ($bodyAccepted) {
+            Write-Host "PR body already ACCEPTED — skip final-check writer (IMP-20260711-F5D7)"
+            "SKIP_FINAL_CHECK_WRITER=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            exit 0
+          }
+
           # packet freshness 검증: PR 본문 JSON 우선, 없으면 파일 fallback.
           # DEFECT-B: run_id/head SHA 불일치 시 fallback 없이 fail-closed.
           $packetJsonPath = "human_acceptance_packet.json"
@@ -703,6 +722,26 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
+          # IMP-20260711-F5D7 MT-9: SKIP_FINAL_CHECK_WRITER가 true이면(=이미 ACCEPTED) skip 사유를
+          # PR comment에 기록하고 종료한다. ACCEPTED PR을 PENDING 최종 확인 안내로 덮어쓰지 않는다.
+          if ($env:SKIP_FINAL_CHECK_WRITER -eq "true") {
+            $skipRepo = $env:GITHUB_REPOSITORY
+            $skipPr = "${{ github.event.pull_request.number }}"
+            $skipHeaders = @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept = "application/vnd.github+json"
+              "X-GitHub-Api-Version" = "2022-11-28"
+            }
+            $skipBody = "<!-- pipeline-final-check-writer-skipped -->`nCI final-check writer: PR body가 이미 ACCEPTED 상태이므로 skip합니다 (IMP-20260711-F5D7)."
+            $skipPayload = @{ body = $skipBody } | ConvertTo-Json -Depth 4
+            $skipUri = "$env:GITHUB_API_URL/repos/$skipRepo/issues/$skipPr/comments"
+            try {
+              Invoke-RestMethod -Method Post -Uri $skipUri -Headers $skipHeaders -Body $skipPayload -ContentType "application/json; charset=utf-8" | Out-Null
+            } catch {
+              Write-Host "skip comment 게시 실패 (graceful): $_"
+            }
+            exit 0
+          }
           $repo = $env:GITHUB_REPOSITORY
           $prNumber = "${{ github.event.pull_request.number }}"
           $headers = @{

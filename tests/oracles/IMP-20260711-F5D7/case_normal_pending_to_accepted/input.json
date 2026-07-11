@@ -1,0 +1,10 @@
+{
+  "case_id": "case_normal_pending_to_accepted",
+  "case_kind": "normal",
+  "description": "post_accept_writer가 PENDING 상태의 PR body를 ACCEPTED로 전이 — 허용되어야 함",
+  "current_acceptance_status": "PENDING",
+  "writer_role": "post_accept_writer",
+  "target_status": "ACCEPTED",
+  "current_pr_body_snippet": "<!-- pipeline-human-acceptance-packet-pending -->",
+  "writer_epoch": "epoch-2026-test-001"
+}

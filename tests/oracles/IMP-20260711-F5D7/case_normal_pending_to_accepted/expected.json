@@ -1,0 +1,8 @@
+{
+  "case_id": "case_normal_pending_to_accepted",
+  "result": "PASS",
+  "pr_body_updated": true,
+  "acceptance_status": "ACCEPTED",
+  "failure_code": null,
+  "reason": "post_accept_writer는 PENDING → ACCEPTED 전이가 허용된다"
+}
