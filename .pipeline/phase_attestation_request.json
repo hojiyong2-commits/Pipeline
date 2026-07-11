@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-11T12:32:57Z",
+  "pipeline_id": "IMP-20260711-86DD",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "aaef2c685fc722c005f129e385b67daa9a423021",
+  "state": {
+    "current_phase": "dev",
+    "phase_completed_at": "2026-07-11T12:32:06Z",
+    "report_file": "module_handover_MT-5.xml",
+    "evidence": "cleanup_report_86dd.md,pipeline.py,.claude/agents/pipeline-manager-agent.md,tests/e2e/test_approval_authority_86dd.py,tests/oracles/IMP-20260711-86DD/case_edge_dead_code_deleted/expected.txt,tests/oracles/IMP-20260711-86DD/case_edge_dead_code_deleted/input.txt,tests/oracles/IMP-20260711-86DD/case_normal_relay_section/expected.txt,tests/oracles/IMP-20260711-86DD/case_normal_relay_section/input.txt"
+  },
+  "agent_run": {
+    "run_id": "dev-79379d6d50964148",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "module_handover_MT-5.xml",
+    "output_sha256": "31a28572e1eabdc6c84a6080d3357ea239dd11ff9adbf8a2184c3d3aa42dcb82",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260711-86DD/dev/agent_receipt_dev-79379d6d50964148.json",
+    "receipt_sha256": "fab93a8211aacfef8b85b3a8dcef2d4a0d5333492aa25d49d2f7c6a9a3908c94",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260711-86DD\\dev\\dev-79379d6d50964148.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260711-86DD\\dev\\dev-79379d6d50964148.json",
+      "path": ".pipeline/phase_evidence/IMP-20260711-86DD/dev/agent_receipt_dev-79379d6d50964148.json",
+      "sha256": "fab93a8211aacfef8b85b3a8dcef2d4a0d5333492aa25d49d2f7c6a9a3908c94",
+      "size_bytes": 510,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "module_handover_MT-5.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260711-86DD/dev/report_module_handover_MT-5.xml",
+      "sha256": "31a28572e1eabdc6c84a6080d3357ea239dd11ff9adbf8a2184c3d3aa42dcb82",
+      "size_bytes": 1763,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260711-86DD/dev/scope_manifest_scope_manifest.json",
+      "sha256": "4d3da6ad42d5404e44962e32a6f6718140268669a69aeea3f888a5b18d525873",
+      "size_bytes": 1301,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "cleanup_report_86dd.md",
+      "sha256": "26c6d0f372f9028462890203f5150c9b32c345b02382e332a47608e2aa550355",
+      "size_bytes": 2746
+    },
+    {
+      "path": "pipeline.py",
+      "sha256": "974dbd68c49db68031bef15cdfbebd7cf97c696d915433834e1cda5d26841baf",
+      "size_bytes": 1593001
+    },
+    {
+      "path": ".claude/agents/pipeline-manager-agent.md",
+      "sha256": "5ef228f6b36bbea97f473488bc9c3a7e7049a251f121014af32a5e8e65c3db15",
+      "size_bytes": 17755
+    },
+    {
+      "path": "tests/e2e/test_approval_authority_86dd.py",
+      "sha256": "8a5d59914ce4f7974c7fc1da1e79f2ac1b6c68d4b01d30d78bf1d74c39c626e4",
+      "size_bytes": 12411
+    },
+    {
+      "path": "tests/oracles/IMP-20260711-86DD/case_edge_dead_code_deleted/expected.txt",
+      "sha256": "c2a048f46b0ad7f33441982b552f7ab1b67564d5a0c3b5b3d17440b81f6eec99",
+      "size_bytes": 158
+    },
+    {
+      "path": "tests/oracles/IMP-20260711-86DD/case_edge_dead_code_deleted/input.txt",
+      "sha256": "13feaa0cae117971860203df22e297aa4d96369938fc4c0da98bda47868858ab",
+      "size_bytes": 238
+    },
+    {
+      "path": "tests/oracles/IMP-20260711-86DD/case_normal_relay_section/expected.txt",
+      "sha256": "b0877a1b49ebd7d9cb5c480e8005e808bc28313999f900529921daf619b139ba",
+      "size_bytes": 151
+    },
+    {
+      "path": "tests/oracles/IMP-20260711-86DD/case_normal_relay_section/input.txt",
+      "sha256": "441e713c97b296c3dda93e076c15413cd07c785f0fbc4607107555f63ecc42d1",
+      "size_bytes": 368
+    }
+  ],
+  "local_only_files": []
+}

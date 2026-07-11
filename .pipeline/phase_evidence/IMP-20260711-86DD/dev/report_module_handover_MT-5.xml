@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <mt_id>MT-5</mt_id>
+  <pipeline_id>IMP-20260711-86DD</pipeline_id>
+  <description>
+    QA Round 1 FAIL 3건 수정. (1) dead code: 0회 호출되던 run_pipeline 헬퍼와
+    동반 미사용 import(os/subprocess/sys) 제거 — 자기모순 해소, ruff F401 clean.
+    (2) Runtime Functional Verification Gate 위반: 허위 "runtime behavior" 주장을
+    모듈 docstring에서 제거하고 "source-analysis and import-level verification"로 정정.
+    (3) TC-11 tautology 제거: 하드코딩 str.count 대신 pipeline._validate_approval_request_message를
+    실제로 import·호출하여 정상 최소 고정 양식 통과 + 중복(count!=1) BLOCKED ValueError +
+    None fail-closed TypeError를 검증. TC-1~TC-11 pass/fail 판정 불변(11 passed).
+  </description>
+  <implemented_files>
+    <file>tests/e2e/test_approval_authority_86dd.py</file>
+  </implemented_files>
+  <self_check>
+    <syntax>PASS — python -m py_compile 통과</syntax>
+    <dead_code>PASS — run_pipeline 제거(grep 0건), 미사용 import 제거(ruff F401 All checks passed)</dead_code>
+    <tests>PASS — python -m pytest tests/e2e/test_approval_authority_86dd.py 결과 11 passed in 2.16s</tests>
+    <import_level_verification>PASS — TC-11이 _import_pipeline로 pipeline._validate_approval_request_message를 직접 호출</import_level_verification>
+    <scope>PASS — git diff --name-only HEAD = tests/e2e/test_approval_authority_86dd.py 단일 파일, Trust-Root 위반 없음</scope>
+  </self_check>
+  <evidence>
+    <file>tests/e2e/test_approval_authority_86dd.py</file>
+    <test_result>11 passed in 2.16s</test_result>
+    <ruff_f401>All checks passed</ruff_f401>
+  </evidence>
+</module_handover>
