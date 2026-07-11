@@ -5877,10 +5877,6 @@ def _build_approval_request_output(pipeline_id: str, pr_url: str) -> Dict[str, A
     _validate_approval_request_message(approval_request_message)
     return {
         "approval_request_message": approval_request_message,
-        # DEPRECATED: use approval_request_message
-        # (IMP-20260711-86DD MT-2) approval_display는 approval_request_message와 동일 내용을 담는
-        # 구버전 하위 호환 필드다. 신규 코드는 approval_request_message만 사용한다.
-        "approval_display": approval_request_message,  # MT-34: main context가 파일에서 직접 읽는 표시용 필드
         "acceptance_code_display": acceptance_code_display,
         "pr_url": pr_url,
         "codex_required": True,
@@ -24758,7 +24754,8 @@ def _publish_acceptance_request(
                 json.dumps(_req_post, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            print("  [PR 본문 SHA 재기록] pr_body_sha256 + github_canonical_pr_body_sha256(canonical) 업데이트 완료")
+            if not getattr(args, "machine_readable", False):
+                print("  [PR 본문 SHA 재기록] pr_body_sha256 + github_canonical_pr_body_sha256(canonical) 업데이트 완료")
         except (OSError, json.JSONDecodeError, TypeError) as _exc:
             _die(
                 "[BLOCKED] failure_code=pr_body_resync_failed\n"
@@ -24782,10 +24779,11 @@ def _publish_acceptance_request(
                         json.dumps(_cx_post, ensure_ascii=False, indent=2),
                         encoding="utf-8",
                     )
-                    print(
-                        "  [CODEX CANONICAL SHA 기록] "
-                        "github_canonical_pr_body_sha256 업데이트 완료"
-                    )
+                    if not getattr(args, "machine_readable", False):
+                        print(
+                            "  [CODEX CANONICAL SHA 기록] "
+                            "github_canonical_pr_body_sha256 업데이트 완료"
+                        )
         except (OSError, json.JSONDecodeError, TypeError) as _cx_exc:
             _die(
                 "[BLOCKED] failure_code=codex_canonical_resync_failed\n"
@@ -25411,13 +25409,14 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         # IMP-20260703-B985 MT-31: machine-readable 시 scratch 경로에 final_user_message.txt 자동 저장.
         if getattr(args, "machine_readable", False):
             _reuse_arm = _reuse_approval_out.get("approval_request_message", "")
+            # IMP-20260711-86DD MT-2: message_file을 JSON에 추가하지 않음 (이중 relay 경로 차단).
+            # scratch 저장은 내부 저장 전용이며 JSON stdout에는 포함하지 않는다.
             try:
                 _reuse_scratch_dir = _get_scratch_dir(pipeline_id)
                 _reuse_msg_path = os.path.join(_reuse_scratch_dir, "final_user_message.txt")
                 _reuse_msg_bytes = _reuse_arm.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
                 with open(_reuse_msg_path, "wb") as _rmf:
                     _rmf.write(_reuse_msg_bytes)
-                _reuse_approval_out["message_file"] = _reuse_msg_path
             except OSError:
                 pass  # scratch 저장 실패는 non-fatal
             print(json.dumps(_reuse_approval_out, ensure_ascii=False))
@@ -26102,8 +26101,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             + "\n  " + str(_ready.get("message", "승인 요청 사전 검증 실패."))
             + "\n  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed."
         )
-    # IMP-20260703-B985 MT-34: approval_display 필드를 req_candidate에 저장하여
-    # main context가 acceptance_request.json에서 직접 읽을 수 있도록 한다.
     _approval_out = _build_approval_request_output(pipeline_id, pr_url or "")
     # IMP-20260703-B985 MT-24 (REJECT #19): copy-only approval message.
     # 방금 publish한 consolidated snapshot의 frozen approval_request_message_text를 그대로 사용한다
@@ -26115,7 +26112,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     )
     if _approval_frozen_msg:
         _approval_out["approval_request_message"] = _approval_frozen_msg
-        _approval_out["approval_display"] = _approval_frozen_msg
     # IMP-20260703-B985 MT-24 (REJECT #19): approval_request_message 빈 문자열 방어.
     # publish 후 승인 요청 안내문이 비어 있으면(0-length) 사용자가 승인 코드를 확인할 채널이
     # 사라지므로 fail-closed BLOCKED로 차단한다.
@@ -26128,7 +26124,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
             "  gates request-accept를 다시 실행하세요."
         )
-    req_candidate["approval_display"] = _approval_out["approval_request_message"]
     # IMP-20260624-069A MT-1: User Acceptance 최종 승인 요청문을 최소 고정 양식으로 통일.
     # IMP-20260703-B985 MT-16: --machine-readable 시 human stdout 없이 JSON만 출력.
     # IMP-20260703-B985 MT-24: human/machine 모두 snapshot의 frozen approval message를 1회만 출력한다.
@@ -26138,14 +26133,14 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # print()/sys.stdout.write() 하지 않는다. 이중 출력 방지 불변식 — 이 분기에 human print 추가 금지.
     if getattr(args, "machine_readable", False):
         _arm = _approval_out.get("approval_request_message", "")
-        # scratch 저장 (BOM 없이 LF UTF-8)
+        # scratch 저장 (BOM 없이 LF UTF-8) — 내부 저장 전용, JSON stdout에는 포함하지 않음
+        # IMP-20260711-86DD MT-2: message_file을 JSON에 추가하지 않음 (이중 relay 경로 차단)
         try:
             _scratch_dir = _get_scratch_dir(pipeline_id)
             _msg_path = os.path.join(_scratch_dir, "final_user_message.txt")
             _msg_bytes = _arm.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
             with open(_msg_path, "wb") as _mf:
                 _mf.write(_msg_bytes)
-            _approval_out["message_file"] = _msg_path
         except OSError:
             pass  # scratch 저장 실패는 non-fatal — JSON 출력은 계속 진행
         print(json.dumps(_approval_out, ensure_ascii=False))
