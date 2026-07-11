@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-11T03:00:47Z",
+  "pipeline_id": "IMP-20260711-F5D7",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "616bc26a718a8d3954036cbbcdb7c596f918c2c4",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-07-11T02:31:45Z",
+    "report_file": "dev_handover_F5D7.xml",
+    "evidence": "pipeline.py,.github/workflows/ci.yml,tests/e2e/test_writer_ownership_f5d7.py,tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/input.json,tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/expected.json,tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/input.json,tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/expected.json"
+  },
+  "agent_run": {
+    "run_id": "dev-4b45e11749c9dd1d",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_F5D7.xml",
+    "output_sha256": "aab66ed1b92f0be148b888454d0fdedf346aca36c923f26ee5178a95e31545d3",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260711-F5D7/dev/agent_receipt_dev-4b45e11749c9dd1d.json",
+    "receipt_sha256": "c7b383c43c9ff7ca5b0503aa482d273f237bf84c991e3014a46758cc02760752",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260711-F5D7\\dev\\dev-4b45e11749c9dd1d.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260711-F5D7\\dev\\dev-4b45e11749c9dd1d.json",
+      "path": ".pipeline/phase_evidence/IMP-20260711-F5D7/dev/agent_receipt_dev-4b45e11749c9dd1d.json",
+      "sha256": "c7b383c43c9ff7ca5b0503aa482d273f237bf84c991e3014a46758cc02760752",
+      "size_bytes": 507,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_F5D7.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260711-F5D7/dev/report_dev_handover_F5D7.xml",
+      "sha256": "aab66ed1b92f0be148b888454d0fdedf346aca36c923f26ee5178a95e31545d3",
+      "size_bytes": 5020,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260711-F5D7/dev/scope_manifest_scope_manifest.json",
+      "sha256": "1c3c29c11a77104e0ba56b63a7423e3ce18601b4d9e08b6b380bbb741289d7f0",
+      "size_bytes": 4810,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "5154a063bdc52328248a83450bc0a7ee182e48858b53e7ae901f1bb65fed82e5",
+      "size_bytes": 1567590
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "56b2aaa9f9769d46554d84725f5cda833c1be8af53fe9f94858728ea9313e00a",
+      "size_bytes": 35603
+    }
+  ],
+  "local_only_files": []
+}
