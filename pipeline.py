@@ -25418,6 +25418,17 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                     _rmf.write(_reuse_msg_bytes)
             except OSError:
                 pass  # scratch 저장 실패는 non-fatal
+            # IMP-20260711-86DD MT-2 (Output Authority SSoT): emit 직전 alias 키 회귀 방지 (fail-closed).
+            # approval_request_message가 유일한 user-facing 필드다. approval_display/message_file 같은
+            # 승인 본문 alias 키가 다시 추가되면 이중 relay 경로가 생기므로 JSON 출력 전에 즉시 차단한다.
+            # (membership 검사 — dict-key 할당이 아니므로 single-quote 리터럴 사용.)
+            for _fk in ('approval_display', 'message_file'):
+                if _fk in _reuse_approval_out:
+                    _die(
+                        "[BLOCKED] failure_code=approval_json_forbidden_key\n"
+                        f"  machine-readable 승인 JSON에 금지 alias 키 '{_fk}'가 포함됨.\n"
+                        "  approval_request_message만 user-facing 필드여야 합니다 (이중 relay 경로 차단)."
+                    )
             print(json.dumps(_reuse_approval_out, ensure_ascii=False))
         else:
             print()
@@ -26142,6 +26153,17 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 _mf.write(_msg_bytes)
         except OSError:
             pass  # scratch 저장 실패는 non-fatal — JSON 출력은 계속 진행
+        # IMP-20260711-86DD MT-2 (Output Authority SSoT): emit 직전 alias 키 회귀 방지 (fail-closed).
+        # approval_request_message가 유일한 user-facing 필드다. approval_display/message_file 같은
+        # 승인 본문 alias 키가 다시 추가되면 이중 relay 경로가 생기므로 JSON 출력 전에 즉시 차단한다.
+        # (membership 검사 — dict-key 할당이 아니므로 single-quote 리터럴 사용.)
+        for _fk in ('approval_display', 'message_file'):
+            if _fk in _approval_out:
+                _die(
+                    "[BLOCKED] failure_code=approval_json_forbidden_key\n"
+                    f"  machine-readable 승인 JSON에 금지 alias 키 '{_fk}'가 포함됨.\n"
+                    "  approval_request_message만 user-facing 필드여야 합니다 (이중 relay 경로 차단)."
+                )
         print(json.dumps(_approval_out, ensure_ascii=False))
     else:
         print()

@@ -264,98 +264,219 @@ class TestApprovalAuthority:
 
 
 class TestApprovalAuthoritySubprocess:
-    """TC-12 ~ TC-13: subprocess 기반 E2E 및 relay 시뮬레이션"""
+    """TC-12 ~ TC-13: subprocess 기반 실제 런타임 검증 (source-analysis 아님).
 
-    def test_tc12_machine_readable_stdout_no_diagnostic_text(self, tmp_path):
-        """TC-12 (subprocess E2E): --machine-readable 모드에서 stdout에 diagnostic text 없음
+    설계 근거 (REJECT #3 rework):
+      - TC-12는 격리 PIPELINE_STATE_PATH로 `gates request-accept --machine-readable`을
+        실제 subprocess로 실행하여 machine-readable stdout이 절대 오염되지 않음을 검증한다.
+        assertion은 exit code와 무관하게 무조건 실행된다(returncode==0일 때만 검사하는
+        skip/bypass 패턴 제거). hermetic 환경에서는 gh/PR가 없어 pr_body_not_found로
+        결정적으로 BLOCK되며, 이때 stdout은 반드시 비어 있어야 한다(진단/에러는 stderr).
+      - TC-13은 `python -c` 드라이버로 실제 pipeline._build_approval_request_output을 호출하고
+        CLI가 emit하는 것과 동일한 json.dumps 결과(=machine-readable JSON stdout 원문)를
+        subprocess stdout으로 캡처하여 구조를 검증한다. 하드코딩 샘플 문자열이 아니라
+        실제 emit 함수의 런타임 출력을 파싱한다. approval_display/message_file alias 부재와
+        approval_request_message 단일 소스를 런타임 JSON에서 직접 확인한다.
 
-        gates request-accept --machine-readable 실행 시
-        '[PR 본문 SHA 재기록]', '[CODEX CANONICAL SHA 기록]' 같은 진단 메시지가
-        stdout에 섞이면 json.loads(stdout)가 실패한다.
+    참고: `gates request-accept`를 returncode==0까지 몰고 가려면 frozen contract + codex
+    APPROVE_TO_USER + fake gh 스택이 필요하며, 현 codex preflight(contract_not_frozen 등)로는
+    hermetic 성공이 비결정적이다. 따라서 emit 원문 검증은 TC-13의 결정적 드라이버로 수행하고,
+    TC-12는 stdout 오염 불변식(항상 검증)을 담당한다.
+    """
 
-        exit code와 무관하게 해당 문자열이 stdout에 없어야 한다.
-        성공(exit 0)이면 stdout 전체가 유효한 JSON이어야 한다.
+    def _bootstrap_isolated_state(self, tmp_path):
+        """격리 PIPELINE_STATE_PATH로 IMP 파이프라인을 생성하고 external gate를 PASS로 seed.
+
+        `pipeline.py new`로 state를 부트스트랩하므로 event_log 등 필수 키가 모두 채워진다
+        (손수 만든 최소 state의 KeyError를 방지). requirements_tracking을 비활성화하여
+        AC 검사를 우회하고, technical/oracle/github_ci를 PASS로 두어 request-accept가
+        상위 gate가 아닌 PR body 단계까지 진입하도록 한다.
+
+        Args:
+            tmp_path: pytest tmp_path fixture.
+        Returns:
+            (env, state_file, pipeline_id) 튜플.
+        Raises:
+            TypeError: tmp_path가 None인 경우.
         """
         import os
         import subprocess
         import sys as _sys
 
-        evidence_path = REPO_ROOT / "cleanup_report_86dd.md"
-        if not evidence_path.exists():
-            evidence_path = tmp_path / "dummy_evidence.md"
-            evidence_path.write_text("# dummy evidence for TC-12", encoding="utf-8")
+        if tmp_path is None:
+            raise TypeError("tmp_path must not be None")
 
-        env = {
-            **os.environ,
-            "PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING": "1",
-        }
+        state_file = tmp_path / "pipeline_state.json"
+        env = dict(os.environ)
+        env["PIPELINE_STATE_PATH"] = str(state_file)
+        env["PATH"] = str(tmp_path)  # gh CLI 미탐지 (hermetic)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
+        env["PIPELINE_NO_DASHBOARD"] = "1"
+        env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
+
+        r_new = subprocess.run(
+            [_sys.executable, str(PIPELINE_PY), "new", "--type", "IMP",
+             "--desc", "tc12 approval authority isolation"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=90, env=env, cwd=str(PIPELINE_PY.parent),
+        )
+        assert r_new.returncode == 0, f"new failed: {r_new.stdout} {r_new.stderr}"
+
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        pid = str(state.get("pipeline_id", ""))
+        assert pid, "pipeline_id missing after new"
+        state.setdefault("requirements_tracking", {})["enabled"] = False
+        state.setdefault("external_gates", {})
+        for _g in ("technical", "oracle", "github_ci"):
+            state["external_gates"].setdefault(_g, {})["status"] = "PASS"
+        state_file.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        return env, state_file, pid
+
+    def test_tc12_machine_readable_stdout_never_polluted(self, tmp_path):
+        """TC-12 (실제 subprocess E2E): --machine-readable stdout 오염 불변식.
+
+        격리 PIPELINE_STATE_PATH에서 `gates request-accept --machine-readable`을 실제
+        실행한다. hermetic 환경(gh/PR 없음)에서는 pr_body_not_found로 결정적으로 BLOCK되며,
+        아래 불변식을 exit code와 무관하게 항상 검증한다(returncode==0 조건부 skip 없음):
+          1. stdout에 진단 마커([PR 본문 SHA 재기록]/[CODEX CANONICAL SHA 기록])가 없다.
+          2. BLOCK 시 machine-readable stdout은 비어 있다(진단/에러는 stderr 전용).
+          3. BLOCK 사유는 stderr에 노출된다(stdout이 아니라).
+          4. stdout이 비어 있지 않다면 그 전체가 유효한 JSON이어야 한다(부분 오염 금지).
+        """
+        import subprocess
+        import sys as _sys
+
+        env, state_file, pid = self._bootstrap_isolated_state(tmp_path)
+        evidence_path = tmp_path / "dummy_evidence.md"
+        evidence_path.write_text("# dummy evidence for TC-12", encoding="utf-8")
+
         result = subprocess.run(
-            [
-                _sys.executable,
-                str(PIPELINE_PY),
-                "gates",
-                "request-accept",
-                "--machine-readable",
-                "--evidence",
-                str(evidence_path),
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=90,
-            env=env,
+            [_sys.executable, str(PIPELINE_PY), "gates", "request-accept",
+             "--machine-readable", "--evidence", str(evidence_path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=120, env=env, cwd=str(PIPELINE_PY.parent),
         )
 
-        # 핵심 불변식: diagnostic prints가 stdout에 없어야 함 (exit code 무관)
+        # 불변식 1: 진단 마커가 stdout에 절대 없어야 함 (exit code 무관, 무조건 검증)
         assert "[PR 본문 SHA 재기록]" not in result.stdout, (
-            "[PR 본문 SHA 재기록] 메시지가 machine-readable stdout에 노출됨\n"
-            f"stdout(첫 300자):\n{result.stdout[:300]}"
+            "[PR 본문 SHA 재기록] 진단 메시지가 machine-readable stdout에 노출됨\n"
+            f"stdout(첫 400자):\n{result.stdout[:400]}"
         )
         assert "[CODEX CANONICAL SHA 기록]" not in result.stdout, (
-            "[CODEX CANONICAL SHA 기록] 메시지가 machine-readable stdout에 노출됨\n"
-            f"stdout(첫 300자):\n{result.stdout[:300]}"
+            "[CODEX CANONICAL SHA 기록] 진단 메시지가 machine-readable stdout에 노출됨\n"
+            f"stdout(첫 400자):\n{result.stdout[:400]}"
         )
 
-        # 성공 시 추가 검증
-        if result.returncode == 0 and result.stdout.strip():
-            data = json.loads(result.stdout)
-            assert "approval_request_message" in data, (
-                "success stdout에 approval_request_message 키 없음"
+        # 불변식 4: stdout은 비어 있거나(=BLOCK), 전체가 유효한 JSON이어야 한다 (부분 오염 금지)
+        _stdout_stripped = result.stdout.strip()
+        if _stdout_stripped:
+            data = json.loads(_stdout_stripped)  # 파싱 실패 시 test FAIL (부분 오염 감지)
+            assert isinstance(data, dict), "machine-readable stdout JSON은 dict여야 함"
+            assert "approval_request_message" in data
+            # alias 키 회귀 방지: 런타임 JSON에 승인 본문 alias 키가 없어야 함
+            assert "approval_display" not in data, "approval_display alias 키가 JSON에 잔존"
+            assert "message_file" not in data, "message_file alias 키가 JSON에 잔존"
+        else:
+            # 불변식 2+3: hermetic BLOCK 경로 — stdout 비어 있고 BLOCK 사유는 stderr에 노출
+            assert result.returncode != 0, (
+                "hermetic 환경(gh/PR 없음)에서는 request-accept가 BLOCK(exit!=0)되어야 함\n"
+                f"returncode={result.returncode}\nstderr(첫 400자):\n{result.stderr[:400]}"
             )
-            msg = data["approval_request_message"]
-            assert msg.count("사용자 승인 요청") == 1, (
-                f"approval_request_message에 '사용자 승인 요청'이 1회가 아님: {msg.count('사용자 승인 요청')}회"
+            assert "[PIPELINE ERROR]" in result.stderr or "BLOCKED" in result.stderr, (
+                "BLOCK 사유가 stderr에 노출되지 않음 (진단/에러는 stderr 전용이어야 함)\n"
+                f"stderr(첫 400자):\n{result.stderr[:400]}"
             )
 
-    def test_tc13_relay_simulation_no_duplication(self):
-        """TC-13: Pipeline Manager relay 시뮬레이션 — approval_request_message 중복 없음
+        # post-state assertion: 격리 state 파일이 실제로 사용되었음을 확인 (CLI Evidence Contract)
+        final_state = json.loads(state_file.read_text(encoding="utf-8"))
+        assert final_state.get("pipeline_id") == pid, "격리 state 파일이 사용되지 않음"
 
-        Pipeline Manager는 JSON에서 approval_request_message를 추출하여 1회만 출력한다.
-        동일 메시지를 2회 연결하면 count가 1이 아니어야 한다(REJECT 기준).
+    def test_tc13_real_emitted_json_is_single_source(self, tmp_path):
+        """TC-13 (실제 emit 원문 검증): machine-readable JSON은 approval_request_message 단일 소스.
+
+        `python -c` 드라이버로 실제 pipeline._build_approval_request_output을 호출하고,
+        CLI가 emit하는 것과 동일한 json.dumps(out, ensure_ascii=False) 문자열을 subprocess
+        stdout으로 캡처한다(하드코딩 샘플 아님 — 실제 emit 함수의 런타임 출력). 이 원문 JSON에서:
+          1. approval_display / message_file alias 키가 없다(이중 relay 경로 부재).
+          2. approval_request_message가 4요소를 각 1회씩 포함한다(단일 소스).
+          3. approval_request_message 외 어떤 필드도 승인 본문("사용자 승인 요청")을 담지 않는다.
+        추가로 hard gate(_validate_approval_request_message)가 중복 relay(count!=1)를 실제
+        호출로 차단함을 확인한다.
         """
+        import subprocess
+        import sys as _sys
+
+        pid = "IMP-20260711-86DD"
+        pr_url = "https://github.com/hojiyong2-commits/Pipeline/pull/877"
+        # CLI emit 원문과 동일한 직렬화를 재현하는 결정적 드라이버.
+        driver = (
+            "import json, importlib.util\n"
+            "spec = importlib.util.spec_from_file_location('pipeline', PIPELINE_PATH)\n"
+            "mod = importlib.util.module_from_spec(spec)\n"
+            "spec.loader.exec_module(mod)\n"
+            "out = mod._build_approval_request_output(PID, PR_URL)\n"
+            "print(json.dumps(out, ensure_ascii=False))\n"
+        )
+        driver = (
+            f"PIPELINE_PATH = {json.dumps(str(PIPELINE_PY))}\n"
+            f"PID = {json.dumps(pid)}\n"
+            f"PR_URL = {json.dumps(pr_url)}\n"
+        ) + driver
+
+        env = {"PYTHONIOENCODING": "utf-8"}
+        import os as _os
+        env = {**_os.environ, **env}
+        result = subprocess.run(
+            [_sys.executable, "-c", driver],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=90, env=env, cwd=str(PIPELINE_PY.parent),
+        )
+        assert result.returncode == 0, (
+            f"emit 드라이버 실패 (returncode={result.returncode})\nstderr:\n{result.stderr[:500]}"
+        )
+
+        # 실제 emit 원문(=machine-readable JSON stdout)을 파싱
+        data = json.loads(result.stdout)
+        assert isinstance(data, dict), "emit JSON은 dict여야 함"
+
+        # 불변식 1: 승인 본문 alias 키 부재 (approval_display / message_file)
+        assert "approval_display" not in data, (
+            f"approval_display alias 키가 실제 emit JSON에 잔존: keys={sorted(data.keys())}"
+        )
+        assert "message_file" not in data, (
+            f"message_file alias 키가 실제 emit JSON에 잔존: keys={sorted(data.keys())}"
+        )
+
+        # 불변식 2: approval_request_message 단일 소스 (4요소 각 1회)
+        arm = data.get("approval_request_message", "")
+        assert arm, "approval_request_message가 비어 있음"
+        assert arm.count("사용자 승인 요청") == 1, (
+            f"'사용자 승인 요청' count != 1: {arm.count('사용자 승인 요청')}"
+        )
+        assert arm.count("PR:") == 1, f"'PR:' count != 1: {arm.count('PR:')}"
+        assert arm.count("승인 코드:") == 1, f"'승인 코드:' count != 1: {arm.count('승인 코드:')}"
+        assert arm.count("CODEX 검토 필요") == 1, (
+            f"'CODEX 검토 필요' count != 1: {arm.count('CODEX 검토 필요')}"
+        )
+        assert arm.strip().split("\n")[-1].strip() == "CODEX 검토 필요", (
+            f"승인 요청문 마지막 의미 줄이 'CODEX 검토 필요'가 아님: {arm.strip().split(chr(10))[-1]!r}"
+        )
+
+        # 불변식 3: approval_request_message 외 어떤 필드도 승인 본문을 담지 않음
+        for key, val in data.items():
+            if key == "approval_request_message":
+                continue
+            assert "사용자 승인 요청" not in str(val), (
+                f"필드 '{key}'에 승인 본문이 중복 노출됨: {val!r}"
+            )
+
+        # hard gate: 중복 relay(동일 블록 2회 연결)를 실제 호출로 차단
         pipeline = _import_pipeline()
         validate = pipeline._validate_approval_request_message
-
-        relay_msg = (
-            "사용자 승인 요청\n\n"
-            "PR: https://github.com/hojiyong2-commits/Pipeline/pull/877\n\n"
-            "승인 코드:\nACCEPT-IMP-20260711-86DD\n\n"
-            "CODEX 검토 필요"
-        )
-
-        # 1회 relay: 4요소 각 1회 — 통과해야 함
-        assert relay_msg.count("사용자 승인 요청") == 1
-        assert relay_msg.count("PR:") == 1
-        assert relay_msg.count("승인 코드:") == 1
-        assert relay_msg.count("CODEX 검토 필요") == 1
-        validate(relay_msg)  # 예외 없음
-
-        # 중복 relay 시나리오: 동일 블록 2회 concatenate → FAIL
-        doubled = relay_msg + "\n\n" + relay_msg
-        assert doubled.count("사용자 승인 요청") != 1, (
-            "중복 relay는 count != 1 조건을 트리거해야 함"
-        )
+        validate(arm)  # 단일 소스는 예외 없이 통과
+        doubled = arm + "\n\n" + arm
+        assert doubled.count("사용자 승인 요청") == 2  # 2회 = 실패 케이스 트리거
         with pytest.raises(ValueError) as exc_info:
             validate(doubled)
         err = str(exc_info.value)
