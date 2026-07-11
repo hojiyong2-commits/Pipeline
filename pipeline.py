@@ -84,7 +84,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, NoReturn, Optional, Set, Tuple, TypedDict
+from typing import Any, Dict, FrozenSet, List, NoReturn, Optional, Set, Tuple, TypedDict
 import re
 import socket
 import subprocess
@@ -6472,6 +6472,26 @@ TEMPORARY_PR_BODY_PATTERNS: List[str] = [
     "TBD",
     "TODO",
 ]
+
+# IMP-20260711-F5D7 MT-1: PR body writer ownership SSoT.
+# post-accept PR body writer race condition을 writer 역할 소유권으로 근본 차단하기 위한 상수.
+# 어떤 writer가 어떤 acceptance 상태 전이를 기록할 수 있는지 명시하여 ACCEPTED→PENDING 역전이를 봉쇄한다.
+PR_BODY_WRITER_ROLES: FrozenSet[str] = frozenset({
+    "post_accept_writer",         # gates accept 완료 후 ACCEPTED 패킷 기록
+    "pending_acceptance_writer",  # gates request-accept 패킷 기록
+    "final_check_writer",         # CI 최종 확인 안내 단계
+    "manual_report_writer",       # report update-pr-body 수동 호출
+})
+
+# ACCEPTED 상태로 전이 가능한 writer 역할만 정의 (역전이 차단).
+# key=(from_status, to_status), value=allowed_writers set.
+# ("ACCEPTED", "PENDING") 역전이는 빈 set이므로 어떤 writer도 허용되지 않는다.
+ACCEPTANCE_STATE_TRANSITION_RULES: Dict[Tuple[str, str], Set[str]] = {
+    ("PENDING", "ACCEPTED"): {"post_accept_writer"},
+    ("PENDING", "PENDING"): {"pending_acceptance_writer", "final_check_writer"},
+    ("ACCEPTED", "ACCEPTED"): {"post_accept_writer"},  # idempotent
+    ("ACCEPTED", "PENDING"): set(),  # 역전이 차단 (어떤 writer도 불허)
+}
 
 # IMP-20260703-B985 MT-34 (REJECT #27): PR body에 남으면 안 되는 stale acceptance 상태 패턴.
 # PIPELINE_FINAL_PACKET_END 뒤 또는 packet 블록 밖에 acceptance: FAIL/REJECTED가 남으면
@@ -15506,6 +15526,9 @@ def _build_final_packet_content(
     evidence: Dict[str, Any],
     acceptance_status_override: Optional[str] = None,
     verification_json_sha256: Optional[str] = None,
+    writer_role: Optional[str] = None,
+    writer_epoch: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
 ) -> str:
     """packet 텍스트를 생성한다. 120자/줄 제한 + 승인 코드 독립 줄.
 
@@ -15712,7 +15735,21 @@ def _build_final_packet_content(
         lines.append(ln)
 
     raw = "\n".join(lines)
-    return _wrap_packet_text(raw, PACKET_LINE_MAX_WIDTH)
+    result = _wrap_packet_text(raw, PACKET_LINE_MAX_WIDTH)
+
+    # IMP-20260711-F5D7 MT-4: writer ownership 메타데이터 HTML comment를 packet 맨 앞에 prepend한다.
+    # writer_role/writer_epoch/snapshot_id 중 하나라도 주어지면 삽입한다(기본 None이면 미삽입 → 하위호환).
+    # 래핑 이후에 prepend하여 주석 한 줄이 _wrap_packet_text에 의해 분할되지 않도록 한다.
+    if writer_role or writer_epoch or snapshot_id:
+        _wr = writer_role or "unknown"
+        _we = writer_epoch or "unknown"
+        _si = snapshot_id or "unknown"
+        _meta_comment = (
+            f"<!-- pipeline-writer-meta writer_role={_wr} "
+            f"writer_epoch={_we} snapshot_id={_si} -->\n"
+        )
+        result = _meta_comment + result
+    return result
 
 
 def _display_model_from_evidence(
@@ -17073,6 +17110,131 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
     )
 
 
+# [Purpose]: IMP-20260711-F5D7 MT-3 — PR body HTML comment에서 writer ownership 메타데이터와
+#   acceptance 표시 상태를 추출하여, 어떤 writer가 마지막으로 body를 기록했고 현재 상태가
+#   ACCEPTED/PENDING 중 무엇인지 판정할 SSoT를 제공한다.
+# [Assumptions]: pr_body는 문자열(또는 None). 마커/메타 주석이 없으면 상태는 UNKNOWN이다.
+# [Vulnerability & Risks]: 정규식이 예상치 못한 주석 포맷을 만나면 필드가 None으로 남는다(graceful).
+# [Improvement]: 향후 writer_meta 주석에 서명/timestamp를 추가하여 위·변조 탐지를 강화할 수 있다.
+def _extract_pr_body_acceptance_metadata(pr_body: str) -> Dict[str, Any]:
+    """PR body HTML comment에서 writer ownership 메타데이터를 추출한다.
+
+    PR body에 아래 패턴의 HTML comment가 있으면 추출한다:
+        <!-- pipeline-writer-meta writer_role=X writer_epoch=Y snapshot_id=Z acceptance_status=W -->
+
+    마커 기반 상태 감지도 함께 수행한다:
+        <!-- pipeline-human-acceptance-packet-accepted --> → ACCEPTED
+        <!-- pipeline-human-acceptance-packet-pending --> → PENDING
+
+    Args:
+        pr_body: PR 본문 문자열. None/비str이면 기본 UNKNOWN 결과를 반환한다.
+    Returns:
+        {"writer_role": Optional[str], "writer_epoch": Optional[str],
+         "snapshot_id": Optional[str], "acceptance_status": str, "has_meta_comment": bool}
+        acceptance_status는 "ACCEPTED" | "PENDING" | "UNKNOWN" 중 하나.
+    Raises:
+        없음 — 모든 입력 오류는 UNKNOWN 결과로 흡수한다(graceful).
+    """
+    result: Dict[str, Any] = {
+        "writer_role": None,
+        "writer_epoch": None,
+        "snapshot_id": None,
+        "acceptance_status": "UNKNOWN",
+        "has_meta_comment": False,
+    }
+
+    if not isinstance(pr_body, str):
+        return result
+
+    # 마커 기반 상태 감지 (accepted 우선).
+    if "<!-- pipeline-human-acceptance-packet-accepted -->" in pr_body:
+        result["acceptance_status"] = "ACCEPTED"
+    elif "<!-- pipeline-human-acceptance-packet-pending -->" in pr_body:
+        result["acceptance_status"] = "PENDING"
+
+    # 메타데이터 comment 추출.
+    meta_pattern = r"<!--\s*pipeline-writer-meta\s+(.*?)-->"
+    match = re.search(meta_pattern, pr_body, re.DOTALL)
+    if match:
+        result["has_meta_comment"] = True
+        attrs_str = match.group(1)
+        for attr in ("writer_role", "writer_epoch", "snapshot_id", "acceptance_status"):
+            attr_match = re.search(rf"{attr}=(\S+)", attrs_str)
+            if attr_match:
+                result[attr] = attr_match.group(1)
+
+    return result
+
+
+# [Purpose]: IMP-20260711-F5D7 MT-2 — 모든 PR body 쓰기 직전에 writer 역할과 상태 전이를 검증하여
+#   ACCEPTED body를 PENDING으로 덮어쓰는 post-accept race condition을 fail-closed로 차단한다.
+# [Assumptions]: 호출자는 현재 PR body의 acceptance 상태(_extract_pr_body_acceptance_metadata 결과)와
+#   기록하려는 목표 상태를 전달한다. pr_body_fetch_ok=False면 상태 판정 불가 → 전면 차단.
+# [Vulnerability & Risks]: current/target 문자열이 예상 외 값이면 transition_not_allowed로 차단(안전측).
+# [Improvement]: writer_epoch 단조 증가 비교를 추가하여 오래된 writer의 뒤늦은 쓰기도 봉쇄 가능.
+def _validate_pr_body_write_permission(
+    writer_role: str,
+    current_acceptance_status: str,
+    target_status: str,
+    pr_body_fetch_ok: bool = True,
+) -> Dict[str, Any]:
+    """PR body 쓰기 권한을 검증한다.
+
+    Args:
+        writer_role: PR_BODY_WRITER_ROLES 중 하나.
+        current_acceptance_status: 현재 PR body의 acceptance 상태 ("PENDING" | "ACCEPTED" | "UNKNOWN").
+        target_status: 기록하려는 acceptance 상태 ("PENDING" | "ACCEPTED").
+        pr_body_fetch_ok: PR body fetch 성공 여부. False면 fail-closed(전면 차단).
+    Returns:
+        {"allowed": bool, "skip": bool, "reason": str, "failure_code": Optional[str]}
+          - allowed=True, skip=False: 쓰기 허용
+          - allowed=False, skip=True: ACCEPTED 감지로 skip(치명적 오류 아님)
+          - allowed=False, skip=False: 쓰기 차단(BLOCKED 반환해야 함)
+    Raises:
+        없음.
+    """
+    # fail-closed: PR body fetch 실패 시 모든 write 차단.
+    if not pr_body_fetch_ok:
+        return {
+            "allowed": False,
+            "skip": False,
+            "reason": f"PR body fetch 실패 — writer_role={writer_role} write 차단 (fail-closed)",
+            "failure_code": "pr_body_fetch_failed",
+        }
+
+    if writer_role not in PR_BODY_WRITER_ROLES:
+        return {
+            "allowed": False,
+            "skip": False,
+            "reason": f"알 수 없는 writer_role: {writer_role!r}",
+            "failure_code": "unknown_writer_role",
+        }
+
+    key = (current_acceptance_status.upper(), target_status.upper())
+    allowed_writers = ACCEPTANCE_STATE_TRANSITION_RULES.get(key, set())
+
+    if writer_role in allowed_writers:
+        return {"allowed": True, "skip": False, "reason": "OK", "failure_code": None}
+
+    # ACCEPTED → PENDING 역전이: final_check_writer/pending_acceptance_writer 등이 시도한 경우 skip.
+    if current_acceptance_status.upper() == "ACCEPTED" and target_status.upper() == "PENDING":
+        return {
+            "allowed": False,
+            "skip": True,  # CI 단계 등에서 silent skip
+            "reason": (
+                f"PR body가 이미 ACCEPTED 상태 — {writer_role}의 PENDING 재기록 차단"
+            ),
+            "failure_code": "reverse_transition_blocked",
+        }
+
+    return {
+        "allowed": False,
+        "skip": False,
+        "reason": f"writer_role={writer_role}는 {current_acceptance_status}→{target_status} 전이 불허",
+        "failure_code": "transition_not_allowed",
+    }
+
+
 def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
     """report update-pr-body 핸들러.
 
@@ -17105,7 +17267,28 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
         ))
         return
 
-    current_body = _get_pr_body_text() or ""
+    _fetched_body = _get_pr_body_text()
+    _fetch_ok = _fetched_body is not None
+    current_body = _fetched_body or ""
+
+    # IMP-20260711-F5D7 MT-6: writer ownership 검증 — 이미 ACCEPTED인 PR body를
+    # manual_report_writer가 PENDING 패킷으로 되돌리는 것을 차단한다(post-accept race 방지).
+    # skip=True(ACCEPTED→PENDING 역전이)면 안내 후 조용히 반환한다. 그 외(마커 없는 신규 body,
+    # fetch 실패)는 graceful degradation으로 기존 동작(write 진행)을 유지한다.
+    _meta = _extract_pr_body_acceptance_metadata(current_body)
+    _perm = _validate_pr_body_write_permission(
+        writer_role="manual_report_writer",
+        current_acceptance_status=str(_meta["acceptance_status"]),
+        target_status="PENDING",
+        pr_body_fetch_ok=_fetch_ok,
+    )
+    if not _perm["allowed"] and _perm.get("skip"):
+        print(YELLOW(
+            "\n[REPORT UPDATE-PR-BODY] PR 본문이 이미 ACCEPTED 상태입니다 — "
+            "manual_report_writer의 PENDING 재기록을 건너뜁니다 "
+            f"(IMP-20260711-F5D7, reason={_perm.get('failure_code')}).\n"
+        ))
+        return
 
     # 버그 2+3 수정 (IMP-20260603-2E3D): 블록 교체 전 콘솔 아티팩트와 구 승인 코드 제거
     try:
@@ -21175,6 +21358,7 @@ def _materialize_acceptance_snapshot(
     frozen_packet_content: Optional[str] = None,
     staged_json_sha256: Optional[str] = None,
     staged_json_content: Optional[str] = None,  # MT-21: frozen publish path용 staged JSON content
+    writer_epoch: Optional[str] = None,  # IMP-20260711-F5D7 MT-5: writer ownership epoch SSoT
 ) -> Dict[str, Any]:
     """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
 
@@ -21219,6 +21403,14 @@ def _materialize_acceptance_snapshot(
             f"frozen_packet_content must be str or None, got "
             f"{type(frozen_packet_content).__name__}"
         )
+    if writer_epoch is not None and not isinstance(writer_epoch, str):
+        raise TypeError(
+            f"writer_epoch must be str or None, got {type(writer_epoch).__name__}"
+        )
+    # IMP-20260711-F5D7 MT-5: writer_epoch SSoT — None이면 현재 UTC 타임스탬프로 생성한다.
+    # 이 epoch는 sha_manifest에 포함되어 어느 writer 호출이 이 snapshot을 만들었는지 추적한다.
+    if writer_epoch is None:
+        writer_epoch = "epoch-" + _now().replace(":", "").replace("-", "").replace("T", "-")[:17]
     # Phase 1: 순수 계산 (I/O 없음) — 실패 시 아무 파일도 안 써짐
     # BUG-20260628-F52C: staging은 frozen_at(staging 시점에 한 번만 생성한 timestamp)으로 packet
     # bytes를 고정하고, publish는 frozen_packet_content(staging이 만든 동일 bytes)를 재렌더링 없이
@@ -21368,6 +21560,7 @@ def _materialize_acceptance_snapshot(
     sha_manifest: Dict[str, Optional[str]] = {
         "packet_sha256": pkt_sha,
         "json_sha256": json_sha,
+        "writer_epoch": writer_epoch,  # IMP-20260711-F5D7 MT-5: writer ownership epoch SSoT
     }
 
     # BUG-20260628-F52C MT-1: staging 모드(publish=False)는 temp 파일에서 SHA만 계산하고
@@ -21728,6 +21921,26 @@ def _finalize_post_accept(
             "blocked_reason": (
                 "PR 본문 재조회 결과 PIPELINE_FINAL_PACKET 블록에서 ACCEPTED 표시를 "
                 "확인하지 못했습니다."
+            ),
+            "gh_skipped": False,
+            "pr_body_updated": True,
+        }
+
+    # IMP-20260711-F5D7 MT-7: writer ownership 메타데이터 기반 역전이(PENDING) 재검증.
+    # 위 step 7은 packet 블록의 "ACCEPTED" 텍스트를 확인한다. 이 추가 검증은 race condition으로
+    # CI final-check writer가 PENDING 마커(<!-- pipeline-human-acceptance-packet-pending -->)를
+    # body에 남긴 경우를 잡는다. body는 ACCEPTED를 HTML 마커가 아닌 텍스트로 표시하므로,
+    # UNKNOWN(마커 없음)은 정상으로 통과시키고 명시적 PENDING 마커가 감지될 때만 BLOCKED 처리한다
+    # (마커 부재를 이유로 정상 accept 흐름을 차단하지 않는다).
+    _reverified_meta = _extract_pr_body_acceptance_metadata(rechecked_body)
+    if _reverified_meta["acceptance_status"] == "PENDING":
+        return {
+            "status": "BLOCKED",
+            "failure_code": "post_accept_accepted_marker_missing",
+            "blocked_reason": (
+                "PR body 재조회 결과 PENDING 마커가 감지되었습니다 "
+                "(post-accept race condition — writer ownership 위반). "
+                f"감지 상태: {_reverified_meta['acceptance_status']}"
             ),
             "gh_skipped": False,
             "pr_body_updated": True,

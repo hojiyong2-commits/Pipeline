@@ -1,0 +1,10 @@
+{
+  "case_id": "case_edge_accepted_to_pending_blocked",
+  "case_kind": "edge",
+  "description": "final_check_writer가 ACCEPTED 상태의 PR body를 PENDING으로 덮어쓰기 시도 — 차단되어야 함",
+  "current_acceptance_status": "ACCEPTED",
+  "writer_role": "final_check_writer",
+  "target_status": "PENDING",
+  "current_pr_body_snippet": "<!-- pipeline-human-acceptance-packet-accepted -->",
+  "writer_epoch": "epoch-2026-test-002"
+}

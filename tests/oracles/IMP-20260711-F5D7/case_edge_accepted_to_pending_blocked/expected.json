@@ -1,0 +1,8 @@
+{
+  "case_id": "case_edge_accepted_to_pending_blocked",
+  "result": "BLOCKED",
+  "pr_body_updated": false,
+  "acceptance_status": "ACCEPTED",
+  "failure_code": "reverse_transition_blocked",
+  "reason": "final_check_writer는 ACCEPTED → PENDING 역전이가 금지된다"
+}
