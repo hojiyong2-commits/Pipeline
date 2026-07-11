@@ -51,27 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "cleanup_report_86dd.md",
-      "sha256": "26c6d0f372f9028462890203f5150c9b32c345b02382e332a47608e2aa550355",
-      "size_bytes": 2746
-    },
-    {
-      "path": "pipeline.py",
-      "sha256": "974dbd68c49db68031bef15cdfbebd7cf97c696d915433834e1cda5d26841baf",
-      "size_bytes": 1593001
-    },
-    {
-      "path": ".claude/agents/pipeline-manager-agent.md",
-      "sha256": "5ef228f6b36bbea97f473488bc9c3a7e7049a251f121014af32a5e8e65c3db15",
-      "size_bytes": 17755
-    },
-    {
-      "path": "tests/e2e/test_approval_authority_86dd.py",
-      "sha256": "636711e5154a395c70156e93867ba1e93f493414a78563bd2163abcf811489f7",
-      "size_bytes": 12149
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
