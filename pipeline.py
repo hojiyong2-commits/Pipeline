@@ -24754,8 +24754,9 @@ def _publish_acceptance_request(
                 json.dumps(_req_post, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            # machine_readable 출력 제어는 호출자(_cmd_gates_request_accept)에서 담당
-            print("  [PR 본문 SHA 재기록] pr_body_sha256 + github_canonical_pr_body_sha256(canonical) 업데이트 완료")
+            # diagnostic 메시지는 stderr로 출력 — machine-readable 모드에서 stdout JSON 오염 방지
+            sys.stderr.write("  [PR 본문 SHA 재기록] pr_body_sha256 + github_canonical_pr_body_sha256(canonical) 업데이트 완료\n")
+            sys.stderr.flush()
         except (OSError, json.JSONDecodeError, TypeError) as _exc:
             _die(
                 "[BLOCKED] failure_code=pr_body_resync_failed\n"
@@ -24779,11 +24780,9 @@ def _publish_acceptance_request(
                         json.dumps(_cx_post, ensure_ascii=False, indent=2),
                         encoding="utf-8",
                     )
-                    # machine_readable 출력 제어는 호출자(_cmd_gates_request_accept)에서 담당
-                    print(
-                        "  [CODEX CANONICAL SHA 기록] "
-                        "github_canonical_pr_body_sha256 업데이트 완료"
-                    )
+                    # diagnostic 메시지는 stderr로 출력 — machine-readable 모드에서 stdout JSON 오염 방지
+                    sys.stderr.write("  [CODEX CANONICAL SHA 기록] github_canonical_pr_body_sha256 업데이트 완료\n")
+                    sys.stderr.flush()
         except (OSError, json.JSONDecodeError, TypeError) as _cx_exc:
             _die(
                 "[BLOCKED] failure_code=codex_canonical_resync_failed\n"
