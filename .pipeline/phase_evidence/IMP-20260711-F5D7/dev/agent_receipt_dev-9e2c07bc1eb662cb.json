@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260711-F5D7",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-9e2c07bc1eb662cb",
+  "status": "COMPLETED",
+  "started_at": "2026-07-11T05:00:33Z",
+  "completed_at": "2026-07-11T05:07:58Z",
+  "output_file": "dev_handover_F5D7.xml",
+  "output_sha256": "ac48ca2ed8ab2a1a4119701c78925f79640d54e79b46990b1803f8df989f535f",
+  "evidence_files": [],
+  "commit_sha": "6cdbea2ac4fd62ae45baaed8b77a367a89121609"
+}
