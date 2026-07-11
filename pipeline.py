@@ -15740,13 +15740,23 @@ def _build_final_packet_content(
     # IMP-20260711-F5D7 MT-4: writer ownership 메타데이터 HTML comment를 packet 맨 앞에 prepend한다.
     # writer_role/writer_epoch/snapshot_id 중 하나라도 주어지면 삽입한다(기본 None이면 미삽입 → 하위호환).
     # 래핑 이후에 prepend하여 주석 한 줄이 _wrap_packet_text에 의해 분할되지 않도록 한다.
+    # IMP-20260711-F5D7 MT-4 rework: acceptance_status를 meta comment에 함께 기록한다. 이 값이
+    # PR body FINAL_PACKET 블록 안에 남아 CI final-check writer와 _extract_pr_body_acceptance_metadata의
+    # ACCEPTED/PENDING 감지 SSoT가 된다(comment marker가 아니라 PR body 실제 metadata 기준).
     if writer_role or writer_epoch or snapshot_id:
         _wr = writer_role or "unknown"
         _we = writer_epoch or "unknown"
         _si = snapshot_id or "unknown"
+        _disp_up = str(_acceptance_display_status).upper()
+        if "ACCEPTED" in _disp_up:
+            _acc_status = "ACCEPTED"
+        elif "REJECTED" in _disp_up:
+            _acc_status = "REJECTED"
+        else:
+            _acc_status = "PENDING"
         _meta_comment = (
             f"<!-- pipeline-writer-meta writer_role={_wr} "
-            f"writer_epoch={_we} snapshot_id={_si} -->\n"
+            f"writer_epoch={_we} snapshot_id={_si} acceptance_status={_acc_status} -->\n"
         )
         result = _meta_comment + result
     return result
@@ -17259,7 +17269,15 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
         )
     packet_content = packet_path.read_text(encoding="utf-8", errors="replace")
 
-    if not shutil.which("gh"):
+    # IMP-20260711-F5D7 MT-6: 테스트 훅 — writer permission 검증 → BLOCKED 경로를 실제 CLI로
+    # 검증할 수 있도록 gh 없이도 fetch 결과를 강제한다. 운영에서는 두 env 모두 미설정이므로 무영향.
+    #   PIPELINE_FAKE_PR_FETCH_FAIL=1 → PR body fetch 실패(fail-closed) 강제.
+    #   PIPELINE_FAKE_PR_BODY=<path> → 지정 파일 내용을 PR body로 주입(fetch 성공).
+    _fake_fetch_fail = os.environ.get("PIPELINE_FAKE_PR_FETCH_FAIL") == "1"
+    _fake_body_path = os.environ.get("PIPELINE_FAKE_PR_BODY") or ""
+    _test_hook_active = _fake_fetch_fail or bool(_fake_body_path)
+
+    if not _test_hook_active and not shutil.which("gh"):
         print(YELLOW(
             "\n[REPORT UPDATE-PR-BODY] gh CLI가 없어 PR 본문을 갱신하지 않습니다.\n"
             "  현재 packet 내용은 다음 파일에 보존됩니다: "
@@ -17267,14 +17285,26 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
         ))
         return
 
-    _fetched_body = _get_pr_body_text()
+    if _fake_fetch_fail:
+        _fetched_body = None
+    elif _fake_body_path:
+        try:
+            _fetched_body = Path(_fake_body_path).read_text(encoding="utf-8")
+        except OSError:
+            _fetched_body = None
+    else:
+        _fetched_body = _get_pr_body_text()
     _fetch_ok = _fetched_body is not None
     current_body = _fetched_body or ""
 
     # IMP-20260711-F5D7 MT-6: writer ownership 검증 — 이미 ACCEPTED인 PR body를
     # manual_report_writer가 PENDING 패킷으로 되돌리는 것을 차단한다(post-accept race 방지).
-    # skip=True(ACCEPTED→PENDING 역전이)면 안내 후 조용히 반환한다. 그 외(마커 없는 신규 body,
-    # fetch 실패)는 graceful degradation으로 기존 동작(write 진행)을 유지한다.
+    # 결과 해석:
+    #   allowed=False, skip=True  → ACCEPTED→PENDING 역전이. 안내 후 조용히 반환(치명적 오류 아님).
+    #   allowed=False, skip=False → fetch 실패/unknown writer/전이 불허. write로 이어지면 안 되므로
+    #                               즉시 BLOCKED(sys.exit(1)) 처리한다(fail-closed). 이전 버그에서는
+    #                               skip=True만 return하고 이 경우를 무시한 채 write를 진행했다.
+    #   allowed=True              → 정상 write 진행.
     _meta = _extract_pr_body_acceptance_metadata(current_body)
     _perm = _validate_pr_body_write_permission(
         writer_role="manual_report_writer",
@@ -17289,6 +17319,17 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
             f"(IMP-20260711-F5D7, reason={_perm.get('failure_code')}).\n"
         ))
         return
+    if not _perm["allowed"]:
+        _die(
+            "[BLOCKED] failure_code={code}\n"
+            "  PR 본문 쓰기가 writer ownership 검증에서 차단되었습니다 "
+            "(IMP-20260711-F5D7, manual_report_writer).\n"
+            "  사유: {reason}\n"
+            "  fail-closed — PR 본문을 변경하지 않습니다.".format(
+                code=_perm.get("failure_code") or "unknown",
+                reason=_perm.get("reason") or "(사유 없음)",
+            )
+        )
 
     # 버그 2+3 수정 (IMP-20260603-2E3D): 블록 교체 전 콘솔 아티팩트와 구 승인 코드 제거
     try:
@@ -21359,6 +21400,9 @@ def _materialize_acceptance_snapshot(
     staged_json_sha256: Optional[str] = None,
     staged_json_content: Optional[str] = None,  # MT-21: frozen publish path용 staged JSON content
     writer_epoch: Optional[str] = None,  # IMP-20260711-F5D7 MT-5: writer ownership epoch SSoT
+    writer_role: Optional[str] = None,  # IMP-20260711-F5D7 MT-4: PR body writer 역할 (metadata 기록)
+    snapshot_id: Optional[str] = None,  # IMP-20260711-F5D7 MT-4: writer metadata snapshot_id
+    acceptance_status_override: Optional[str] = None,  # IMP-20260711-F5D7 MT-4: post-accept 시 ACCEPTED 표시
 ) -> Dict[str, Any]:
     """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
 
@@ -21407,10 +21451,33 @@ def _materialize_acceptance_snapshot(
         raise TypeError(
             f"writer_epoch must be str or None, got {type(writer_epoch).__name__}"
         )
-    # IMP-20260711-F5D7 MT-5: writer_epoch SSoT — None이면 현재 UTC 타임스탬프로 생성한다.
-    # 이 epoch는 sha_manifest에 포함되어 어느 writer 호출이 이 snapshot을 만들었는지 추적한다.
+    if writer_role is not None and not isinstance(writer_role, str):
+        raise TypeError(
+            f"writer_role must be str or None, got {type(writer_role).__name__}"
+        )
+    if snapshot_id is not None and not isinstance(snapshot_id, str):
+        raise TypeError(
+            f"snapshot_id must be str or None, got {type(snapshot_id).__name__}"
+        )
+    if acceptance_status_override is not None and not isinstance(acceptance_status_override, str):
+        raise TypeError(
+            "acceptance_status_override must be str or None, got "
+            f"{type(acceptance_status_override).__name__}"
+        )
+    # IMP-20260711-F5D7 MT-5: writer_epoch SSoT — None이면 acceptance_request의 안정적 식별자
+    # (snapshot_id/nonce)에서 결정론적으로 파생한다. _now() 기반이 아니라 결정론적으로 만들어야
+    # staging → frozen publish 재계산 시에도 packet bytes가 동일하게 유지되어 codex == published
+    # == 현재 PR body 3자 SHA 불변식이 깨지지 않는다(안정 식별자가 없을 때만 timestamp fallback).
     if writer_epoch is None:
-        writer_epoch = "epoch-" + _now().replace(":", "").replace("-", "").replace("T", "-")[:17]
+        _epoch_seed = (
+            str(acceptance_request.get("snapshot_id") or "")
+            or str(acceptance_request.get("nonce") or "")
+            or str(frozen_at or "")
+        )
+        if _epoch_seed:
+            writer_epoch = "epoch-" + hashlib.sha256(_epoch_seed.encode("utf-8")).hexdigest()[:16]
+        else:
+            writer_epoch = "epoch-" + _now().replace(":", "").replace("-", "").replace("T", "-")[:17]
     # Phase 1: 순수 계산 (I/O 없음) — 실패 시 아무 파일도 안 써짐
     # BUG-20260628-F52C: staging은 frozen_at(staging 시점에 한 번만 생성한 timestamp)으로 packet
     # bytes를 고정하고, publish는 frozen_packet_content(staging이 만든 동일 bytes)를 재렌더링 없이
@@ -21484,10 +21551,18 @@ def _materialize_acceptance_snapshot(
         verification_json = _build_verification_json(evidence_payload)
         _pre_vj_str = json.dumps(verification_json, ensure_ascii=False, indent=2)
         _pre_json_sha = _pre_hashlib.sha256(_pre_vj_str.encode("utf-8")).hexdigest()
+        # IMP-20260711-F5D7 MT-4: writer ownership metadata를 실제 packet 본문에 기록한다.
+        # acceptance_status_override가 주어지면(post-accept="ACCEPTED") 그 값으로 표시하고,
+        # 아니면 기존 동작(승인 대기 중 PENDING)을 유지한다. writer_role이 있을 때만 meta comment가
+        # 삽입되므로(writer_role 없으면 writer_epoch/snapshot_id도 None 전달), 기존 호출은 하위호환.
+        _disp_override = acceptance_status_override or "승인 대기 중 (PENDING)"
         content = _build_final_packet_content(
             evidence_payload,
-            acceptance_status_override="승인 대기 중 (PENDING)",
+            acceptance_status_override=_disp_override,
             verification_json_sha256=_pre_json_sha,  # MT-13: 미리 계산한 SHA 주입
+            writer_role=writer_role,
+            writer_epoch=(writer_epoch if writer_role else None),
+            snapshot_id=(snapshot_id if writer_role else None),
         )
         _vj_write_str = _pre_vj_str  # MT-21: pre-computed string으로 SHA 일관성 보장
     else:
@@ -21753,7 +21828,11 @@ def _auto_generate_final_packet_and_update_pr(
         OSError: packet 파일 쓰기 실패 시 (호출자가 처리).
         ValueError: evidence_payload 조립 실패 시 (호출자가 처리).
     """
-    result = _materialize_acceptance_snapshot(state, acceptance_request)
+    # IMP-20260711-F5D7 MT-4: 이 경로는 nonce 발급 직후 PENDING packet을 생성/게시하므로
+    # pending_acceptance_writer 역할을 명시하여 writer-meta를 packet에 기록한다.
+    result = _materialize_acceptance_snapshot(
+        state, acceptance_request, writer_role="pending_acceptance_writer"
+    )
     return {
         "packet_path": result["packet_path"],
         "json_path": result["json_path"],
@@ -21811,8 +21890,17 @@ def _finalize_post_accept(
 
     # 단계 2: post-accept packet(md+json) 재생성. acceptance_request는 이미 CONSUMED/ACCEPT 상태이므로
     # 재생성된 packet의 표시 상태는 ACCEPTED여야 한다.
+    # IMP-20260711-F5D7 MT-4: post_accept_writer 역할 + acceptance_status=ACCEPTED를 실제로 전달하여
+    # packet/PR body FINAL_PACKET 블록에 writer-meta(acceptance_status=ACCEPTED)를 남긴다. 이 metadata가
+    # CI final-check writer와 _extract_pr_body_acceptance_metadata의 ACCEPTED 감지 SSoT가 된다.
     try:
-        snapshot = _materialize_acceptance_snapshot(state, acceptance_request)
+        snapshot = _materialize_acceptance_snapshot(
+            state,
+            acceptance_request,
+            writer_role="post_accept_writer",
+            snapshot_id=str(acceptance_request.get("snapshot_id", "") or "") or None,
+            acceptance_status_override="ACCEPTED",
+        )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         return {
             "status": "BLOCKED",
@@ -23315,9 +23403,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     _recovered_candidate["ac_fulfillment_table"] = _ac_table
                 # frozen_at은 staging 시점에 한 번만 생성 — request-accept NEW-staging 경로와 동일.
                 _recover_frozen_at = _now()
+                # IMP-20260711-F5D7 MT-4: recovery staging도 동일 pending_acceptance_writer 역할을
+                # 부여하여 request-accept NEW-staging과 동일한 packet bytes를 산출한다(writer_epoch은
+                # nonce에서 결정론적으로 파생되므로 두 경로의 bytes가 일치한다 → 3자 SHA 불변식 유지).
                 _staged = _materialize_acceptance_snapshot(
                     state, _recovered_candidate, publish=False,
                     frozen_at=_recover_frozen_at,
+                    writer_role="pending_acceptance_writer",
                 )
                 _recovered_content = str(_staged.get("packet_content", "") or "")
                 _recovered_pkt_sha = str(
@@ -25267,8 +25359,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         else:
             # 새 frozen staging 생성 — frozen_at은 staging 시점에 한 번만 생성한다.
             frozen_at = _now()
+            # IMP-20260711-F5D7 MT-4: pending_acceptance_writer 역할을 staging 시점에 부여하여
+            # staged(=frozen publish로 재사용될) packet 본문에 writer-meta가 남게 한다.
             staged_result = _materialize_acceptance_snapshot(
-                state, req_candidate, publish=False, frozen_at=frozen_at
+                state, req_candidate, publish=False, frozen_at=frozen_at,
+                writer_role="pending_acceptance_writer",
             )
             staged_sha_manifest = staged_result.get("sha_manifest", {})
             staged_packet_content = staged_result.get("packet_content", "")
