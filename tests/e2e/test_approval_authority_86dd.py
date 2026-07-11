@@ -6,7 +6,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -43,10 +42,6 @@ class TestApprovalAuthority:
     def test_tc2_build_approval_output_contains_required_parts(self, tmp_path):
         """TC-2: _build_approval_request_output 반환 메시지에 4개 필수 요소 포함"""
         # pipeline.py를 import해서 함수 직접 호출
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("pipeline", PIPELINE_PY)
-        pipeline = importlib.util.module_from_spec(spec)
-
         # 실제 함수를 직접 호출하기 어려우므로 파일 소스코드 검사로 대체
         source = PIPELINE_PY.read_text(encoding="utf-8")
         # _build_approval_request_output 함수가 존재해야 함
