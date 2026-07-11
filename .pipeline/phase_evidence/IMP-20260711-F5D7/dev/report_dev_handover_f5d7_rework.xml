@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260711-F5D7</pipeline_id>
+  <phase>dev (rework — Phase 8 Architect 후 재진입)</phase>
+  <run_id>dev-109a38cae6f10b88</run_id>
+  <summary>
+    User Acceptance 3회 연속 REJECT의 동일 근본 원인(post-accept PR body writer race)을 수정했다.
+    _materialize_acceptance_snapshot의 Phase 4가 writer guard 없이 PR body를 직접 덮어쓰던 경로를
+    제거하고, 신규 통합 관문 _write_pr_body_packet_block_with_writer_guard로 모든 publish PR body
+    write를 강제했다.
+  </summary>
+
+  <scope_declaration>
+    <files_to_create>없음 (아티팩트 XML/JSON 제외)</files_to_create>
+    <files_to_modify>
+      C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py,
+      C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_writer_ownership_f5d7.py
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>_gh_edit_pr_body( 호출부 전수 검색 → 3곳(def/guard/report update-pr-body). _validate_pr_body_write_permission / _extract_pr_body_acceptance_metadata 기존 헬퍼 재사용.</searched>
+      <decision>REUSE(검증 헬퍼) + NEW(통합 관문 1개) — 기존 검증 로직을 재사용하되 publish 경로에 배선되지 않은 문제를 통합 관문으로 해소.</decision>
+    </reuse_search>
+    <out_of_scope>approval_request_message stdout 이중 출력은 현재 코드에 존재하지 않음(단일 출력 확인). 코드 변경 없이 TC-F 회귀 가드만 추가.</out_of_scope>
+    <scope_amendment_reason>
+      PM 제공 scope_manifest는 4개 함수를 명시했으나, publish=True 경로 일관성(모든 호출자에 writer_role/target_status 명시)을 위해
+      5번째 함수 _auto_generate_final_packet_and_update_pr에도 target_status="PENDING"을 배선했다. 동일 pipeline.py 파일 내이며
+      PM step_plan target_files(pipeline.py) 범위 안이므로 추가 파일 승인 불필요.
+    </scope_amendment_reason>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-12</micro_task_id>
+    <target_function>_materialize_acceptance_snapshot.Phase4 + _write_pr_body_packet_block_with_writer_guard</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:_publish_acceptance_request">gates request-accept publish(PENDING) — writer_role/target_status 배선</caller>
+      <caller location="pipeline.py:_finalize_post_accept">gates accept post-finalize(ACCEPTED) — target_status 배선</caller>
+      <caller location="pipeline.py:_auto_generate_final_packet_and_update_pr">nonce 발급 직후 PENDING publish — target_status 배선</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_get_pr_body_text</dep>
+      <dep>_extract_pr_body_acceptance_metadata</dep>
+      <dep>_validate_pr_body_write_permission</dep>
+      <dep>_replace_pr_body_packet_block</dep>
+      <dep>_gh_edit_pr_body</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>GitHub PR body (gh pr edit) — writer guard 허용 시에만 write</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>YES — _materialize_acceptance_snapshot에 target_status: Optional[str] = None 추가(기본값 None, 하위호환 유지)</signature_change>
+      <breaking_change>NO — 기존 publish=True 호출자는 모두 writer_role을 전달하며, target_status 미전달 시 acceptance_status_override/writer_role에서 파생</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-A~TC-F + TC-E2</test_coverage>
+      <rollback_strategy>git checkout pipeline.py tests/e2e/test_writer_ownership_f5d7.py 로 이전 상태 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <pre_fix_snapshot>
+    <function name="_materialize_acceptance_snapshot.Phase4" file="pipeline.py">
+      <current_signature>if _gh_available(): current_body = _get_pr_body_text() or ""; new_body = _replace_pr_body_packet_block(...); pr_updated = _gh_edit_pr_body(new_body)</current_signature>
+      <current_callers>_publish_acceptance_request, _finalize_post_accept, _auto_generate_final_packet_and_update_pr</current_callers>
+      <current_behavior>writer 검증 없이 PR body를 직접 덮어씀 — ACCEPTED body를 PENDING packet으로 덮어쓰는 race 발생. None body를 "" 로 흡수하여 기존 body 파괴 위험.</current_behavior>
+    </function>
+  </pre_fix_snapshot>
+
+  <post_fix_diff>
+    Phase 4가 _write_pr_body_packet_block_with_writer_guard(current_body=_get_pr_body_text(), ...)를 경유.
+    None body → fail-closed(pr_update_failed=True). ACCEPTED→PENDING 역전이 → silent skip(ACCEPTED body 보존, pr_update_failed=False).
+    허용 전이 → 기존과 동일하게 write. 시그니처에 target_status 추가. 호출자 3곳 writer_role/target_status 배선.
+  </post_fix_diff>
+
+  <self_check>
+    <python_version_syntax>PASS — Python 3.12 문법, typing.Optional/Dict 사용</python_version_syntax>
+    <type_hinting>PASS — 신규 헬퍼 전 파라미터+리턴(Dict[str, Any]) 명시</type_hinting>
+    <error_handling>PASS — 헬퍼는 예외 없이 결과 dict 반환(호출자 fail-closed 분기), target_status isinstance 가드</error_handling>
+    <path_safety>N/A — 경로 I/O 없음</path_safety>
+    <security>PASS — 하드코딩 시크릿 없음</security>
+    <al_edge_cases>PASS — current_body None/비str 방어, writer_role 빈 문자열 BLOCKED, target_status isinstance 가드</al_edge_cases>
+    <pd_policy>PASS — None→fail-closed, 역전이→skip 정책 명시(docstring)</pd_policy>
+    <fs_encoding_fallback>N/A — 파일 텍스트 read 신규 없음</fs_encoding_fallback>
+    <docstring>PASS — 신규 헬퍼 docstring + 4-line 자기반성 헤더</docstring>
+    <execution_check>PASS — (1) py_compile OK (2) 격리 import OK (3) pytest tests/e2e/test_writer_ownership_f5d7.py 24 passed</execution_check>
+    <async_bridge_check>SKIP — asyncio+UI 아님</async_bridge_check>
+    <playwright_wait_check>SKIP — Playwright 미사용</playwright_wait_check>
+    <impact_analysis_check>PASS — 전체 impact_analysis 블록 출력, state_mutations 명시, risk_assessment 4필드 채움</impact_analysis_check>
+    <frozen_codebase_check>PASS — (1) scope 외 파일 미수정 (2) 무관 리팩토링 0건 (3) OAR 0회(1-pass) (4) pre/post snapshot 출력 (5) _gh_edit_pr_body 호출부 전수 audit (6) 단일 관문화로 multi-location 정합)</frozen_codebase_check>
+  </self_check>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_writer_ownership_f5d7.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_writer_ownership_f5d7.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_writer_ownership_f5d7.py</file>
+    <test_result>tests/e2e/test_writer_ownership_f5d7.py — 24 passed</test_result>
+  </evidence>
+
+  <dev_output>
+    <files>
+      pipeline.py — _write_pr_body_packet_block_with_writer_guard(신규), _materialize_acceptance_snapshot Phase 4 교체 + target_status 파라미터, _publish_acceptance_request/_finalize_post_accept/_auto_generate_final_packet_and_update_pr writer 배선;
+      tests/e2e/test_writer_ownership_f5d7.py — TC-A~TC-F + TC-E2 추가
+    </files>
+    <reference_applied>N/A</reference_applied>
+    <dependencies>표준 라이브러리만 사용(추가 의존성 없음)</dependencies>
+    <entry_point>python pipeline.py gates request-accept / gates accept</entry_point>
+    <env_vars>PIPELINE_GH_EXECUTABLE, PIPELINE_FAKE_PR_BODY, PIPELINE_FAKE_PR_FETCH_FAIL (테스트 훅)</env_vars>
+    <known_constraints>
+      MT-12는 PM atomic_plan(MT-1~MT-11)에 미등록. pipeline.py module gate는 unknown MT id를 hard-block하므로
+      `pipeline.py module design/dev/qa --mt-id MT-12` 기록 전 PM planner/manager 재실행으로 MT-12 등록 필요.
+      dev-agent는 module gate/done 상태 기록을 직접 수행하지 않으며 Pipeline Manager가 receipt와 함께 기록한다.
+      관련 pytest 회귀 실패 40건은 사전 존재 환경 이슈(contract_not_frozen/staging setup)로, 본 변경 revert baseline에서도 동일 재현(회귀 아님).
+    </known_constraints>
+  </dev_output>
+</handover>

@@ -17254,6 +17254,89 @@ def _validate_pr_body_write_permission(
     }
 
 
+# [Purpose]: IMP-20260711-F5D7 MT-12 rework — PR body FINAL_PACKET 블록을 쓰는 모든 publish 경로가
+#   반드시 writer ownership 검증을 거치도록 강제하는 단일 통합 helper. 3회 REJECT의 근본 원인은
+#   _materialize_acceptance_snapshot Phase 4가 이 검증 없이 PR body를 직접 덮어써(ACCEPTED→PENDING)
+#   post-accept race를 유발한 것이다. 이 helper가 유일한 PR body write 관문이 된다.
+# [Assumptions]: 호출자는 방금 조회한 current_body(gh에서 읽은 원문 또는 None)와, 기록하려는
+#   packet_content/writer_role/target_status를 전달한다. current_body=None은 fetch 실패를 의미한다.
+# [Vulnerability & Risks]: current_body가 str이 아닌 예상 외 타입이면 fail-closed로 차단한다(안전측).
+#   snapshot_id/writer_epoch는 packet_content에 이미 embed되어 있으므로 여기서는 정보성 인자다.
+# [Improvement]: writer_epoch 단조 비교를 추가하여 오래된 writer의 뒤늦은 write까지 봉쇄 가능.
+def _write_pr_body_packet_block_with_writer_guard(
+    current_body: Optional[str],
+    packet_content: str,
+    writer_role: str,
+    target_status: str,
+    snapshot_id: str = "",
+    writer_epoch: str = "",
+) -> Dict[str, Any]:
+    """writer ownership 검증을 거쳐 PR body의 FINAL_PACKET 블록을 교체/기록한다.
+
+    이 함수는 PR body write의 단일 관문이다. _validate_pr_body_write_permission이 허용할 때만
+    _replace_pr_body_packet_block + _gh_edit_pr_body를 호출한다.
+
+    Args:
+        current_body: 방금 조회한 현재 PR body 원문. None이면 fetch 실패로 간주(fail-closed).
+        packet_content: PR body에 삽입할 최신 packet 본문(writer-meta 이미 embed됨).
+        writer_role: PR_BODY_WRITER_ROLES 중 하나.
+        target_status: 기록하려는 acceptance 상태("PENDING" | "ACCEPTED").
+        snapshot_id: 정보성 — packet_content에 이미 반영되어 있으므로 검증에만 참고.
+        writer_epoch: 정보성 — packet_content에 이미 반영되어 있으므로 검증에만 참고.
+    Returns:
+        dict with keys:
+          - allowed(bool): write 허용 여부.
+          - skip(bool): ACCEPTED→PENDING 역전이 등으로 조용히 건너뛴 경우 True(치명적 오류 아님).
+          - pr_updated(bool): 실제 _gh_edit_pr_body가 성공했는지.
+          - failure_code(Optional[str]): 차단 사유 코드(없으면 None).
+          - reason(Optional[str]): 사람 읽을 수 있는 사유.
+    Raises:
+        없음 — 모든 실패는 결과 dict로 반환(호출자가 fail-closed 분기 결정).
+    """
+    # 1) fail-closed: current_body가 None(fetch 실패)이거나 str이 아니면 어떤 write도 하지 않는다.
+    if current_body is None or not isinstance(current_body, str):
+        return {
+            "allowed": False,
+            "skip": False,
+            "pr_updated": False,
+            "failure_code": "pr_body_fetch_failed",
+            "reason": "PR body fetch 실패(None/비str) — writer guard fail-closed",
+        }
+
+    # 2) 현재 PR body의 acceptance 상태를 판정한다.
+    _meta = _extract_pr_body_acceptance_metadata(current_body)
+    _current_status = str(_meta.get("acceptance_status", "UNKNOWN") or "UNKNOWN")
+
+    # 3) 상태 전이 권한을 검증한다(fail-closed 게이트).
+    _perm = _validate_pr_body_write_permission(
+        writer_role=writer_role,
+        current_acceptance_status=_current_status,
+        target_status=target_status,
+        pr_body_fetch_ok=True,
+    )
+
+    # 4) 허용되지 않으면 write하지 않고 사유를 그대로 전달한다(skip 여부 보존).
+    if not _perm.get("allowed"):
+        return {
+            "allowed": False,
+            "skip": bool(_perm.get("skip")),
+            "pr_updated": False,
+            "failure_code": _perm.get("failure_code"),
+            "reason": _perm.get("reason"),
+        }
+
+    # 5) 허용된 경우에만 packet 블록을 교체하고 PR body를 실제로 갱신한다.
+    _new_body = _replace_pr_body_packet_block(current_body, packet_content)
+    _pr_updated = _gh_edit_pr_body(_new_body)
+    return {
+        "allowed": True,
+        "skip": False,
+        "pr_updated": _pr_updated,
+        "failure_code": None,
+        "reason": "OK",
+    }
+
+
 def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
     """report update-pr-body 핸들러.
 
@@ -21412,6 +21495,7 @@ def _materialize_acceptance_snapshot(
     writer_role: Optional[str] = None,  # IMP-20260711-F5D7 MT-4: PR body writer 역할 (metadata 기록)
     snapshot_id: Optional[str] = None,  # IMP-20260711-F5D7 MT-4: writer metadata snapshot_id
     acceptance_status_override: Optional[str] = None,  # IMP-20260711-F5D7 MT-4: post-accept 시 ACCEPTED 표시
+    target_status: Optional[str] = None,  # IMP-20260711-F5D7 MT-12: Phase 4 writer guard 목표 상태
 ) -> Dict[str, Any]:
     """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
 
@@ -21472,6 +21556,10 @@ def _materialize_acceptance_snapshot(
         raise TypeError(
             "acceptance_status_override must be str or None, got "
             f"{type(acceptance_status_override).__name__}"
+        )
+    if target_status is not None and not isinstance(target_status, str):
+        raise TypeError(
+            f"target_status must be str or None, got {type(target_status).__name__}"
         )
     # IMP-20260711-F5D7 MT-5: writer_epoch SSoT — None이면 acceptance_request의 안정적 식별자
     # (snapshot_id/nonce)에서 결정론적으로 파생한다. _now() 기반이 아니라 결정론적으로 만들어야
@@ -21725,16 +21813,47 @@ def _materialize_acceptance_snapshot(
         state["acceptance_request"]["verification_json_sha256"] = _effective_json_sha
 
     # Phase 4: PR 본문 갱신.
+    # IMP-20260711-F5D7 MT-12 rework: 직접 write 경로(빈 문자열 흡수 후 _replace → _gh_edit)를
+    # 제거하고 _write_pr_body_packet_block_with_writer_guard 단일 관문을 경유한다. 이 관문이 이미
+    # ACCEPTED인 PR body를 PENDING packet으로 덮어쓰는 post-accept race를 fail-closed로 차단한다.
     # BUG-20260628-F52C REJECT-2: gh가 있는데 pr edit가 실패하면 "갱신 안 됨"과 구분되는
     # pr_body_update_failed=True를 반환하여 _publish_acceptance_request가 fail-closed BLOCKED하도록 한다.
     # gh CLI 자체가 없으면(pr_body_update_failed=False) 기존 graceful skip을 유지한다.
     pr_updated = False
     pr_update_failed = False
+    # target_status 결정: 명시 인자 > acceptance_status_override 파생 > writer_role 파생 > PENDING.
+    _effective_target = str(target_status or "").upper()
+    if not _effective_target:
+        if acceptance_status_override and "ACCEPTED" in acceptance_status_override.upper():
+            _effective_target = "ACCEPTED"
+        elif writer_role == "post_accept_writer":
+            _effective_target = "ACCEPTED"
+        else:
+            _effective_target = "PENDING"
+    _effective_writer_role = str(writer_role or "")
     if _gh_available():  # BUG-20260628-F52C: PIPELINE_GH_EXECUTABLE 오버라이드 포함 판정.
-        current_body = _get_pr_body_text() or ""
-        new_body = _replace_pr_body_packet_block(current_body, content)
-        pr_updated = _gh_edit_pr_body(new_body)
-        if not pr_updated:
+        # None(fetch 실패)은 빈 문자열로 흡수하지 않는다 — writer guard가 fail-closed 판정한다.
+        _current_body_for_guard = _get_pr_body_text()
+        _guard_result = _write_pr_body_packet_block_with_writer_guard(
+            current_body=_current_body_for_guard,
+            packet_content=content,
+            writer_role=_effective_writer_role,
+            target_status=_effective_target,
+            snapshot_id=str(snapshot_id or ""),
+            writer_epoch=str(writer_epoch or ""),
+        )
+        if _guard_result.get("allowed"):
+            pr_updated = bool(_guard_result.get("pr_updated"))
+            if not pr_updated:
+                pr_update_failed = True
+        elif _guard_result.get("skip"):
+            # ACCEPTED→PENDING 역전이 등 — ACCEPTED body를 보존하기 위해 조용히 건너뛴다.
+            # 이는 치명적 오류가 아니므로 pr_update_failed를 세우지 않는다(fail-closed BLOCKED 아님).
+            pr_updated = False
+            pr_update_failed = False
+        else:
+            # fetch 실패 / unknown writer / 전이 불허 — write로 이어지면 안 되므로 fail-closed.
+            pr_updated = False
             pr_update_failed = True
 
     return {
@@ -21840,7 +21959,9 @@ def _auto_generate_final_packet_and_update_pr(
     # IMP-20260711-F5D7 MT-4: 이 경로는 nonce 발급 직후 PENDING packet을 생성/게시하므로
     # pending_acceptance_writer 역할을 명시하여 writer-meta를 packet에 기록한다.
     result = _materialize_acceptance_snapshot(
-        state, acceptance_request, writer_role="pending_acceptance_writer"
+        state, acceptance_request,
+        writer_role="pending_acceptance_writer",
+        target_status="PENDING",  # IMP-20260711-F5D7 MT-12: nonce 발급 직후 PENDING publish
     )
     return {
         "packet_path": result["packet_path"],
@@ -21909,6 +22030,7 @@ def _finalize_post_accept(
             writer_role="post_accept_writer",
             snapshot_id=str(acceptance_request.get("snapshot_id", "") or "") or None,
             acceptance_status_override="ACCEPTED",
+            target_status="ACCEPTED",  # IMP-20260711-F5D7 MT-12: post-accept PENDING→ACCEPTED 승격
         )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         return {
@@ -24555,6 +24677,10 @@ def _publish_acceptance_request(
         frozen_packet_content=frozen_packet_content,
         staged_json_sha256=staged_json_sha256,
         staged_json_content=staged_json_content,  # MT-21: frozen publish path JSON content
+        # IMP-20260711-F5D7 MT-12: PENDING publish 경로 — writer guard가 ACCEPTED body를 덮지 않도록
+        # writer_role/target_status를 명시 전달한다.
+        writer_role="pending_acceptance_writer",
+        target_status="PENDING",
     )
 
     # REJECT-2: gh가 있는데 PR body 갱신(pr edit)이 실패한 경우 fail-closed BLOCKED.

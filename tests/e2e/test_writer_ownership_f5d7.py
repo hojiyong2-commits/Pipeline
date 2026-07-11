@@ -434,9 +434,200 @@ def test_tc17_manual_report_writer_unknown_body_success():
         )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# IMP-20260711-F5D7 MT-12 rework: _write_pr_body_packet_block_with_writer_guard
+# 통합 helper 및 _materialize_acceptance_snapshot Phase 4 writer guard 배선 검증.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ACCEPTED_BODY = (
+    "<!-- PIPELINE_FINAL_PACKET_START -->\n"
+    "<!-- pipeline-human-acceptance-packet-accepted -->\n"
+    "<!-- pipeline-writer-meta writer_role=post_accept_writer writer_epoch=epoch-x "
+    "snapshot_id=snap-1 acceptance_status=ACCEPTED -->\n"
+    "[검증용 메타데이터]\nacceptance_display: ACCEPTED\n"
+    "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+)
+_PENDING_BODY = (
+    "<!-- PIPELINE_FINAL_PACKET_START -->\n"
+    "<!-- pipeline-human-acceptance-packet-pending -->\n"
+    "[검증용 메타데이터]\nacceptance_display: 승인 대기 중 (PENDING)\n"
+    "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+)
+_UNKNOWN_BODY = "# 작업 요약\n내용\n\n## 사용자가 확인할 결과물\n결과\n"
+
+
+def _guard_with_edit_counter(mod, **kwargs):
+    """helper를 호출하되 _gh_edit_pr_body 호출 횟수를 세는 카운터로 monkeypatch한다.
+
+    Returns:
+        (result_dict, edit_call_count) 튜플.
+    """
+    guard = getattr(mod, "_write_pr_body_packet_block_with_writer_guard", None)
+    assert guard is not None, "_write_pr_body_packet_block_with_writer_guard 함수가 없습니다"
+    _calls = {"n": 0}
+
+    def _fake_edit(new_body):
+        _calls["n"] += 1
+        return True
+
+    _orig = mod._gh_edit_pr_body
+    mod._gh_edit_pr_body = _fake_edit
+    try:
+        result = guard(**kwargs)
+    finally:
+        mod._gh_edit_pr_body = _orig
+    return result, _calls["n"]
+
+
+# TC-A: ACCEPTED body + target=PENDING → _gh_edit_pr_body 미호출 (역전이 방지)
+def test_tca_accepted_body_pending_target_no_write():
+    """TC-A: 이미 ACCEPTED인 PR body에 pending writer가 PENDING을 쓰려 하면 write되지 않는다."""
+    mod = _load_pipeline_module()
+    result, edit_calls = _guard_with_edit_counter(
+        mod,
+        current_body=_ACCEPTED_BODY,
+        packet_content=_PENDING_BODY,
+        writer_role="pending_acceptance_writer",
+        target_status="PENDING",
+    )
+    assert not result["allowed"], f"ACCEPTED→PENDING이 허용됨: {result}"
+    assert result.get("skip") is True, f"역전이는 skip이어야 함: {result}"
+    assert result["pr_updated"] is False
+    assert edit_calls == 0, f"_gh_edit_pr_body가 호출됨(역전이인데 write 발생): {edit_calls}"
+
+
+# TC-B: pending path → writer guard 통과하여 PR body 업데이트
+def test_tcb_pending_writer_unknown_body_writes():
+    """TC-B: pending_acceptance_writer가 UNKNOWN body에 PENDING을 쓰면 write가 발생한다."""
+    mod = _load_pipeline_module()
+    result, edit_calls = _guard_with_edit_counter(
+        mod,
+        current_body=_UNKNOWN_BODY,
+        packet_content=_PENDING_BODY,
+        writer_role="pending_acceptance_writer",
+        target_status="PENDING",
+    )
+    assert result["allowed"], f"UNKNOWN→PENDING pending writer가 차단됨: {result}"
+    assert result["pr_updated"] is True
+    assert edit_calls == 1, f"_gh_edit_pr_body가 1회 호출되어야 함: {edit_calls}"
+
+
+# TC-C: accepted path → writer guard 통과하여 PR body 업데이트
+def test_tcc_post_accept_writer_pending_to_accepted_writes():
+    """TC-C: post_accept_writer가 PENDING body를 ACCEPTED로 승격하면 write가 발생한다."""
+    mod = _load_pipeline_module()
+    result, edit_calls = _guard_with_edit_counter(
+        mod,
+        current_body=_PENDING_BODY,
+        packet_content=_ACCEPTED_BODY,
+        writer_role="post_accept_writer",
+        target_status="ACCEPTED",
+    )
+    assert result["allowed"], f"PENDING→ACCEPTED post_accept_writer가 차단됨: {result}"
+    assert result["pr_updated"] is True
+    assert edit_calls == 1, f"_gh_edit_pr_body가 1회 호출되어야 함: {edit_calls}"
+
+
+# TC-D: writer_role 빈 문자열("")로 호출 → BLOCKED (write 없음)
+def test_tcd_empty_writer_role_blocked():
+    """TC-D: writer_role=""는 unknown_writer_role로 BLOCKED되고 write하지 않는다."""
+    mod = _load_pipeline_module()
+    result, edit_calls = _guard_with_edit_counter(
+        mod,
+        current_body=_UNKNOWN_BODY,
+        packet_content=_PENDING_BODY,
+        writer_role="",
+        target_status="PENDING",
+    )
+    assert not result["allowed"], f"빈 writer_role이 허용됨: {result}"
+    assert result.get("skip") is False, "빈 role은 skip이 아니라 BLOCKED여야 함"
+    assert result.get("failure_code") == "unknown_writer_role"
+    assert result["pr_updated"] is False
+    assert edit_calls == 0, f"빈 role인데 write 발생: {edit_calls}"
+
+
+# TC-E: current_body=None → 모든 쓰기 경로 fail-closed (pr_updated=False)
+def test_tce_none_body_fail_closed():
+    """TC-E: current_body=None(fetch 실패)이면 어떤 writer도 write하지 못한다(fail-closed)."""
+    mod = _load_pipeline_module()
+    for role in (
+        "pending_acceptance_writer",
+        "post_accept_writer",
+        "final_check_writer",
+        "manual_report_writer",
+    ):
+        result, edit_calls = _guard_with_edit_counter(
+            mod,
+            current_body=None,
+            packet_content=_PENDING_BODY,
+            writer_role=role,
+            target_status="PENDING",
+        )
+        assert not result["allowed"], f"{role}: None body인데 write 허용됨"
+        assert result.get("failure_code") == "pr_body_fetch_failed"
+        assert result["pr_updated"] is False
+        assert edit_calls == 0, f"{role}: None body인데 write 발생: {edit_calls}"
+
+
+# TC-E2: _materialize_acceptance_snapshot Phase 4가 직접 write 대신 writer guard를 배선한다 (wiring)
+def test_tce2_materialize_phase4_wired_to_writer_guard():
+    """TC-E2: _materialize_acceptance_snapshot이 _get_pr_body_text() or "" 직접 write를 제거하고
+    _write_pr_body_packet_block_with_writer_guard를 경유하는지 소스로 검증한다(회귀 방지)."""
+    import inspect
+
+    mod = _load_pipeline_module()
+    materialize = getattr(mod, "_materialize_acceptance_snapshot", None)
+    assert materialize is not None
+    src = inspect.getsource(materialize)
+    # Phase 4가 writer guard 관문을 경유한다.
+    assert "_write_pr_body_packet_block_with_writer_guard" in src, (
+        "Phase 4가 writer guard를 경유하지 않습니다(직접 write 잔존 가능)"
+    )
+    # 직접 write 패턴(_get_pr_body_text() or "" → _gh_edit)이 제거되었다.
+    assert '_get_pr_body_text() or ""' not in src, (
+        "직접 write 패턴 _get_pr_body_text() or \"\" 가 아직 남아 있습니다"
+    )
+
+
+# TC-F: gates request-accept 흐름 내 approval_request_message 단일 출력 불변식
+def test_tcf_approval_message_emitted_once():
+    """TC-F: _cmd_gates_request_accept에서 approval_request_message는 stdout에 최대 1회만 출력된다.
+
+    재사용(read-only) 경로와 신규 발급 경로는 상호배타이며(재사용 경로는 print 후 return),
+    각 print 사이트는 정확히 1회씩만 존재해야 한다(이중 출력 회귀 방지).
+    """
+    import inspect
+
+    mod = _load_pipeline_module()
+    cmd = getattr(mod, "_cmd_gates_request_accept", None)
+    assert cmd is not None, "_cmd_gates_request_accept 함수가 없습니다"
+    src = inspect.getsource(cmd)
+    # 재사용 경로의 message print 사이트 1회.
+    reuse_prints = src.count('print(_reuse_approval_out["approval_request_message"])')
+    # 신규 발급 경로의 message print 사이트 1회.
+    new_prints = src.count("print(_approval_msg)")
+    assert reuse_prints == 1, f"재사용 경로 approval message print가 {reuse_prints}회(1회여야 함)"
+    assert new_prints == 1, f"신규 경로 approval message print가 {new_prints}회(1회여야 함)"
+    # 재사용 경로는 print 후 return하여 신규 경로 print와 동시에 실행되지 않는다.
+    reuse_idx = src.find('print(_reuse_approval_out["approval_request_message"])')
+    new_idx = src.find("print(_approval_msg)")
+    assert reuse_idx != -1 and new_idx != -1
+    between = src[reuse_idx:new_idx]
+    assert "return" in between, (
+        "재사용 경로 print와 신규 경로 print 사이에 return이 없어 이중 출력 가능"
+    )
+
+
 if __name__ == "__main__":
     # SELF-VERIFY 블록 — tests/ 폴더가 있어도 직접 실행 가능하게 유지.
     _ = os.environ  # noqa: F401 (isolation env 확인용 placeholder)
+    test_tca_accepted_body_pending_target_no_write()
+    test_tcb_pending_writer_unknown_body_writes()
+    test_tcc_post_accept_writer_pending_to_accepted_writes()
+    test_tcd_empty_writer_role_blocked()
+    test_tce_none_body_fail_closed()
+    test_tce2_materialize_phase4_wired_to_writer_guard()
+    test_tcf_approval_message_emitted_once()
     test_tc1_writer_roles_constant_defined()
     test_tc2_transition_rules_defined()
     test_tc3_validate_permission_blocks_reverse_transition()
