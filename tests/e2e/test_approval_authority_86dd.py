@@ -42,15 +42,13 @@ class TestApprovalAuthority:
         # approval_display 키가 return dict에 있으면 이중 relay 경로가 생김
         # "approval_display": 패턴이 실행 코드에 없어야 함
         # (주석에는 있을 수 있으나 dict key 할당 패턴은 제거됨)
-        pattern_as_key = r'"approval_display"\s*:'
-        matches = re.findall(pattern_as_key, source)
         # 주석 줄을 제외한 실행 코드에서 찾기
         non_comment_lines = [
             line for line in source.splitlines()
             if not line.strip().startswith("#") and '"approval_display"' in line
         ]
         assert len(non_comment_lines) == 0, (
-            f"approval_display 키가 실행 코드에서 발견됨 (이중 relay 경로):\n"
+            "approval_display 키가 실행 코드에서 발견됨 (이중 relay 경로):\n"
             + "\n".join(non_comment_lines)
         )
 
@@ -58,13 +56,12 @@ class TestApprovalAuthority:
         """TC-2: machine-readable JSON stdout에 message_file 키가 추가되지 않음"""
         source = PIPELINE_PY.read_text(encoding="utf-8")
         # _approval_out["message_file"] 할당이 실행 코드에 없어야 함
-        pattern = r'_approval_out\["message_file"\]\s*='
         non_comment_lines = [
             line for line in source.splitlines()
             if not line.strip().startswith("#") and '_approval_out["message_file"]' in line
         ]
         assert len(non_comment_lines) == 0, (
-            f"_approval_out[\"message_file\"] 할당이 실행 코드에서 발견됨:\n"
+            "_approval_out[\"message_file\"] 할당이 실행 코드에서 발견됨:\n"
             + "\n".join(non_comment_lines)
         )
 
@@ -170,8 +167,8 @@ class TestApprovalAuthority:
             and 'req_candidate["approval_display"]' in line
         ]
         assert len(non_comment_lines) == 0, (
-            f"req_candidate[\"approval_display\"] 할당이 실행 코드에서 발견됨 "
-            f"(acceptance_request.json 이중 relay 경로):\n"
+            "req_candidate[\"approval_display\"] 할당이 실행 코드에서 발견됨 "
+            "(acceptance_request.json 이중 relay 경로):\n"
             + "\n".join(non_comment_lines)
         )
 
@@ -212,11 +209,11 @@ class TestApprovalAuthority:
         )
         # return dict에 approval_display 없어야 함 (실행 코드 기준)
         non_comment = [
-            l for l in func_body.splitlines()
-            if not l.strip().startswith("#") and '"approval_display"' in l
+            ln for ln in func_body.splitlines()
+            if not ln.strip().startswith("#") and '"approval_display"' in ln
         ]
         assert len(non_comment) == 0, (
-            f"_build_approval_request_output이 여전히 approval_display를 반환함:\n"
+            "_build_approval_request_output이 여전히 approval_display를 반환함:\n"
             + "\n".join(non_comment)
         )
 
