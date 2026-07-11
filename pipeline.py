@@ -6487,8 +6487,17 @@ PR_BODY_WRITER_ROLES: FrozenSet[str] = frozenset({
 # key=(from_status, to_status), value=allowed_writers set.
 # ("ACCEPTED", "PENDING") 역전이는 빈 set이므로 어떤 writer도 허용되지 않는다.
 ACCEPTANCE_STATE_TRANSITION_RULES: Dict[Tuple[str, str], Set[str]] = {
+    # IMP-20260711-F5D7 rework: 초기/미발급 상태(NONE/NOT_REQUESTED/UNKNOWN) → PENDING 정상 전이.
+    # 이 항목이 없으면 기본값 set()으로 fresh PR body에서 모든 writer가 BLOCKED되어
+    # report update-pr-body가 정상 상태에서 항상 exit 1이 되는 회귀가 발생한다.
+    # post_accept_writer는 ACCEPTED 전용이므로 초기→PENDING 허용 집합에서 제외한다.
+    ("NONE", "PENDING"): {"pending_acceptance_writer", "manual_report_writer", "final_check_writer"},
+    ("NOT_REQUESTED", "PENDING"): {"pending_acceptance_writer", "manual_report_writer", "final_check_writer"},
+    ("UNKNOWN", "PENDING"): {"pending_acceptance_writer", "manual_report_writer", "final_check_writer"},
+    # PENDING → ACCEPTED (post_accept_writer만 승격 가능)
     ("PENDING", "ACCEPTED"): {"post_accept_writer"},
-    ("PENDING", "PENDING"): {"pending_acceptance_writer", "final_check_writer"},
+    # PENDING → PENDING (재발급/업데이트) — manual_report_writer 포함(수동 report update-pr-body).
+    ("PENDING", "PENDING"): {"pending_acceptance_writer", "manual_report_writer", "final_check_writer"},
     ("ACCEPTED", "ACCEPTED"): {"post_accept_writer"},  # idempotent
     ("ACCEPTED", "PENDING"): set(),  # 역전이 차단 (어떤 writer도 불허)
 }

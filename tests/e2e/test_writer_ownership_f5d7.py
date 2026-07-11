@@ -391,6 +391,49 @@ def test_tc16_ci_writer_skips_on_accepted_pr_body():
     assert not re.search(ci_pattern, pending_body), "PENDING PR body가 잘못 매치됨(오탐)"
 
 
+# TC-17: manual_report_writer가 UNKNOWN body(fresh/미발급 PR)에서 exit 0으로 성공하는 positive path
+def test_tc17_manual_report_writer_unknown_body_success():
+    """TC-17: manual_report_writer + UNKNOWN body(마커 없음) → exit 0(정상 전이 허용).
+
+    회귀 방지: ACCEPTANCE_STATE_TRANSITION_RULES에 ("UNKNOWN","PENDING") 항목이 없으면
+    기본값 set()으로 인해 manual_report_writer가 transition_not_allowed로 BLOCKED(exit 1)된다.
+    수정 후 UNKNOWN→PENDING 전이가 허용되어, fresh PR body에서 report update-pr-body가
+    정상 진행(gh 부재 시 graceful skip, exit 0)한다.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = pathlib.Path(tmp)
+        # _packet_output_path()는 cwd 기준이므로 packet md를 만들어 존재 조건을 만족시킨다.
+        (tmp_path / "human_acceptance_packet.md").write_text(
+            "[검증용 메타데이터]\npipeline_id: IMP-TEST\n", encoding="utf-8"
+        )
+        # 마커가 없는 fresh PR body → _extract_pr_body_acceptance_metadata가 UNKNOWN을 반환.
+        unknown_body = "# 작업 요약\n내용\n\n## 사용자가 확인할 결과물\n결과\n"
+        body_file = tmp_path / "fake_pr_body.txt"
+        body_file.write_text(unknown_body, encoding="utf-8")
+        env = dict(os.environ)
+        env["PIPELINE_STATE_PATH"] = str(tmp_path / "isolated_state.json")
+        env["PIPELINE_FAKE_PR_BODY"] = str(body_file)  # fetch 성공(UNKNOWN body 주입)
+        env.pop("PIPELINE_FAKE_PR_FETCH_FAIL", None)
+        # gh 설치 여부와 무관하게 결정적이도록 존재하지 않는 gh 실행 경로를 강제
+        # → _gh_available()=False → _gh_edit_pr_body()가 graceful하게 False 반환 → exit 0.
+        env["PIPELINE_GH_EXECUTABLE"] = str(tmp_path / "no_such_gh_binary")
+        result = subprocess.run(
+            [sys.executable, str(PIPELINE_PY), "report", "update-pr-body"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=60, cwd=str(tmp_path), env=env,
+        )
+        combined = (result.stdout or "") + (result.stderr or "")
+        # UNKNOWN→PENDING 전이는 manual_report_writer에 허용되므로 BLOCKED되지 않는다.
+        assert result.returncode == 0, (
+            f"TC-17: manual_report_writer UNKNOWN→PENDING은 exit 0이어야 함 — "
+            f"returncode={result.returncode}\n{combined[:800]}"
+        )
+        # 회귀 시 나타나던 writer ownership BLOCKED 메시지가 없어야 한다.
+        assert "transition_not_allowed" not in combined, (
+            f"TC-17: UNKNOWN→PENDING이 잘못 차단됨(transition_not_allowed): {combined[:800]}"
+        )
+
+
 if __name__ == "__main__":
     # SELF-VERIFY 블록 — tests/ 폴더가 있어도 직접 실행 가능하게 유지.
     _ = os.environ  # noqa: F401 (isolation env 확인용 placeholder)
@@ -406,4 +449,5 @@ if __name__ == "__main__":
     test_tc14_manual_writer_cannot_overwrite_accepted()
     test_tc15_writer_metadata_in_generated_packet()
     test_tc16_ci_writer_skips_on_accepted_pr_body()
+    test_tc17_manual_report_writer_unknown_body_success()
     print("[SELF-VERIFY] OK")
