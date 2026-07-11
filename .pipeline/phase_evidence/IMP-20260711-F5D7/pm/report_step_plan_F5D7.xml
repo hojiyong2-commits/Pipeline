@@ -1,0 +1,510 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PM Planner Agent Output for IMP-20260711-F5D7 -->
+<!-- Post-Accept PR Body Writer Race Condition Fix — Writer Ownership + Snapshot Epoch SSoT -->
+
+<decomposition_audit>
+  <pipeline_id>IMP-20260711-F5D7</pipeline_id>
+  <audit_timestamp>2026-07-11T12:00:00Z</audit_timestamp>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>11</micro_task_count>
+  <grep_executions>11</grep_executions>
+
+  <module_decomposition>
+    <module id="M-1" name="Writer Role SSoT">
+      <description>PR body final packet을 쓰는 모든 경로 전수 조사 및 writer_role 상수/타입 정의</description>
+      <ambiguity_triggers>
+        <trigger id="T-1" category="tech_choice" fired="false">writer_role enum vs string constant 선택 — string constant 사용 (기존 pipeline.py 패턴)</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-2" name="Acceptance State Transition">
+      <description>NONE/NOT_REQUESTED → PENDING → ACCEPTED/REJECTED 단방향 전이 규칙 및 역전이 차단</description>
+      <ambiguity_triggers>
+        <trigger id="T-2" category="edge_case" fired="false">역전이 시도 시 no-op vs BLOCKED — fail-closed BLOCKED 선택</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-3" name="Writer Epoch/Snapshot Identity">
+      <description>PR body final packet에 writer_role, writer_epoch, snapshot_id, acceptance_status 메타데이터 기록</description>
+      <ambiguity_triggers>
+        <trigger id="T-3" category="output_format" fired="false">epoch 형식 — UUID hex 사용 (기존 snapshot_id 패턴)</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-4" name="Pre-Write State Validation">
+      <description>모든 PR body write 직전에 현재 PR body를 읽고 acceptance 상태 전이 검증</description>
+      <ambiguity_triggers>
+        <trigger id="T-4" category="edge_case" fired="false">current body fetch 실패 시 — fail-closed (write 금지)</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-5" name="CI Writer Scope Reduction">
+      <description>GitHub CI final-check writer가 ACCEPTED 감지 시 PR body write를 skip하고 사유 기록</description>
+      <ambiguity_triggers>
+        <trigger id="T-5" category="blast_radius" fired="false">workflow 파일 수정 범위 — ci.yml + final_check.yml 모두 수정</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-6" name="Post-Accept Writer Verification">
+      <description>_finalize_post_accept가 ACCEPTED 전이 후 PR body 재조회하여 ACCEPTED 상태 반영 검증</description>
+      <ambiguity_triggers>
+        <trigger id="T-6" category="edge_case" fired="false">재조회 시 PENDING 남아있으면 — BLOCKED</trigger>
+      </ambiguity_triggers>
+    </module>
+  </module_decomposition>
+
+  <call_site_analysis>
+    <writer_path id="W-1" role="pending_acceptance_writer">
+      <entry_point>_materialize_acceptance_snapshot</entry_point>
+      <files>pipeline.py</files>
+      <grep_evidence>
+        <pattern>_materialize_acceptance_snapshot</pattern>
+        <match_count>47</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <notes>gates request-accept 경로에서 PENDING packet 생성 및 PR body 갱신</notes>
+    </writer_path>
+    <writer_path id="W-2" role="post_accept_writer">
+      <entry_point>_finalize_post_accept</entry_point>
+      <files>pipeline.py</files>
+      <grep_evidence>
+        <pattern>_finalize_post_accept</pattern>
+        <match_count>12</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <notes>gates accept ACCEPT 후 ACCEPTED packet 생성 및 PR body 갱신</notes>
+    </writer_path>
+    <writer_path id="W-3" role="manual_report_writer">
+      <entry_point>_cmd_report_update_pr_body</entry_point>
+      <files>pipeline.py</files>
+      <grep_evidence>
+        <pattern>_cmd_report_update_pr_body</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <notes>report update-pr-body 명령 — ACCEPTED 상태에서는 차단되어야 함</notes>
+    </writer_path>
+    <writer_path id="W-4" role="final_check_writer">
+      <entry_point>ci.yml "최종 확인 안내 만들기" step + "PR에 최종 확인 안내 남기기" step</entry_point>
+      <files>.github/workflows/ci.yml</files>
+      <grep_evidence>
+        <pattern>gh pr edit|Invoke-RestMethod.*PATCH</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <notes>GitHub CI가 PR body 갱신하는 경로 — ACCEPTED 감지 시 skip 필요</notes>
+    </writer_path>
+    <writer_path id="W-5" role="final_check_writer">
+      <entry_point>final_check.yml "최종 확인 안내 댓글 생성" step</entry_point>
+      <files>.github/workflows/final_check.yml</files>
+      <grep_evidence>
+        <pattern>gh api.*PATCH.*body</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <notes>final_check workflow의 PR comment 갱신 — PR body 직접 수정은 없으나 일관성 점검 필요</notes>
+    </writer_path>
+  </call_site_analysis>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260711-F5D7</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>.github/workflows/** 및 pipeline.py 수정 포함 — Trust-Root 파일 변경. post-accept race condition은 데이터 무결성에 영향을 주는 핵심 파이프라인 로직 수정.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>5</expected_changed_files>
+      <expected_changed_functions>12</expected_changed_functions>
+      <expected_changed_lines>350</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 취향 질문(변수명, 코드 스타일, enum vs constant 세부 구현)은 묻지 않고 유지보수성 기준으로 정리했습니다. writer_role은 기존 pipeline.py 패턴인 string constant로 통일합니다.</filter_summary>
+
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>writer 역할별 상태 전이 규칙을 코드로 어떻게 강제할까요?</user_facing_question>
+        <evidence>
+          현재 PR body를 쓰는 경로가 5개입니다:
+          1. _materialize_acceptance_snapshot (pending_acceptance_writer)
+          2. _finalize_post_accept (post_accept_writer)
+          3. _cmd_report_update_pr_body (manual_report_writer)
+          4. ci.yml "PR에 최종 확인 안내 남기기" step (final_check_writer)
+          5. final_check.yml comment 갱신 (final_check_writer)
+
+          이들 사이에 상태 전이 규칙이 없어서 ACCEPTED 상태의 PR body를 다른 writer가 PENDING으로 되돌릴 수 있습니다.
+        </evidence>
+        <why_it_matters>
+          단방향 전이(NONE→PENDING→ACCEPTED)가 코드로 강제되지 않으면 race condition으로 사용자가 승인한 결과가 뒤집힐 수 있습니다. 이는 파이프라인 신뢰성의 핵심입니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>Pre-Write Validation + Skip Pattern</label>
+            <benefit>모든 writer가 write 직전에 현재 PR body의 acceptance_status를 읽고, ACCEPTED면 post_accept_writer 외 write를 skip/BLOCKED. 역전이가 구조적으로 불가능.</benefit>
+            <cost>모든 writer 경로에 검증 로직 추가 필요 (pipeline.py 4곳 + ci.yml 1곳). 약 150줄 추가.</cost>
+          </option>
+          <option id="B">
+            <label>Epoch Comparison Only</label>
+            <benefit>writer_epoch만 비교하여 더 오래된 epoch이 최신 epoch을 덮어쓰지 못하게 함.</benefit>
+            <cost>epoch이 같거나 epoch 파싱 실패 시 역전이 가능. ACCEPTED→PENDING 전이 자체는 막지 못함.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청 원문에서 "writer_role별 허용 상태 전이를 코드로 강제"를 명시했으므로 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">PR body final packet을 쓰는 모든 경로에 writer_role SSoT 상수 정의</requirement>
+    <requirement id="REQ-2">ACCEPTED→PENDING/NOT_REQUESTED 역전이 구조적 차단</requirement>
+    <requirement id="REQ-3">ACCEPTED→older ACCEPTED snapshot 덮어쓰기 차단</requirement>
+    <requirement id="REQ-4">PR body write 직전 current body fetch/parse 실패 시 fail-closed</requirement>
+    <requirement id="REQ-5">GitHub CI final-check writer가 ACCEPTED 감지 시 skip + 사유 기록</requirement>
+    <requirement id="REQ-6">_finalize_post_accept가 유일한 ACCEPTED 전이 writer</requirement>
+    <requirement id="REQ-7">post-accept write 후 PENDING marker/old ACCEPT code 잔존 시 BLOCKED</requirement>
+    <requirement id="REQ-8">기존 D278/F52C/B985/DB54 테스트 회귀 없음</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_SSoT_constants_section</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>WRITER_ROLE|PR_BODY_WRITER</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PR_BODY_WRITER_ROLES SSoT 상수 정의 (4개 writer_role: final_check_writer, pending_acceptance_writer, post_accept_writer, manual_report_writer) 및 ACCEPTANCE_STATE_TRANSITION_RULES 상수 정의</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_validate_pr_body_write_permission</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_materialize_acceptance_snapshot</site>
+        <site>_finalize_post_accept</site>
+        <site>_cmd_report_update_pr_body</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_validate_pr_body_write</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PR body write 직전 상태 전이 검증 함수 신규 생성 — current body에서 acceptance_status 추출, writer_role별 허용 전이 검사, BLOCKED/skip/proceed 결정 반환</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-2,AC-3,AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>_extract_pr_body_acceptance_metadata</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_validate_pr_body_write_permission</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_extract_pr_body_acceptance</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PIPELINE_FINAL_PACKET 블록에서 acceptance_status, writer_role, writer_epoch, snapshot_id 메타데이터 추출 함수 신규 생성</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-5,AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>_build_final_packet_content</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_materialize_acceptance_snapshot</site>
+        <site>_cmd_report_final_packet</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_build_final_packet_content</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>packet 본문에 writer_role, writer_epoch, snapshot_id 메타데이터 HTML comment 삽입 (PIPELINE_PACKET_METADATA 블록)</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>_materialize_acceptance_snapshot</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept</site>
+        <site>_finalize_post_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_materialize_acceptance_snapshot</pattern>
+        <match_count>47</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PR body write 직전 _validate_pr_body_write_permission 호출 추가, BLOCKED 시 pr_body_write_blocked=True 반환, writer_role=pending_acceptance_writer 전달</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-2,AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>_cmd_report_update_pr_body</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_report</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_cmd_report_update_pr_body</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PR body write 직전 _validate_pr_body_write_permission 호출 추가, BLOCKED 시 _die, writer_role=manual_report_writer 전달</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-7">
+      <affected_function>_finalize_post_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_finalize_post_accept</pattern>
+        <match_count>12</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>writer_role=post_accept_writer로 _materialize_acceptance_snapshot 호출, 재조회 시 PENDING marker 잔존 검사 강화</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-6,AC-7,AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-8">
+      <affected_function>ci.yml "최종 확인 안내 만들기" step</affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>최종 확인 안내 만들기</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>packet JSON에서 acceptance_status 추출, ACCEPTED면 skip하고 Actions 로그에 사유 기록</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-9">
+      <affected_function>ci.yml "PR에 최종 확인 안내 남기기" step</affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PR에 최종 확인 안내 남기기</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PR body에서 ACCEPTED 상태 감지 시 comment update만 수행하고 PR body 수정 skip, skip 사유를 comment에 기록</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-9,AC-10</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-10">
+      <affected_function>tests/e2e/test_writer_ownership_f5d7.py</affected_function>
+      <target_files>
+        <file>tests/e2e/test_writer_ownership_f5d7.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_writer_ownership</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TC-1~TC-12 E2E 테스트 신규 생성 — writer ownership, 상태 전이, race condition 재현 시나리오 검증</change_summary>
+      <line_estimate>300</line_estimate>
+      <covers_ac>AC-11</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-11">
+      <affected_function>tests/oracles/IMP-20260711-F5D7/**</affected_function>
+      <target_files>
+        <file>tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/input.json</file>
+        <file>tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/expected.json</file>
+        <file>tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/input.json</file>
+        <file>tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>IMP-20260711-F5D7</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>oracle 파일 생성 — 정상 케이스(PENDING→ACCEPTED 전이) 1개, 엣지 케이스(ACCEPTED→PENDING 차단) 1개</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-12</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>PR_BODY_WRITER_ROLES SSoT 상수에 4개 writer_role이 정의되어 있다 (final_check_writer, pending_acceptance_writer, post_accept_writer, manual_report_writer)</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>PENDING→ACCEPTED 전이는 post_accept_writer만 허용된다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>ACCEPTED PR body를 final_check_writer/pending_acceptance_writer/manual_report_writer가 PENDING으로 덮어쓰려 하면 skip 또는 BLOCKED 반환한다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>current PR body fetch 실패 시 모든 writer가 write를 금지한다 (fail-closed)</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>PR body final packet에 writer_role, writer_epoch, snapshot_id, acceptance_status 메타데이터가 HTML comment로 기록된다</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>_finalize_post_accept가 ACCEPTED 전이 후 PR body를 재조회하여 ACCEPTED 상태 반영을 검증한다</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>post-accept 이후 PR body에 PENDING marker 또는 old ACCEPT code가 남아있으면 BLOCKED 반환한다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>동일 snapshot_id/epoch/body 재write는 no-op으로 허용된다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>GitHub CI final-check writer가 ACCEPTED 감지 후 PR body write를 skip하고 Actions 로그에 사유를 기록한다</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>GitHub CI가 ACCEPTED skip 시 PR comment에 skip 사유를 기록한다</text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true">
+      <text>TC-1~TC-12 E2E 테스트가 모두 PASS한다</text>
+    </criterion>
+    <criterion id="AC-12" must_verify="true" source="user" user_visible="true">
+      <text>기존 D278/F52C/B985/DB54 테스트가 회귀 없이 PASS한다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.12 — 기존 파이프라인 환경 유지</python_version>
+
+  <forbidden>
+    <item>기존 snapshot/SHA 보안 검증 로직 약화</item>
+    <item>ACCEPTED→PENDING 역전이 허용</item>
+    <item>writer_role 없이 PR body write 허용</item>
+    <item>fail-closed 대신 fail-open 처리</item>
+  </forbidden>
+
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <status>READY_FOR_QA</status>
+      <evidence>
+        <files>pipeline.py, .github/workflows/ci.yml, tests/e2e/test_writer_ownership_f5d7.py</files>
+        <scope_manifest>scope_manifest.json</scope_manifest>
+      </evidence>
+    </handover_spec>
+  </handover_template>
+
+  <oracle_design>
+    <oracle_directory>tests/oracles/IMP-20260711-F5D7</oracle_directory>
+    <cases>
+      <case id="case_normal_pending_to_accepted" kind="normal">
+        <description>post_accept_writer가 PENDING PR body를 ACCEPTED로 전이 — 허용</description>
+        <input>current_acceptance_status=PENDING, writer_role=post_accept_writer, target_status=ACCEPTED</input>
+        <expected>result=PASS, pr_body_updated=true, acceptance_status=ACCEPTED</expected>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="case_edge_accepted_to_pending_blocked" kind="edge">
+        <description>final_check_writer가 ACCEPTED PR body를 PENDING으로 덮어쓰기 시도 — 차단</description>
+        <input>current_acceptance_status=ACCEPTED, writer_role=final_check_writer, target_status=PENDING</input>
+        <expected>result=BLOCKED, failure_code=reverse_transition_blocked, pr_body_updated=false</expected>
+        <expected_source>user_provided</expected_source>
+      </case>
+    </cases>
+  </oracle_design>
+
+  <writer_ownership_report>
+    <writer_role_table>
+      | writer_role | 진입점 | 허용 전이 | 금지 전이 |
+      |-------------|--------|-----------|-----------|
+      | final_check_writer | ci.yml, final_check.yml | NONE→PENDING, PENDING→PENDING | ACCEPTED→* |
+      | pending_acceptance_writer | _materialize_acceptance_snapshot | NONE→PENDING, PENDING→PENDING | ACCEPTED→* |
+      | post_accept_writer | _finalize_post_accept | PENDING→ACCEPTED | ACCEPTED→PENDING, ACCEPTED→older_ACCEPTED |
+      | manual_report_writer | _cmd_report_update_pr_body | NONE→PENDING, PENDING→PENDING | ACCEPTED→* |
+    </writer_role_table>
+
+    <state_transition_table>
+      | 현재 상태 | 목표 상태 | 허용 writer_role | 결과 |
+      |-----------|-----------|------------------|------|
+      | NONE/NOT_REQUESTED | PENDING | all except post_accept_writer | PASS |
+      | PENDING | PENDING | all | PASS (no-op) |
+      | PENDING | ACCEPTED | post_accept_writer only | PASS |
+      | PENDING | REJECTED | post_accept_writer only | PASS |
+      | ACCEPTED | PENDING | none | BLOCKED |
+      | ACCEPTED | NOT_REQUESTED | none | BLOCKED |
+      | ACCEPTED | ACCEPTED (older epoch) | none | BLOCKED |
+      | ACCEPTED | ACCEPTED (same epoch) | post_accept_writer | PASS (no-op) |
+    </state_transition_table>
+
+    <race_condition_scenario>
+      문제 시나리오:
+      1. 사용자가 gates accept --result ACCEPT 실행 → _finalize_post_accept가 PR body를 ACCEPTED로 갱신
+      2. GitHub CI가 동시에 실행 중이고, head SHA가 같아서 packet freshness 통과
+      3. CI "최종 확인 안내 만들기" step이 PENDING packet을 생성
+      4. CI "PR에 최종 확인 안내 남기기" step이 ACCEPTED PR body를 PENDING으로 덮어씀
+      5. 사용자가 PR을 보면 ACCEPTED가 PENDING으로 되돌아가 있음
+
+      수정 후:
+      1. CI writer가 PR body write 직전에 현재 PR body에서 acceptance_status 추출
+      2. acceptance_status=ACCEPTED이면 write skip + Actions 로그에 사유 기록
+      3. PR body의 ACCEPTED 상태가 보존됨
+    </race_condition_scenario>
+  </writer_ownership_report>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
