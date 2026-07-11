@@ -3,7 +3,8 @@
   <pipeline_id>IMP-20260711-F5D7</pipeline_id>
   <phase>dev</phase>
   <agent>dev-agent</agent>
-  <run_id>dev-c9467a125c0ade6a</run_id>
+  <run_id>dev-cef6bb8c633c85cf</run_id>
+  <rework_round>2</rework_round>
   <scope_declaration>
     <files_to_modify>
       <file>pipeline.py</file>
@@ -32,9 +33,9 @@
     <mt id="MT-5" status="DONE">_materialize_acceptance_snapshot writer_epoch SSoT 추가</mt>
     <mt id="MT-6" status="DONE">_cmd_report_update_pr_body 권한 검증 추가</mt>
     <mt id="MT-7" status="DONE">_finalize_post_accept ACCEPTED 재조회 검증 추가</mt>
-    <mt id="MT-8" status="DONE">ci.yml 최종 확인 안내 만들기 ACCEPTED skip</mt>
-    <mt id="MT-9" status="DONE">ci.yml PR 최종 확인 안내 남기기 skip comment</mt>
-    <mt id="MT-10" status="DONE">tests/e2e/test_writer_ownership_f5d7.py TC-1~TC-12</mt>
+    <mt id="MT-8" status="DONE">ci.yml 최종 확인 안내 만들기 ACCEPTED skip (rework: writer-meta 기준으로 변경)</mt>
+    <mt id="MT-9" status="DONE">ci.yml PR 최종 확인 안내 남기기 skip comment (rework: ACCEPTED 감지 개선)</mt>
+    <mt id="MT-10" status="DONE">tests/e2e/test_writer_ownership_f5d7.py TC-1~TC-16 (rework: TC-13~16 추가)</mt>
     <mt id="MT-11" status="DONE">oracle manifest(기등록 확인) + pr_body_writer_ownership_report.md</mt>
   </mt_summary>
   <scope_lock_check>
@@ -47,7 +48,7 @@
   </scope_lock_check>
   <evidence>
     <changed_files>pipeline.py,.github/workflows/ci.yml,tests/e2e/test_writer_ownership_f5d7.py,pr_body_writer_ownership_report.md,tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/input.json,tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/expected.json,tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/input.json,tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/expected.json</changed_files>
-    <tests>tests/e2e/test_writer_ownership_f5d7.py — 12 passed (TC-1~TC-12)</tests>
+    <tests>tests/e2e/test_writer_ownership_f5d7.py — 16 passed (TC-1~TC-16, rework TC-13~16 추가)</tests>
     <verification>py_compile PASS / import PASS / --help PASS / ruff 0 new errors (31==31) / mypy PASS / CLI Evidence Contract PASS / ci.yml YAML PASS</verification>
   </evidence>
   <impact_analysis>
