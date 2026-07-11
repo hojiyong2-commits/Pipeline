@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <mt_id>MT-5</mt_id>
+  <pipeline_id>IMP-20260711-86DD</pipeline_id>
+  <rework>REJECT #2</rework>
+  <files_changed>
+    <file>tests/e2e/test_approval_authority_86dd.py</file>
+  </files_changed>
+  <change_summary>
+    TC-3 수정(test_tc3_progress_prints_redirected_to_stderr): print() 부재와 sys.stderr 전환을 검증.
+    TC-12 추가(TestApprovalAuthoritySubprocess): subprocess 기반 E2E — machine-readable stdout에 diagnostic text 없음 검증.
+    TC-13 추가: relay 시뮬레이션 — approval_request_message 중복 차단 검증.
+    총 13 tests: 13 passed.
+  </change_summary>
+  <scope_lock_check>
+    <git_diff_files>tests/e2e/test_approval_authority_86dd.py</git_diff_files>
+    <manifest_files>tests/e2e/test_approval_authority_86dd.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</module_handover>
