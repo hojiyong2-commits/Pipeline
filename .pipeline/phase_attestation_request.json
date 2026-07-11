@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-07-11T03:09:26Z",
+  "generated_at": "2026-07-11T03:14:34Z",
   "pipeline_id": "IMP-20260711-F5D7",
   "phase": "qa",
   "phase_status": "PASS",
-  "commit_hint": "616bc26a718a8d3954036cbbcdb7c596f918c2c4",
+  "commit_hint": "2e238e5a12ffa8cfb978c49a1d0cde2edf34f748",
   "state": {
     "current_phase": "sec",
     "phase_completed_at": "2026-07-11T03:09:14Z",
@@ -18,7 +18,7 @@
     "agent_id": "qa-agent",
     "status": "COMPLETED",
     "output_file": "qa_report_F5D7.xml",
-    "output_sha256": "27cfb450355371e76885713f0cf433df6c286fa5e010cbcf2cc1126389e2da97",
+    "output_sha256": "caa870d306174ff133b715773349430a72df1ef56dce1b67b990e4a8a9bf33ca",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260711-F5D7/qa/agent_receipt_qa-034a341ec4909faf.json",
     "receipt_sha256": "5f9d021c72687893b3debf41fa7cfa47eb0d578904d5b3cffccfdec642e6360d",
     "used_by_phase": "qa",
@@ -32,15 +32,15 @@
       "path": ".pipeline/phase_evidence/IMP-20260711-F5D7/qa/agent_receipt_qa-034a341ec4909faf.json",
       "sha256": "5f9d021c72687893b3debf41fa7cfa47eb0d578904d5b3cffccfdec642e6360d",
       "size_bytes": 501,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
       "source": "qa_report_F5D7.xml",
       "path": ".pipeline/phase_evidence/IMP-20260711-F5D7/qa/report_qa_report_F5D7.xml",
-      "sha256": "27cfb450355371e76885713f0cf433df6c286fa5e010cbcf2cc1126389e2da97",
-      "size_bytes": 6372,
-      "requires_force_add": true
+      "sha256": "caa870d306174ff133b715773349430a72df1ef56dce1b67b990e4a8a9bf33ca",
+      "size_bytes": 6264,
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
