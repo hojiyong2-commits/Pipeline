@@ -1,15 +1,17 @@
 """
 IMP-20260711-86DD — Approval Authority SSoT E2E Tests (TC-1 ~ TC-11)
 
-REJECT rework: tests now verify runtime behavior, absent fields, and
-hard-gate enforcement — not just superficial structure checks.
+REJECT rework: TC-1~TC-10 verify absent fields, hard-gate structure, and
+producer/consumer SSoT via source-analysis; TC-11 performs import-level
+verification by calling pipeline._validate_approval_request_message directly.
+No subprocess/runtime-CLI claim is made — all checks are source-analysis and
+import-level function invocation.
 """
 import json
-import os
 import re
-import subprocess
-import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 PIPELINE_PY = REPO_ROOT / "pipeline.py"
@@ -17,15 +19,17 @@ AGENT_MD = REPO_ROOT / ".claude" / "agents" / "pipeline-manager-agent.md"
 SETTINGS_JSON = REPO_ROOT / ".claude" / "settings.json"
 
 
-def run_pipeline(*args, state_path=None, timeout=30):
-    env = os.environ.copy()
-    if state_path:
-        env["PIPELINE_STATE_PATH"] = str(state_path)
-    return subprocess.run(
-        [sys.executable, str(PIPELINE_PY)] + list(args),
-        capture_output=True, text=True, timeout=timeout,
-        cwd=str(REPO_ROOT), env=env
-    )
+def _import_pipeline():
+    """pipeline 모듈을 파일 경로로 동적 임포트한다 (import-level 검증용).
+
+    Returns:
+        exec_module로 로드된 pipeline 모듈 객체. main guard 덕분에 CLI는 실행되지 않음.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pipeline", str(PIPELINE_PY))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 class TestApprovalAuthority:
@@ -216,35 +220,35 @@ class TestApprovalAuthority:
             + "\n".join(non_comment)
         )
 
-    def test_tc11_relay_simulation_single_occurrence(self):
-        """TC-11: approval_request_message 원문에 필수 4요소가 정확히 1회씩 포함됨을 검증"""
-        # 최소 고정 양식 시뮬레이션
-        # IMP-20260624-069A 최소 고정 양식: 사용자 승인 요청, PR:, 승인 코드:, CODEX 검토 필요
-        required_phrases = [
-            "사용자 승인 요청",
-            "PR:",
-            "승인 코드:",
-            "CODEX 검토 필요",
-        ]
-        # 시뮬레이션 메시지 (실제 approval_request_message 형식)
-        sample_approval_msg = (
+    def test_tc11_hard_gate_rejects_duplicated_approval_message(self):
+        """TC-11: pipeline._validate_approval_request_message를 실제로 import·호출하여
+        정상 최소 고정 양식은 통과하고, 필수 4요소가 중복(count!=1)된 메시지는 BLOCKED됨을 검증.
+
+        기존 str.count tautology를 제거하고 실제 hard-gate 함수를 호출한다.
+        """
+        pipeline = _import_pipeline()
+        validate = pipeline._validate_approval_request_message
+
+        # IMP-20260624-069A 최소 고정 양식: 4요소 각 1회, 마지막 의미 줄이 'CODEX 검토 필요'
+        valid_msg = (
             "사용자 승인 요청\n\n"
             "PR: https://github.com/example/repo/pull/1\n\n"
             "승인 코드:\nACCEPT-IMP-20260711-86DD\n\n"
             "CODEX 검토 필요"
         )
-        for phrase in required_phrases:
-            count = sample_approval_msg.count(phrase)
-            assert count == 1, (
-                f"필수 구문 '{phrase}'가 approval_request_message에 {count}회 등장 (1회여야 함)"
-            )
+        # 정상 메시지는 예외 없이 통과해야 함 (단일 relay 경로 유효)
+        validate(valid_msg)
 
-        # 중복 relay 시뮬레이션: 같은 메시지를 2회 출력하면 count가 2가 됨
-        duplicated = sample_approval_msg + "\n\n" + sample_approval_msg
-        for phrase in required_phrases:
-            count = duplicated.count(phrase)
-            assert count == 2, (
-                f"중복 relay 시뮬레이션 실패: '{phrase}'가 {count}회여야 2회임"
-            )
-        # 중복은 명시적으로 실패해야 하는 상황 — hard gate가 count != 1을 잡아야 함
-        # 이 assertion은 중복이 실제로 2개임을 확인하는 것 (hard gate 테스트 목적)
+        # 중복 relay 시뮬레이션: 같은 메시지를 2회 연결 → 필수 4요소 count가 2가 됨
+        duplicated = valid_msg + "\n\n" + valid_msg
+        with pytest.raises(ValueError) as exc_info:
+            validate(duplicated)
+        # hard gate가 실제로 count != 1 구조 오류를 잡아 BLOCKED 처리해야 함
+        err_text = str(exc_info.value)
+        assert "count" in err_text and "BLOCKED" in err_text, (
+            f"중복 relay가 count 검증으로 차단되어야 함: {err_text}"
+        )
+
+        # None/비str 입력도 fail-closed로 차단됨을 실제 호출로 확인
+        with pytest.raises(TypeError):
+            validate(None)
