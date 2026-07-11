@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260711-86DD</pipeline_id>
+  <round>REJECT #2 rework QA (MT-2 print→stderr, MT-5 TC-12/TC-13)</round>
+  <verified_branch>origin/impl/IMP-20260711-86DD @ 1051087a</verified_branch>
+
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_approval_authority_86dd.py, dev_handover_86dd_r2.xml, module_handover_MT-5_r2.xml, integration_report_86dd_r2.xml</evidence>
+    <accepted>YES — dev-agent handover 존재, category_tags에 UI 미포함(meta-task)이므로 dev handover 단독 수락</accepted>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 변경 없음 (진단 출력 라우팅 변경만)</wa>
+    <ui>N-A — GUI 위젯 없음 (meta-task)</ui>
+    <fs>N-A — 파일 쓰기 로직 변경 없음 (기존 acceptance_request.json write 경로 미변경)</fs>
+    <pd>PASS — 진단 출력(stderr)과 machine-readable 출력(stdout JSON) 관심사 분리, dead code(approval_display/message_file) 제거</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. (state에 sec SKIP 기록됨)</sec>
+    <al>PASS — fail-closed 예외 처리(_die on OSError/JSONDecodeError/TypeError) 보존, stderr.flush로 출력 순서 보장, None/중복/빈 입력 엣지 테스트 커버</al>
+    <build>N-A — meta-task, EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+
+  <numeric_score>112</numeric_score>
+  <verdict>PASS</verdict>
+  <numeric_score_breakdown>
+    <wa score="0" max="20">N/A — 네트워크 surface 없음 (applicable max에서 제외)</wa>
+    <ui score="0" max="20">N/A — GUI 없음 (applicable max에서 제외)</ui>
+    <fs score="0" max="20">N/A — 파일 I/O 로직 미변경 (applicable max에서 제외)</fs>
+    <pd score="10" max="10">모듈/관심사 분리 5/5 (stderr vs stdout 분리), 인터페이스 계약 5/5 (JSON stdout 단일 소스)</pd>
+    <al score="18" max="20">0나눗셈 N/A, 범위 N/A, 타입 가드 5/5(TypeError raise), 빈/중복 데이터 방어 5/5, 예외 분기 8/10 (TC-12 subprocess가 PIPELINE_STATE_PATH 격리 미사용 + 진단 경로 결정적 미도달 -2)</al>
+    <build score="0" max="10">N/A — meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA 미채점</sec>
+    <total score="112" max="120"/>
+    <percentage>93.3</percentage>
+    <numeric_verdict>PASS — 적용 카테고리(PD 10/10 + AL 18/20 = 28/30 = 93.3%) → 120 스케일 112/120, QA_PASS_THRESHOLD 96/120 이상</numeric_verdict>
+  </numeric_score_breakdown>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover에 pytest 13 passed 결과 포함, QA가 직접 재실행하여 13 passed in 2.65s 확인</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — sys.stderr.write가 _publish_acceptance_request 실제 실행 경로(pr_body_updated 분기) 내에 위치함을 소스+diff로 확인, print() 잔존 0건</functional_binding_verified>
+  </runtime_functional_check>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan_86DD.xml 5~77행 decomposition_audit 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-5 각각 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="TC-1/TC-2/TC-3/TC-12로 machine-readable stdout JSON 전용 검증. print→stderr 전환으로 진단 텍스트 stdout 유출 차단."/>
+    <criterion ac_id="AC-4" status="PASS" evidence="TC-1~TC-7 포함 13개 테스트 전부 PASS (2.65s)."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="approval_display 필드가 실행 코드에서 완전 제거됨(TC-1/TC-8/TC-10 검증). P1-1 '주석 유지' 결정보다 강한 완전 삭제로 '신규 코드에서 읽지 않는다' 의도 충족."/>
+  </criteria_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — REJECT #2 지적 사항이 정확히 해소됨. print() 2개 → sys.stderr.write() + flush() 전환 완료(24758, 24784), 진단 메시지 print() 잔존 0건. TC-12(subprocess E2E)/TC-13(relay 중복 차단) 추가, 13 tests 전부 PASS.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. TC-12 subprocess 테스트는 gh CLI/PR 부재 환경에서 request-accept가 fail-closed로 조기 종료되어 stderr 진단 경로에 결정적으로 도달하지 않음. Real CLI Path E2E 정책상 PIPELINE_STATE_PATH 격리 + gh mock으로 진단 경로를 명시 도달시켜 stderr 라우팅을 직접 관찰하면 검증력이 강화됨. (현재도 TC-3 source-analysis가 전환을 보증하므로 FAIL 아님)
+    2. anti_gaming_read / requirements_tracking 프레임워크 미적용(legacy 파이프라인). 후속 파이프라인에서는 requirements_tracking.enabled=true로 AC 강제 추적 권장.
+    3. AC-5 원문은 'DEPRECATED 주석 유지'였으나 구현은 필드 완전 삭제. dead code 제거 관점에서 더 우수하나, PM P1-1 결정(하위 호환 주석)과의 문서 정합성은 architect 단계에서 정리 권장.
+  </improvement_suggestions>
+</qa_report>
