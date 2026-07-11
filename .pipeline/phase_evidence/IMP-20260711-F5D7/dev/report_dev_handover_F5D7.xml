@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <pipeline_id>IMP-20260711-F5D7</pipeline_id>
+  <phase>dev</phase>
+  <agent>dev-agent</agent>
+  <run_id>dev-c9467a125c0ade6a</run_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/e2e/test_writer_ownership_f5d7.py</file>
+      <file>tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/input.json</file>
+      <file>tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/expected.json</file>
+      <file>tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/input.json</file>
+      <file>tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/expected.json</file>
+    </files_to_modify>
+    <functions_to_modify>
+      <function>_SSoT_constants_section</function>
+      <function>_validate_pr_body_write_permission</function>
+      <function>_extract_pr_body_acceptance_metadata</function>
+      <function>_build_final_packet_content</function>
+      <function>_materialize_acceptance_snapshot</function>
+      <function>_cmd_report_update_pr_body</function>
+      <function>_finalize_post_accept</function>
+    </functions_to_modify>
+  </scope_declaration>
+  <mt_summary>
+    <mt id="MT-1" status="DONE">PR_BODY_WRITER_ROLES + ACCEPTANCE_STATE_TRANSITION_RULES 상수 추가</mt>
+    <mt id="MT-2" status="DONE">_validate_pr_body_write_permission 함수 추가</mt>
+    <mt id="MT-3" status="DONE">_extract_pr_body_acceptance_metadata 함수 추가</mt>
+    <mt id="MT-4" status="DONE">_build_final_packet_content writer 메타데이터 파라미터 추가</mt>
+    <mt id="MT-5" status="DONE">_materialize_acceptance_snapshot writer_epoch SSoT 추가</mt>
+    <mt id="MT-6" status="DONE">_cmd_report_update_pr_body 권한 검증 추가</mt>
+    <mt id="MT-7" status="DONE">_finalize_post_accept ACCEPTED 재조회 검증 추가</mt>
+    <mt id="MT-8" status="DONE">ci.yml 최종 확인 안내 만들기 ACCEPTED skip</mt>
+    <mt id="MT-9" status="DONE">ci.yml PR 최종 확인 안내 남기기 skip comment</mt>
+    <mt id="MT-10" status="DONE">tests/e2e/test_writer_ownership_f5d7.py TC-1~TC-12</mt>
+    <mt id="MT-11" status="DONE">oracle manifest(기등록 확인) + pr_body_writer_ownership_report.md</mt>
+  </mt_summary>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, .github/workflows/ci.yml, tests/e2e/test_writer_ownership_f5d7.py, tests/oracles/IMP-20260711-F5D7/**, pr_body_writer_ownership_report.md</git_diff_files>
+    <manifest_files>pipeline.py, .github/workflows/ci.yml, tests/e2e/test_writer_ownership_f5d7.py, pr_body_writer_ownership_report.md, tests/oracles/IMP-20260711-F5D7/*</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <trust_root_note>pipeline.py, .github/workflows/ci.yml, tests/**는 Trust-Root이나 본 IMP의 PM target_files에 포함되어 수정 허용됨.</trust_root_note>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <changed_files>pipeline.py,.github/workflows/ci.yml,tests/e2e/test_writer_ownership_f5d7.py,pr_body_writer_ownership_report.md,tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/input.json,tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/expected.json,tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/input.json,tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/expected.json</changed_files>
+    <tests>tests/e2e/test_writer_ownership_f5d7.py — 12 passed (TC-1~TC-12)</tests>
+    <verification>py_compile PASS / import PASS / --help PASS / ruff 0 new errors (31==31) / mypy PASS / CLI Evidence Contract PASS / ci.yml YAML PASS</verification>
+  </evidence>
+  <impact_analysis>
+    <target_function>PR_BODY_WRITER_ROLES, ACCEPTANCE_STATE_TRANSITION_RULES, _validate_pr_body_write_permission, _extract_pr_body_acceptance_metadata, _build_final_packet_content, _materialize_acceptance_snapshot, _cmd_report_update_pr_body, _finalize_post_accept, ci_final_check_step</target_function>
+    <blast_radius>LOW — 기존 함수에 선택적 파라미터(default None) 추가 + 신규 함수 2개 순수 추가 + 권한 검증 게이트 삽입. 기존 SHA/provenance/stale 검증 로직 미변경</blast_radius>
+  </impact_analysis>
+  <deviation_notes>
+    <note>PM 지정 _subprocess_run 헬퍼는 pipeline.py에 존재하지 않아 기존 SSoT 헬퍼 _get_pr_body_text()를 재사용함(MT-6/MT-7).</note>
+    <note>MT-7: PR body는 ACCEPTED를 HTML 마커가 아닌 텍스트로 표시하므로, 마커 부재(UNKNOWN)를 BLOCKED로 처리하면 정상 accept 흐름이 차단됨. 따라서 명시적 PENDING 마커 감지 시에만 BLOCKED(post_accept_accepted_marker_missing)로 구현하여 race condition만 잡고 정상 흐름은 보존함.</note>
+    <note>ci.yml은 pwsh 셸이므로 PM 제공 bash 스니펫을 PowerShell로 번역하여 삽입함(MT-8/MT-9).</note>
+  </deviation_notes>
+</handover>
