@@ -24260,7 +24260,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 return  # unreachable (_finish_codex_review_error가 sys.exit)
             # capability match(fail-closed): invoked==selected, actual 보고 시 selected 일치,
             #   HIGH/CRITICAL은 최소 invocation_verified. verification_level을 함께 산출한다(요구4).
-            _invocation_ok = int(_auto_run.get("exit_code", -1) or -1) == 0
+            # IMP-20260712-DAE1 bugfix: exit_code=0은 Python에서 falsy이므로
+            # `(0 or -1) == -1`이 되어 invocation_ok가 항상 False가 되는 버그 수정.
+            # `.get("exit_code")` 반환값 자체가 None인 경우에만 미실행으로 간주한다.
+            _raw_exit = _auto_run.get("exit_code")
+            _invocation_ok = _raw_exit == 0
             _match = _check_codex_model_capability_match(
                 _selected_model_now, _selected_effort_now,
                 _invoked_model_str, _invoked_effort_str,
@@ -24280,7 +24284,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             )
             # auto-invoke 결과를 아래 CLI 분류 경로로 넘긴다(exit/stdout/stderr override).
             _auto_cli_override = {
-                "exit_code": int(_auto_run.get("exit_code", -1) or -1),
+                "exit_code": int(_auto_run.get("exit_code", -1)),  # bugfix: `or -1` 제거(0이 -1로 변환되는 버그)
                 "stdout": str(_auto_run.get("stdout", "") or ""),
                 "stderr": str(_auto_run.get("stderr", "") or ""),
             }
