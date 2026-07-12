@@ -8660,9 +8660,13 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
         lines.append("included_functions:")
         lines += [f"  - {fn}" for fn in _funcs[:200]]
     # IMP-20260712-DAE1 REJECT#3(요구6): verdict 스키마를 JSON으로 강제한다.
+    # IMP-20260712-DAE1 bugfix#3: 모델이 상세 리뷰 텍스트를 출력하여 타임아웃이 발생하는 버그 수정.
+    # 출력 형식을 명확히 제한하여 리뷰 텍스트 없이 JSON verdict만 반환하도록 강제한다.
     lines += [
         "",
-        "리뷰 후 마지막 줄에 아래 JSON 하나만 출력하세요.",
+        "## 출력 규칙 (엄격히 준수 필수)",
+        "- 리뷰 분석/설명/코드 인용 텍스트를 출력하지 마세요.",
+        "- 마지막 출력은 아래 JSON 하나만 출력하세요 (다른 텍스트 없이).",
         '승인: {"verdict": "APPROVE_TO_USER"}',
         '거절: {"verdict": "REJECT", "root_cause": "...", "reproduction": "...", '
         '"required_fix": "...", "acceptance_criteria": ["..."]}',
@@ -23997,6 +24001,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   reject_count는 status==REJECTED일 때만, cli_error_count는 status==ERROR일 때만 누적한다.
     retry_cli_error = bool(getattr(args, "retry_cli_error", False))
     force_review = bool(getattr(args, "force_review", False))
+    _codex_exec_timeout = int(getattr(args, "codex_timeout", 600) or 600)
     prev_reject_count = 0
     prev_cli_error_count = 0
     prev_status = ""
@@ -24237,6 +24242,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 _selected_effort_now,
                 _build_codex_prompt_for_review(_preflight_bundle, pipeline_id),
                 codex_bin=_codex_bin_now,
+                timeout=_codex_exec_timeout,
             )
             _codex_cli_command_real = str(_auto_run.get("codex_cli_command", "") or "")
             _invoked_model_str = str(_auto_run.get("invoked_model", _selected_model_now) or _selected_model_now)
@@ -30716,6 +30722,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_codex.add_argument(
         "--auto-codex-cli", dest="auto_codex_cli", action="store_true", default=False,
         help="[deprecated no-op] cache miss 시 실제 codex exec 자동 호출은 이제 기본 동작입니다.",
+    )
+    # IMP-20260712-DAE1 bugfix#3: 상세 리뷰 생성으로 인한 타임아웃 대응용 타임아웃 옵션.
+    p_gate_codex.add_argument(
+        "--codex-timeout", dest="codex_timeout", type=int, default=600,
+        help="codex exec subprocess 타임아웃(초). 기본값 600. 상세 리뷰 생성이 긴 경우 늘려 사용.",
     )
     p_gate_codex.add_argument(
         "--force-review", dest="force_review", action="store_true", default=False,
