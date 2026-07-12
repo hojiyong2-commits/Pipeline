@@ -8,6 +8,52 @@ description: Pipeline Manager Agent — phase 순서 관리, agent 호출, pipel
 
 **Tier: Sonnet** | 순서 관리, receipt 확인, gate 기록 중심
 
+## Codex Model Router (IMP-20260712-DAE1)
+
+Pipeline Manager는 `gates codex-review` 실행 시 trust-chain risk에 따라 자동으로 Codex 모델을 선택합니다.
+
+### Risk 분류 규칙표
+
+| Risk Level | 트리거 조건 | 예시 |
+|---|---|---|
+| CRITICAL | CODEX_CRITICAL_FUNCTIONS에 해당하는 함수 변경 | _cmd_gates_request_accept, _cmd_gates_accept |
+| HIGH | CODEX_HIGH_RISK_PATHS에 해당하는 파일 변경 | pipeline.py, CLAUDE.md, .github/workflows/ |
+| MEDIUM | 코드 파일(.py/.ts/.js/.yaml) 변경 | 일반 구현 파일 |
+| LOW | 문서/보고서만 변경 | docs/, report.md |
+
+우선순위: CRITICAL > HIGH > MEDIUM > LOW.
+
+### 모델 라우팅 표
+
+| Risk Level | selected_model | mode | cache_allowed | force_review |
+|---|---|---|---|---|
+| LOW | claude-sonnet | observe | true | false |
+| MEDIUM | claude-sonnet | observe | true | false |
+| HIGH | claude-sonnet | enforce | limited | false |
+| CRITICAL | claude-opus | enforce | false | true |
+
+### 계층형 observe/enforce 동작
+
+- **observe 모드** (LOW/MEDIUM): 정책 위반 시 WARN만 출력하고 진행. cache 허용. 전역 전환 없음.
+- **enforce 모드** (HIGH/CRITICAL): 정책 위반 시 BLOCKED. HIGH는 critical 파일 변경 없으면 limited cache 허용. CRITICAL은 항상 cache 금지.
+
+### actual_model=unknown 처리
+
+- `_detect_codex_cli_capability()`가 Codex CLI에서 모델명을 확인할 수 없으면 `actual_model=unknown` 기록.
+- actual_model=unknown + HIGH/CRITICAL → **BLOCKED** (fail-closed). `failure_code=unknown_model_critical_blocked`.
+- actual_model=unknown + LOW/MEDIUM → WARN 후 계속 진행.
+- 확인하지 않은 모델명을 actual_model로 기록하지 않습니다(허위 기록 금지).
+
+### Plus 사용량 보호 전략
+
+- CRITICAL: 항상 claude-opus + force_review + cache 금지 → 검토 품질 최대화.
+- HIGH: claude-sonnet + enforce + limited cache → 신중 사용.
+- LOW/MEDIUM: claude-sonnet + observe + cache 허용 → 사용량 절약.
+
+### 다운그레이드 차단
+
+HIGH/CRITICAL risk에서 더 낮은 모델 티어로 다운그레이드 요청 시 BLOCKED (`failure_code=downgrade_blocked`). 이는 trust-chain 변경에 대한 검토 품질을 보장합니다.
+
 ## 역할
 
 Pipeline Manager는 PM Planner로부터 `step_plan.xml`을 받아 파이프라인 전체(Phase 2~8)를 관리합니다.

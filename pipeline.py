@@ -2318,6 +2318,71 @@ TRUST_ROOT_PATTERNS: List[str] = [
     ".codex/skills/",
 ]
 
+# IMP-20260712-DAE1: Codex Model Router SSoT
+# [Purpose]: trust-chain risk 기반으로 Codex Review 모델/사고레벨/모드를 자동 라우팅한다.
+# [Assumptions]: 함수명/파일경로 목록이 실제 pipeline.py 구조와 일치한다.
+# [Vulnerability & Risks]: 신규 acceptance writer 함수가 추가되면 CODEX_CRITICAL_FUNCTIONS를
+#   함께 갱신해야 CRITICAL 분류가 유지된다(누락 시 fail-open 위험).
+# [Improvement]: 함수 데코레이터/레지스트리로 CRITICAL 함수를 자동 수집하도록 고도화 가능.
+CODEX_MODEL_ROUTER_VERSION: str = "1.0.0"
+
+# CRITICAL risk triggers: acceptance/SHA/nonce writer 함수명 목록
+CODEX_CRITICAL_FUNCTIONS: List[str] = [
+    "_cmd_gates_request_accept",
+    "_cmd_gates_accept",
+    "_publish_acceptance_request",
+    "_write_acceptance_request",
+    "_consume_acceptance_request",
+    "_validate_pr_body_readiness",
+    "_build_acceptance_request",
+    "_finalize_acceptance",
+]
+
+# HIGH risk triggers: trust-chain 파일 경로 패턴
+CODEX_HIGH_RISK_PATHS: List[str] = [
+    "pipeline.py",
+    ".github/workflows/",
+    "CLAUDE.md",
+    ".claude/agents/",
+    "tests/",
+]
+
+# risk level별 모델 정책 SSoT
+CODEX_MODEL_POLICIES: Dict[str, Dict[str, Any]] = {
+    "LOW": {
+        "selected_model": "claude-sonnet",
+        "selected_reasoning_effort": "low",
+        "mode": "observe",
+        "cache_allowed": True,
+        "force_review_required": False,
+        "downgrade_blocked": False,
+    },
+    "MEDIUM": {
+        "selected_model": "claude-sonnet",
+        "selected_reasoning_effort": "medium",
+        "mode": "observe",
+        "cache_allowed": True,
+        "force_review_required": False,
+        "downgrade_blocked": False,
+    },
+    "HIGH": {
+        "selected_model": "claude-sonnet",
+        "selected_reasoning_effort": "high",
+        "mode": "enforce",
+        "cache_allowed": "limited",
+        "force_review_required": False,
+        "downgrade_blocked": True,
+    },
+    "CRITICAL": {
+        "selected_model": "claude-opus",
+        "selected_reasoning_effort": "high",
+        "mode": "enforce",
+        "cache_allowed": False,
+        "force_review_required": True,
+        "downgrade_blocked": True,
+    },
+}
+
 # PM Planner 재시도 허용 최대 횟수 (초과 시 [PM PLANNER RETRY LIMIT] + exit 1)
 PM_PLANNER_MAX_RETRIES: int = 2
 PHASE_RECEIPT_RUN_PHASES = {
@@ -8008,6 +8073,143 @@ def _is_codex_critical_file(path: str) -> bool:
 # [Vulnerability & Risks]: 가장 취약한 지점은 bundle write 자체 실패다. 이 경우 ("", "")를 반환하고
 #            호출자가 fail-closed로 BLOCK하여 Codex CLI 호출을 막는다.
 # [Improvement]: critical_file_summary에 diff 통계(추가/삭제 라인)를 포함하면 Codex 컨텍스트가 풍부해진다.
+# IMP-20260712-DAE1 MT-2: Codex Review risk 분류 (SSoT 상수 기반, 우선순위 CRITICAL>HIGH>MEDIUM>LOW)
+# [Purpose]: 변경 파일/함수 목록을 trust-chain risk level로 분류한다.
+# [Assumptions]: changed_functions는 변경된 함수명 문자열 목록이며 None 허용(빈 목록으로 처리).
+# [Vulnerability & Risks]: 함수명만으로 판정하므로 동명이인 함수가 있으면 오분류 가능(현 구조상 없음).
+# [Improvement]: 파일::함수 식별자 기반 정밀 매칭으로 고도화 가능.
+def _classify_codex_review_risk(
+    changed_files: List[str],
+    changed_functions: List[str],
+) -> Dict[str, Any]:
+    """변경 파일/함수를 trust-chain risk level로 분류한다.
+
+    Args:
+        changed_files: 변경된 파일 경로 목록 (None 허용 → 빈 목록으로 처리).
+        changed_functions: 변경된 함수명 목록 (None 허용 → 빈 목록으로 처리).
+    Returns:
+        {"risk_level": "LOW"|"MEDIUM"|"HIGH"|"CRITICAL", "matched_rule": str,
+         "matched_items": list}.
+    """
+    # None 입력 방어: 빈 목록으로 정규화하여 안전하게 순회한다.
+    _files = changed_files if isinstance(changed_files, list) else []
+    _funcs = changed_functions if isinstance(changed_functions, list) else []
+
+    # CRITICAL: CODEX_CRITICAL_FUNCTIONS에 있는 함수가 변경된 경우 (최우선).
+    for func in _funcs:
+        if str(func) in CODEX_CRITICAL_FUNCTIONS:
+            return {
+                "risk_level": "CRITICAL",
+                "matched_rule": "critical_function",
+                "matched_items": [func],
+            }
+
+    # HIGH: CODEX_HIGH_RISK_PATHS 패턴에 해당하는 파일.
+    for f in _files:
+        _fs = str(f)
+        for pat in CODEX_HIGH_RISK_PATHS:
+            if _fs == pat or _fs.startswith(pat):
+                return {
+                    "risk_level": "HIGH",
+                    "matched_rule": "high_risk_path",
+                    "matched_items": [f],
+                }
+
+    # MEDIUM: 코드 파일 확장자.
+    _code_exts = {".py", ".ts", ".js", ".yaml", ".yml", ".sh", ".ps1", ".json"}
+    for f in _files:
+        if Path(str(f)).suffix.lower() in _code_exts:
+            return {
+                "risk_level": "MEDIUM",
+                "matched_rule": "code_file",
+                "matched_items": [f],
+            }
+
+    # LOW: 기타 (문서, 보고서 등).
+    return {"risk_level": "LOW", "matched_rule": "default", "matched_items": []}
+
+
+# IMP-20260712-DAE1 MT-3: risk level → 모델 정책 매핑 + 다운그레이드 차단.
+# [Purpose]: risk level에 맞는 모델 정책을 반환하고, HIGH/CRITICAL 다운그레이드를 BLOCKED 처리한다.
+# [Assumptions]: CODEX_MODEL_POLICIES가 4개 risk level을 모두 정의한다.
+# [Vulnerability & Risks]: 알 수 없는 risk_level은 LOW로 fallback한다(fail-safe이나 관측 필요).
+# [Improvement]: 정책을 외부 config로 분리하여 파이프라인별 override 지원 가능.
+def _build_codex_model_policy(
+    risk_level: str,
+    requested_model_tier: Optional[str] = None,
+    downgrade_requested: bool = False,
+) -> Dict[str, Any]:
+    """risk level에 맞는 Codex 모델 정책을 반환한다 (다운그레이드 요청은 차단 가능).
+
+    Args:
+        risk_level: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL" (대소문자 무관).
+        requested_model_tier: 요청된 모델 티어(선택). 현재 risk보다 낮으면 다운그레이드 후보.
+        downgrade_requested: 명시적 다운그레이드 요청 플래그.
+    Returns:
+        정책 dict (router_version 포함) 또는 BLOCKED dict
+        ({"result": "BLOCKED", "downgrade_blocked": True, "failure_code": "downgrade_blocked"}).
+    """
+    _RISK_ORDER: Dict[str, int] = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+    _risk = (str(risk_level) or "LOW").upper()
+    policy = dict(CODEX_MODEL_POLICIES.get(_risk, CODEX_MODEL_POLICIES["LOW"]))
+
+    # 다운그레이드 차단: downgrade_requested=True이거나 requested_model_tier가 현재보다 낮으면.
+    _should_block_downgrade = downgrade_requested
+    if not _should_block_downgrade and requested_model_tier:
+        req_order = _RISK_ORDER.get(str(requested_model_tier).upper(), -1)
+        curr_order = _RISK_ORDER.get(_risk, 0)
+        if req_order < curr_order and policy.get("downgrade_blocked"):
+            _should_block_downgrade = True
+
+    if _should_block_downgrade and policy.get("downgrade_blocked"):
+        return {
+            "result": "BLOCKED",
+            "downgrade_blocked": True,
+            "failure_code": "downgrade_blocked",
+        }
+
+    return {**policy, "router_version": CODEX_MODEL_ROUTER_VERSION}
+
+
+# IMP-20260712-DAE1 MT-4: Codex CLI capability 감지 + fail-closed capability gate.
+# [Purpose]: Codex CLI 가용성과 actual_model을 감지하고, unknown+HIGH/CRITICAL을 차단한다.
+# [Assumptions]: `codex --version` 호출이 CLI 존재를 나타낸다. 모델명은 확정 불가 → unknown.
+# [Vulnerability & Risks]: subprocess 호출 실패는 모두 unavailable/unknown으로 흡수한다.
+# [Improvement]: CLI가 모델명을 노출하면 model_source를 version_check→cli_reported로 승격 가능.
+def _detect_codex_cli_capability() -> Dict[str, Any]:
+    """Codex CLI 가용성과 actual_model을 감지. 확인 불가 시 actual_model=unknown.
+
+    Returns:
+        {"available": bool, "actual_model": str, "model_source": str}.
+    """
+    try:
+        result = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            # CLI는 있으나 모델명을 결정적으로 확인할 수 없으므로 unknown으로 남긴다(허위 기록 금지).
+            return {"available": True, "actual_model": "unknown", "model_source": "version_check"}
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError, PermissionError):
+        pass
+    return {"available": False, "actual_model": "unknown", "model_source": "unknown"}
+
+
+def _check_codex_capability_gate(actual_model: str, risk_level: str) -> Dict[str, Any]:
+    """actual_model=unknown + HIGH/CRITICAL → fail-closed BLOCKED.
+
+    Args:
+        actual_model: 감지된 실제 모델명("unknown"이면 확인 불가).
+        risk_level: 현재 risk level (대소문자 무관).
+    Returns:
+        {"result": "OK"} 또는
+        {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}.
+    """
+    if str(actual_model) == "unknown" and str(risk_level).upper() in {"HIGH", "CRITICAL"}:
+        return {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
+    return {"result": "OK"}
+
+
 def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple[str, str]:
     """Codex Review 입력 bundle을 SSoT artifact로 materialize하고 (SHA256, 경로)를 반환한다.
 
@@ -8059,6 +8261,14 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         "changed_critical_files": [],   # 이번 PR에서 변경된 critical 파일 경로 목록.
         "test_summary": {},             # {테스트파일: [테스트함수...]} — 원문 없이 요약만.
         "oracle_summary": [],           # oracle case 요약(case_id/case_kind/SHA/result) — 원문 제외.
+        # IMP-20260712-DAE1 MT-7: Codex Model Router 정책 섹션 (실제 값은 _cmd_gates_codex_review가
+        #   risk 분류 후 result에 기록; bundle에는 결정성 placeholder만 둔다).
+        "model_policy": {
+            "router_version": CODEX_MODEL_ROUTER_VERSION,
+            "risk_level": "UNKNOWN",
+            "selected_model": "unknown",
+            "mode": "unknown",
+        },
     }
 
     try:
@@ -8221,7 +8431,8 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         ]
         bundle["excluded_files_reason"] = (
             "비용/보안: PR body 원문·packet 원문·oracle 원문·raw ACCEPT 코드/nonce·"
-            "대형 테스트 파일 전체 diff는 Codex payload에서 제외하고 개수/SHA/식별자만 포함한다."
+            "대형 테스트 파일 전체 diff는 Codex payload에서 제외하고 개수/SHA/식별자만 포함한다. "
+            "raw ACCEPT 코드/nonce는 어떤 경우에도 bundle에 포함하지 않는다(fail-closed)."
         )
 
         # IMP-20260710-DB54 rework MT-3: critical_function_shas — 핵심 함수 식별자/SHA(best-effort).
@@ -8347,6 +8558,22 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
             _ex.append("pipeline.py")
             bundle["excluded_files"] = _ex
 
+        # IMP-20260712-DAE1 MT-7: raw ACCEPT 코드/nonce 유출 방지(fail-closed). bundle에 아래
+        #   금지 키가 하나라도 있으면 즉시 ("", "")를 반환하여 Codex CLI 호출을 차단한다.
+        _forbidden_bundle_keys = {
+            "acceptance_code", "nonce", "accept_code", "approval_code", "raw_accept",
+        }
+        for _fk in _forbidden_bundle_keys:
+            if _fk in bundle:
+                try:
+                    _log_event(
+                        state,
+                        f"codex_review_bundle_forbidden_key_blocked: {_fk}",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                return ("", "")
+
         # materialize — _codex_snapshot_identity가 읽는 동일 경로에 쓴다(SSoT 불변식).
         #   PIPELINE_STATE_PATH 격리 시 state 파일 옆 .pipeline/에 위치한다(테스트 오염 방지).
         bundle_path = _codex_review_bundle_path(pipeline_id)
@@ -8435,6 +8662,9 @@ def _check_codex_cache(
     state: Dict[str, Any],
     pipeline_id: str,
     current_bundle: Optional[Dict[str, Any]] = None,
+    model_policy: Optional[Dict[str, Any]] = None,
+    actual_model: Optional[str] = None,
+    risk_level: Optional[str] = None,
 ) -> Dict[str, Any]:
     """contract+bundle SHA 조합으로 캐시된 Codex verdict를 조회한다 (critical file SHA 재검증).
 
@@ -8482,6 +8712,24 @@ def _check_codex_cache(
         "live_sha_snapshot": {},
         "excluded_files": [],
     }
+
+    # IMP-20260712-DAE1 MT-5: model policy 기반 cache 금지. CRITICAL(cache_allowed=False)은 항상
+    #   캐시를 신뢰하지 않는다. actual_model=unknown + HIGH/CRITICAL도 캐시 금지(fail-closed).
+    if isinstance(model_policy, dict):
+        _cache_allowed = model_policy.get("cache_allowed")
+        if _cache_allowed is False:
+            _blocked = dict(miss)
+            _blocked["blocked"] = True
+            _blocked["block_reason"] = "CRITICAL risk: 캐시 항상 금지 (cache_allowed=False)"
+            _blocked["reason"] = _blocked["block_reason"]
+            return _blocked
+
+    if actual_model == "unknown" and str(risk_level or "").upper() in {"HIGH", "CRITICAL"}:
+        _blocked = dict(miss)
+        _blocked["blocked"] = True
+        _blocked["block_reason"] = "actual_model=unknown + HIGH/CRITICAL: 캐시 금지"
+        _blocked["reason"] = _blocked["block_reason"]
+        return _blocked
 
     # IMP-20260710-DB54 rework MT-4(문제5): 현재 bundle의 excluded_files에 critical 파일이 있으면
     #   Codex가 그 파일을 못 본 것이므로 캐시 사용 자체를 금지한다(BLOCKED). 캐시 유무와 무관.
@@ -23268,6 +23516,27 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 "  bundle을 재생성하여 final packet 상태와 일치시킨 뒤 다시 실행하세요 (fail-closed)."
             )
 
+    # IMP-20260712-DAE1 MT-6: Risk 분류 + 모델 정책 + Capability Gate (cache 체크 이전).
+    _changed_files_for_risk: List[str] = [str(f) for f in (_preflight_bundle.get("changed_files") or [])]
+    _changed_funcs_for_risk: List[str] = [str(f) for f in (_preflight_bundle.get("included_functions") or [])]
+    _risk_info = _classify_codex_review_risk(_changed_files_for_risk, _changed_funcs_for_risk)
+    _risk_level_str = str(_risk_info.get("risk_level", "MEDIUM") or "MEDIUM")
+    _model_policy = _build_codex_model_policy(_risk_level_str)
+    if _model_policy.get("result") == "BLOCKED":
+        _die(
+            f"[BLOCKED] failure_code={_model_policy.get('failure_code', 'downgrade_blocked')}\n"
+            "  모델 정책 위반으로 Codex Review가 차단됩니다."
+        )
+    _cap_info = _detect_codex_cli_capability()
+    _actual_model_str = str(_cap_info.get("actual_model", "unknown") or "unknown")
+    _cap_gate = _check_codex_capability_gate(_actual_model_str, _risk_level_str)
+    if _cap_gate.get("result") == "BLOCKED":
+        _die(
+            f"[BLOCKED] failure_code={_cap_gate.get('failure_code', 'unknown_model_critical_blocked')}\n"
+            f"  actual_model={_actual_model_str!r} + risk_level={_risk_level_str!r}: "
+            "Codex Review 차단 (fail-closed)."
+        )
+
     # IMP-20260710-DB54 rework MT-4(문제2): cache check — 동일 contract+bundle SHA의 이전 verdict.
     #   현재 bundle을 함께 넘겨 excluded critical/critical_file_shas 부재를 판정한다.
     #   excluded_files에 critical 파일이 있으면 캐시 사용 금지(BLOCKED).
@@ -23281,6 +23550,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         _cache_probe = _check_codex_cache(
             _contract_sha256_for_cache, _review_bundle_sha256, state, pipeline_id,
             current_bundle=_preflight_bundle,
+            model_policy=_model_policy, actual_model=_actual_model_str,
+            risk_level=_risk_level_str,
         )
     except SystemExit:
         raise
@@ -23734,6 +24005,14 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "codex_model": "unknown",
         "model_source": "unknown",
     }
+
+    # IMP-20260712-DAE1 MT-6: Codex Model Router 결과 필드를 result에 기록한다.
+    result["router_version"] = CODEX_MODEL_ROUTER_VERSION
+    result["risk_level"] = _risk_level_str
+    result["selected_model"] = str(_model_policy.get("selected_model", "unknown"))
+    result["actual_model"] = _actual_model_str
+    result["model_source"] = str(_cap_info.get("model_source", "unknown"))
+    result["review_mode"] = str(_model_policy.get("mode", "observe"))
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
     # github_canonical_pr_body_sha256 필드는 acceptance_request에서 가져온다 (fail-closed).
