@@ -8660,11 +8660,13 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
         lines.append("included_functions:")
         lines += [f"  - {fn}" for fn in _funcs[:200]]
     # IMP-20260712-DAE1 REJECT#3(요구6): verdict 스키마를 JSON으로 강제한다.
-    # IMP-20260712-DAE1 bugfix#3: 모델이 상세 리뷰 텍스트를 출력하여 타임아웃이 발생하는 버그 수정.
-    # 출력 형식을 명확히 제한하여 리뷰 텍스트 없이 JSON verdict만 반환하도록 강제한다.
+    # IMP-20260712-DAE1 bugfix#3/4: 모델이 파일을 읽거나 명령어를 실행하여 내부 타임아웃이 발생하는
+    # 버그 수정. 위에서 제공한 메타데이터만 보고 판단하도록 명령어 실행과 파일 읽기를 금지한다.
     lines += [
         "",
         "## 출력 규칙 (엄격히 준수 필수)",
+        "- 쉘 명령어를 실행하지 마세요 (command_execution 사용 금지).",
+        "- 파일을 직접 읽지 마세요. 위 변경 파일 목록과 함수 목록만 보고 판단하세요.",
         "- 리뷰 분석/설명/코드 인용 텍스트를 출력하지 마세요.",
         "- 마지막 출력은 아래 JSON 하나만 출력하세요 (다른 텍스트 없이).",
         '승인: {"verdict": "APPROVE_TO_USER"}',

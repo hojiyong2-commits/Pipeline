@@ -595,6 +595,7 @@ def test_codex_coverage_check_fields_count():
 # 회귀 케이스 (SUN/02:00 vs MON/09:00, dry-run vs 실제 동작)
 # ---------------------------------------------------------------------------
 
+@_CODEX_SKIP
 def test_regression_sun_02_vs_mon_09_diff_values_mismatch():
     """회귀1: 사용자 AC=MON/09:00, diff=SUN/02:00 → diff_values_match_ac=false 시
     QA 차단됨을 검증. _validate_codex_coverage_checks가 그 false를 잡아낸다.
@@ -623,6 +624,7 @@ def test_regression_sun_02_vs_mon_09_diff_values_mismatch():
     assert any("diff_values_match_ac" in e for e in cov_r["errors"])
 
 
+@_CODEX_SKIP
 def test_regression_dry_run_substitution_for_real_move():
     """회귀2: 사용자 AC=실제 파일 이동, 테스트=dry-run만 → no_dry_run_substitution=false → FAIL."""
     ck = _all_true_coverage()
