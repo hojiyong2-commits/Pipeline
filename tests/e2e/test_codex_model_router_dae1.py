@@ -14,7 +14,6 @@ import stat
 import sys
 import textwrap
 from pathlib import Path
-from typing import Optional
 
 _ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_ROOT) not in sys.path:

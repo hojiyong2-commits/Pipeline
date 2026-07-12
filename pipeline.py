@@ -9649,7 +9649,7 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
             "root_cause": _root_cause,
             "reproduction": _reproduction,
             "required_fix": _required_fix,
-            "acceptance_criteria": [str(x).strip() for x in _acceptance],
+            "acceptance_criteria": [str(x).strip() for x in (_acceptance or [])],
             "source": "json_protocol",
         }
 
