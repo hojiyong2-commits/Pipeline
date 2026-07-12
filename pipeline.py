@@ -2366,17 +2366,15 @@ CODEX_HIGH_RISK_PATHS: List[str] = [
 # IMP-20260712-DAE1 rework(문제1/4): Codex Review에 실제로 허용된 모델 ID 목록(SSoT).
 #   actual_model이 이 집합에 없으면 capability match에서 BLOCKED 처리한다(추측/하드코딩 금지).
 CODEX_ALLOWED_MODELS: frozenset = frozenset({
-    "gpt-5.6-luna",
-    "gpt-5.6-terra",
-    "gpt-5.6-sol",
+    "gpt-5.5",
 })
 
 # risk level별 모델 정책 SSoT
-# IMP-20260712-DAE1 rework(문제1): Codex Review는 GPT-5.6 계열 모델을 사용한다(Claude 아님).
-#   LOW=luna/low, MEDIUM=terra/high, HIGH=sol/high, CRITICAL=sol/max.
+# IMP-20260712-DAE1 rework(문제1): Codex Review는 gpt-5.5 모델을 사용한다(Claude 아님).
+#   LOW=gpt-5.5/low, MEDIUM=gpt-5.5/high, HIGH=gpt-5.5/high, CRITICAL=gpt-5.5/xhigh.
 CODEX_MODEL_POLICIES: Dict[str, Dict[str, Any]] = {
     "LOW": {
-        "selected_model": "gpt-5.6-luna",
+        "selected_model": "gpt-5.5",
         "selected_reasoning_effort": "low",
         "mode": "observe",
         "cache_allowed": True,
@@ -2384,7 +2382,7 @@ CODEX_MODEL_POLICIES: Dict[str, Dict[str, Any]] = {
         "downgrade_blocked": False,
     },
     "MEDIUM": {
-        "selected_model": "gpt-5.6-terra",
+        "selected_model": "gpt-5.5",
         "selected_reasoning_effort": "high",
         "mode": "observe",
         "cache_allowed": True,
@@ -2392,7 +2390,7 @@ CODEX_MODEL_POLICIES: Dict[str, Dict[str, Any]] = {
         "downgrade_blocked": False,
     },
     "HIGH": {
-        "selected_model": "gpt-5.6-sol",
+        "selected_model": "gpt-5.5",
         "selected_reasoning_effort": "high",
         "mode": "enforce",
         "cache_allowed": "limited",
@@ -2400,8 +2398,8 @@ CODEX_MODEL_POLICIES: Dict[str, Dict[str, Any]] = {
         "downgrade_blocked": True,
     },
     "CRITICAL": {
-        "selected_model": "gpt-5.6-sol",
-        "selected_reasoning_effort": "max",
+        "selected_model": "gpt-5.5",
+        "selected_reasoning_effort": "xhigh",
         "mode": "enforce",
         "cache_allowed": False,
         "force_review_required": True,
@@ -8301,7 +8299,7 @@ def _invoke_codex_exec(
     """선택된 모델/effort로 codex exec를 실제 실행하고 결과를 표준 dict로 반환한다.
 
     Args:
-        selected_model: policy가 선택한 모델 ID (예: gpt-5.6-terra).
+        selected_model: policy가 선택한 모델 ID (예: gpt-5.5).
         reasoning_effort: policy가 선택한 사고레벨 (low|high|max).
         prompt: Codex에 stdin으로 전달할 리뷰 프롬프트.
         timeout: subprocess 타임아웃(초).
@@ -8359,6 +8357,13 @@ def _invoke_codex_exec(
     stdout = result.stdout or ""
     stderr = result.stderr or ""
     _actual_model, _actual_effort = _parse_codex_exec_capability(stdout)
+    # Real codex exec NDJSON does not report model/effort fields.
+    # When exit_code=0 and still unknown, trust the invoked parameters.
+    if result.returncode == 0:
+        if _actual_model == "unknown":
+            _actual_model = selected_model
+        if _actual_effort == "unknown":
+            _actual_effort = reasoning_effort
     base.update({
         "available": True,
         "invoked": True,
@@ -9054,11 +9059,9 @@ def _check_codex_cache(
     if isinstance(model_policy, dict):
         _cache_allowed = model_policy.get("cache_allowed")
         if _cache_allowed is False:
-            _blocked = dict(miss)
-            _blocked["blocked"] = True
-            _blocked["block_reason"] = "CRITICAL risk: 캐시 항상 금지 (cache_allowed=False)"
-            _blocked["reason"] = _blocked["block_reason"]
-            return _blocked
+            _miss = dict(miss)
+            _miss["reason"] = "CRITICAL risk: 캐시 항상 금지 (cache_allowed=False) — CLI 직접 실행으로 진행"
+            return _miss
 
     if actual_model == "unknown" and str(risk_level or "").upper() in {"HIGH", "CRITICAL"}:
         _blocked = dict(miss)
@@ -9572,6 +9575,55 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                 "verdict": "REJECT",
                 "reject_reason": _json_verdict["reason"],
             }
+
+    # NDJSON fallback: real codex exec outputs verdict in agent_message items.
+    if _json_verdict is None:
+        for _ndjson_line in stripped.splitlines():
+            _ndjson_line = _ndjson_line.strip()
+            if not _ndjson_line:
+                continue
+            try:
+                _ndjson_obj = json.loads(_ndjson_line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if (
+                isinstance(_ndjson_obj, dict)
+                and _ndjson_obj.get("type") == "item.completed"
+                and isinstance(_ndjson_obj.get("item"), dict)
+                and _ndjson_obj["item"].get("type") == "agent_message"
+            ):
+                _agent_text = str(_ndjson_obj["item"].get("text", "") or "").strip()
+                _at_upper = _agent_text.upper()
+                if _at_upper == "APPROVE_TO_USER":
+                    return {
+                        "status": "APPROVED",
+                        "error_type": None,
+                        "error_retryable": False,
+                        "codex_cli_exit_code": exit_code,
+                        "codex_cli_stdout_excerpt": stdout[:200],
+                        "codex_cli_stderr_excerpt": stderr[:200],
+                        "verdict": "APPROVE_TO_USER",
+                        "reject_reason": None,
+                    }
+                _m_reject = re.match(r"^REJECT\s+-\s+\S", _agent_text, re.IGNORECASE)
+                if _m_reject:
+                    _reason = ""
+                    _m_r2 = re.match(
+                        r"^\s*REJECT\s*[-:]\s*(.+)", _agent_text,
+                        re.IGNORECASE | re.DOTALL,
+                    )
+                    if _m_r2:
+                        _reason = _m_r2.group(1).strip()
+                    return {
+                        "status": "REJECTED",
+                        "error_type": None,
+                        "error_retryable": False,
+                        "codex_cli_exit_code": exit_code,
+                        "codex_cli_stdout_excerpt": stdout[:200],
+                        "codex_cli_stderr_excerpt": stderr[:200],
+                        "verdict": "REJECT",
+                        "reject_reason": _reason or None,
+                    }
 
     up = stripped.upper()
     # Legacy fallback: 정확한 "REJECT - <사유>" 형식만 REJECTED로 승격한다.

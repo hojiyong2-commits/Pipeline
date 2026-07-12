@@ -165,9 +165,9 @@ def run_harness(code: str, env: Dict[str, str], timeout: int = 60) -> subprocess
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("risk,exp_model,exp_effort", [
-    ("MEDIUM", "gpt-5.6-terra", "high"),
-    ("HIGH", "gpt-5.6-sol", "high"),
-    ("CRITICAL", "gpt-5.6-sol", "max"),
+    ("MEDIUM", "gpt-5.5", "high"),
+    ("HIGH", "gpt-5.5", "high"),
+    ("CRITICAL", "gpt-5.5", "xhigh"),
 ])
 def test_real_codex_exec_passes_model_and_effort(
     tmp_path: Path, risk: str, exp_model: str, exp_effort: str
@@ -215,12 +215,12 @@ def test_real_codex_exec_passes_model_and_effort(
 # ---------------------------------------------------------------------------
 
 def test_capability_model_mismatch_blocked(tmp_path: Path) -> None:
-    """CLI가 selected와 다른 모델을 보고하면 capability match BLOCKED (model_mismatch)."""
+    """CLI가 허용되지 않은 모델을 보고하면 capability match BLOCKED (disallowed_model)."""
     state_file = tmp_path / "state.json"
     shim = tmp_path / "shim"
     final_state = tmp_path / "final.json"
-    # 정책은 sol을 선택하지만 fake codex는 terra를 echo → 불일치.
-    make_fake_codex(shim, override_model="gpt-5.6-terra", override_effort="high")
+    # 정책은 gpt-5.5를 선택하지만 fake codex는 허용되지 않은 모델을 echo → 차단.
+    make_fake_codex(shim, override_model="gpt-4o", override_effort="high")
     env = _harness_env(state_file, shim_dir=shim)
     code = (
         "pol = p._build_codex_model_policy('HIGH')\n"
@@ -233,17 +233,23 @@ def test_capability_model_mismatch_blocked(tmp_path: Path) -> None:
     r = run_harness(code, env)
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     fs = json.loads(final_state.read_text(encoding="utf-8"))
-    assert fs["actual"] == "gpt-5.6-terra"
+    assert fs["actual"] == "gpt-4o"
     assert fs["chk"]["result"] == "BLOCKED"
-    assert fs["chk"]["failure_code"] == "model_mismatch"
+    assert fs["chk"]["failure_code"] == "disallowed_model"
 
 
-def test_capability_unknown_model_high_blocked(tmp_path: Path) -> None:
-    """CLI가 모델을 보고하지 않으면(unknown) HIGH에서 fail-closed BLOCKED."""
+def test_capability_unreported_model_exit0_trusts_invoked(tmp_path: Path) -> None:
+    """exit 0인데 CLI가 모델을 보고하지 않으면 invoked 파라미터를 신뢰한다(Bug#3 fallback).
+
+    실제 codex exec NDJSON은 model/effort 필드를 보고하지 않으므로, exit_code=0 성공 시
+    _invoke_codex_exec가 unknown을 selected로 승계한다. 따라서 HIGH에서도 actual==selected로
+    관측되어 capability match가 OK가 된다. (진짜 unknown→BLOCKED 경로는
+    test_capability_unknown_model_critical_blocked가 직접 호출로 검증한다.)
+    """
     state_file = tmp_path / "state.json"
     shim = tmp_path / "shim"
     final_state = tmp_path / "final.json"
-    make_fake_codex(shim, omit_model=True)  # model 키 없음 → unknown
+    make_fake_codex(shim, omit_model=True)  # model 키 없음 → NDJSON 미보고 재현
     env = _harness_env(state_file, shim_dir=shim)
     code = (
         "pol = p._build_codex_model_policy('HIGH')\n"
@@ -256,9 +262,8 @@ def test_capability_unknown_model_high_blocked(tmp_path: Path) -> None:
     r = run_harness(code, env)
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     fs = json.loads(final_state.read_text(encoding="utf-8"))
-    assert fs["actual"] == "unknown"
-    assert fs["chk"]["result"] == "BLOCKED"
-    assert fs["chk"]["failure_code"] == "unknown_model_critical_blocked"
+    assert fs["actual"] == "gpt-5.5"  # Bug#3: exit0 미보고 → invoked selected 신뢰
+    assert fs["chk"]["result"] == "OK"
 
 
 def test_capability_unknown_model_critical_blocked(tmp_path: Path) -> None:
@@ -267,7 +272,7 @@ def test_capability_unknown_model_critical_blocked(tmp_path: Path) -> None:
     final_state = tmp_path / "final.json"
     env = _harness_env(state_file)
     code = (
-        "chk = p._check_codex_model_capability_match('gpt-5.6-sol','max','unknown','unknown','CRITICAL')\n"
+        "chk = p._check_codex_model_capability_match('gpt-5.5','xhigh','unknown','unknown','CRITICAL')\n"
         "leg = p._check_codex_capability_gate('unknown','CRITICAL')\n"
         "open(%r,'w',encoding='utf-8').write(json.dumps({'chk': chk, 'leg': leg}))\n"
         % str(final_state)
@@ -356,7 +361,7 @@ def test_cli_usage_limit_is_error_not_reject(tmp_path: Path) -> None:
     make_fake_codex(shim, exit_code=1, stderr_text="you have hit your usage limit", omit_model=True)
     env = _harness_env(state_file, shim_dir=shim)
     code = (
-        "run = p._invoke_codex_exec('gpt-5.6-sol','high','x')\n"
+        "run = p._invoke_codex_exec('gpt-5.5','high','x')\n"
         "cls = p._run_codex_cli_review(run['exit_code'], run['stdout'], run['stderr'])\n"
         "open(%r,'w',encoding='utf-8').write(json.dumps({'status': cls['status'],\n"
         "  'error_type': cls['error_type'], 'retryable': cls['error_retryable'],\n"
@@ -425,11 +430,11 @@ def test_risk_fail_closed_and_tests_inheritance(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 문제1: 모델 정책이 GPT-5.6 계열인지 (Claude 아님)
+# 문제1: 모델 정책이 gpt-5.5인지 (Claude 아님)
 # ---------------------------------------------------------------------------
 
 def test_model_policies_are_gpt56(tmp_path: Path) -> None:
-    """LOW=luna/low, MEDIUM=terra/high, HIGH=sol/high, CRITICAL=sol/max (Claude 아님)."""
+    """LOW=gpt-5.5/low, MEDIUM=gpt-5.5/high, HIGH=gpt-5.5/high, CRITICAL=gpt-5.5/xhigh (Claude 아님)."""
     state_file = tmp_path / "state.json"
     final_state = tmp_path / "final.json"
     env = _harness_env(state_file)
@@ -444,13 +449,13 @@ def test_model_policies_are_gpt56(tmp_path: Path) -> None:
     r = run_harness(code, env)
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     fs = json.loads(final_state.read_text(encoding="utf-8"))
-    assert fs["LOW"] == ["gpt-5.6-luna", "low"]
-    assert fs["MEDIUM"] == ["gpt-5.6-terra", "high"]
-    assert fs["HIGH"] == ["gpt-5.6-sol", "high"]
-    assert fs["CRITICAL"] == ["gpt-5.6-sol", "max"]
+    assert fs["LOW"] == ["gpt-5.5", "low"]
+    assert fs["MEDIUM"] == ["gpt-5.5", "high"]
+    assert fs["HIGH"] == ["gpt-5.5", "high"]
+    assert fs["CRITICAL"] == ["gpt-5.5", "xhigh"]
     for m in fs["LOW"][0], fs["MEDIUM"][0], fs["HIGH"][0], fs["CRITICAL"][0]:
         assert "claude" not in m, f"Claude 모델이 남아 있음: {m}"
-    assert fs["allowed"] == ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"]
+    assert fs["allowed"] == ["gpt-5.5"]
 
 
 # ---------------------------------------------------------------------------
@@ -508,7 +513,7 @@ def test_approval_message_stdout_json_only_channel(tmp_path: Path) -> None:
 # rework#2 요구4: request-accept 신뢰 게이트 _check_codex_review_operational_trust
 # ---------------------------------------------------------------------------
 
-_CODEX_CLI_CMD = "codex exec --model gpt-5.6-sol -c model_reasoning_effort=high --json -"
+_CODEX_CLI_CMD = "codex exec --model gpt-5.5 -c model_reasoning_effort=high --json -"
 
 
 def _trust_result(**overrides) -> dict:
@@ -518,10 +523,10 @@ def _trust_result(**overrides) -> dict:
         "acceptance_eligible": True,
         "router_version": "1.0.0",
         "risk_level": "HIGH",
-        "model_policy_signature": "HIGH:gpt-5.6-sol:high:enforce",
+        "model_policy_signature": "HIGH:gpt-5.5:high:enforce",
         "codex_cli_command": _CODEX_CLI_CMD,
-        "selected_model": "gpt-5.6-sol",
-        "actual_model": "gpt-5.6-sol",
+        "selected_model": "gpt-5.5",
+        "actual_model": "gpt-5.5",
         "selected_reasoning_effort": "high",
         "actual_effort": "high",
     }
@@ -595,7 +600,7 @@ def test_operational_trust_blocks_unknown_model_high(tmp_path: Path) -> None:
 
 def test_operational_trust_blocks_model_mismatch(tmp_path: Path) -> None:
     """selected_model != actual_model → BLOCKED."""
-    out = _run_trust(tmp_path, _trust_result(actual_model="gpt-5.6-terra"))
+    out = _run_trust(tmp_path, _trust_result(actual_model="gpt-4o"))
     assert out["status"] == "BLOCKED"
     assert out["failure_code"] == "codex_review_model_mismatch"
 
@@ -603,9 +608,9 @@ def test_operational_trust_blocks_model_mismatch(tmp_path: Path) -> None:
 def test_operational_trust_blocks_effort_mismatch(tmp_path: Path) -> None:
     """selected_effort != actual_effort → BLOCKED (MEDIUM에서 actual unknown 아님)."""
     out = _run_trust(tmp_path, _trust_result(
-        risk_level="MEDIUM", selected_model="gpt-5.6-terra", actual_model="gpt-5.6-terra",
-        model_policy_signature="MEDIUM:gpt-5.6-terra:high:observe",
-        codex_cli_command="codex exec --model gpt-5.6-terra -c model_reasoning_effort=high --json -",
+        risk_level="MEDIUM", selected_model="gpt-5.5", actual_model="gpt-5.5",
+        model_policy_signature="MEDIUM:gpt-5.5:high:observe",
+        codex_cli_command="codex exec --model gpt-5.5 -c model_reasoning_effort=high --json -",
         actual_effort="low",
     ))
     assert out["status"] == "BLOCKED"

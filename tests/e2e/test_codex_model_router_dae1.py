@@ -96,8 +96,8 @@ def test_tc13_unknown_model_low_ok() -> None:
 
 
 def test_tc14_known_model_critical_ok() -> None:
-    """known model(GPT-5.6 계열)은 CRITICAL이어도 legacy capability_gate에서 BLOCKED 아님."""
-    assert pipeline._check_codex_capability_gate("gpt-5.6-sol", "CRITICAL")["result"] == "OK"
+    """known model(gpt-5.5)은 CRITICAL이어도 legacy capability_gate에서 BLOCKED 아님."""
+    assert pipeline._check_codex_capability_gate("gpt-5.5", "CRITICAL")["result"] == "OK"
 
 
 # --- TC-15: _detect_codex_cli_capability ---
