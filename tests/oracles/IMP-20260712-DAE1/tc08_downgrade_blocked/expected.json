@@ -1,0 +1,5 @@
+{
+  "result": "BLOCKED",
+  "downgrade_blocked": true,
+  "failure_code": "downgrade_blocked"
+}
