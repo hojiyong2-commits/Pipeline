@@ -1,0 +1,4 @@
+pipeline-manager-agent.md에서 승인 요청 relay 섹션 수를 검사한다.
+대상 파일: .claude/agents/pipeline-manager-agent.md
+검사 조건: ## 섹션 헤더 중 relay/중계/Output Authority/이중 출력/승인 요청 출력 규칙/request-accept 중계 프로토콜 포함 섹션 수
+단, "표시 상태값"/"최소 고정 양식" 포함 섹션은 제외

@@ -1,0 +1,5 @@
+dead code 테스트 파일 2개의 존재 여부를 검사한다.
+검사 대상:
+  - tests/test_codex_review_hook_cd3c.py
+  - tests/test_codex_review_loop_4121.py
+검사 조건: 두 파일 모두 존재하지 않아야 한다 (MT-4 AC-3)
