@@ -43,9 +43,11 @@ def test_tc04_high_risk_workflow_path() -> None:
     assert result["risk_level"] == "HIGH"
 
 
-def test_tc05_empty_inputs_low() -> None:
-    """빈 입력 → LOW (default)."""
-    assert pipeline._classify_codex_review_risk([], [])["risk_level"] == "LOW"
+def test_tc05_empty_inputs_blocked() -> None:
+    """빈 changeset → BLOCKED (fail-closed, IMP-20260712-DAE1 rework 문제5). LOW fallback 금지."""
+    r = pipeline._classify_codex_review_risk([], [])
+    assert r["risk_level"] == "BLOCKED"
+    assert r.get("blocked") is True
 
 
 # --- TC-6~TC-10: _build_codex_model_policy ---
@@ -94,8 +96,8 @@ def test_tc13_unknown_model_low_ok() -> None:
 
 
 def test_tc14_known_model_critical_ok() -> None:
-    """known model은 CRITICAL이어도 BLOCKED 아님."""
-    assert pipeline._check_codex_capability_gate("claude-sonnet", "CRITICAL")["result"] == "OK"
+    """known model(GPT-5.6 계열)은 CRITICAL이어도 legacy capability_gate에서 BLOCKED 아님."""
+    assert pipeline._check_codex_capability_gate("gpt-5.6-sol", "CRITICAL")["result"] == "OK"
 
 
 # --- TC-15: _detect_codex_cli_capability ---

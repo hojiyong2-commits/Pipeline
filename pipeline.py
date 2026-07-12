@@ -2327,6 +2327,9 @@ TRUST_ROOT_PATTERNS: List[str] = [
 CODEX_MODEL_ROUTER_VERSION: str = "1.0.0"
 
 # CRITICAL risk triggers: acceptance/SHA/nonce writer 함수명 목록
+# IMP-20260712-DAE1 rework(문제5): Codex Model Router 자체(risk classifier, model policy,
+#   capability, cache, review bundle, snapshot/verdict 경로) 변경도 CRITICAL로 분류한다.
+#   이 함수들이 바뀌면 trust-chain 판정 로직 자체가 흔들리므로 최고 위험으로 취급한다.
 CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_cmd_gates_request_accept",
     "_cmd_gates_accept",
@@ -2336,21 +2339,44 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_validate_pr_body_readiness",
     "_build_acceptance_request",
     "_finalize_acceptance",
+    # IMP-20260712-DAE1 rework(문제5): Codex Model Router 핵심 함수 (self-referential CRITICAL).
+    "_classify_codex_review_risk",
+    "_build_codex_model_policy",
+    "_detect_codex_cli_capability",
+    "_codex_review_snapshot",
+    "_codex_review_result_path",
+    "_codex_review_loop_state_path",
+    "_build_codex_review_bundle",
+    "_save_acceptance_staging",
+    "_load_acceptance_staging",
+    "_check_codex_review_gate",
+    "_check_codex_pr_body_sha_invariant",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
+# IMP-20260712-DAE1 rework(문제5): tests/ 를 제거한다. tests/** 변경은 그 자체로 risk를 올리지
+#   않고, 함께 변경된 제품 코드의 risk를 상속한다(_classify_codex_review_risk에서 test 파일 제외).
 CODEX_HIGH_RISK_PATHS: List[str] = [
     "pipeline.py",
     ".github/workflows/",
     "CLAUDE.md",
     ".claude/agents/",
-    "tests/",
 ]
 
+# IMP-20260712-DAE1 rework(문제1/4): Codex Review에 실제로 허용된 모델 ID 목록(SSoT).
+#   actual_model이 이 집합에 없으면 capability match에서 BLOCKED 처리한다(추측/하드코딩 금지).
+CODEX_ALLOWED_MODELS: frozenset = frozenset({
+    "gpt-5.6-luna",
+    "gpt-5.6-terra",
+    "gpt-5.6-sol",
+})
+
 # risk level별 모델 정책 SSoT
+# IMP-20260712-DAE1 rework(문제1): Codex Review는 GPT-5.6 계열 모델을 사용한다(Claude 아님).
+#   LOW=luna/low, MEDIUM=terra/high, HIGH=sol/high, CRITICAL=sol/max.
 CODEX_MODEL_POLICIES: Dict[str, Dict[str, Any]] = {
     "LOW": {
-        "selected_model": "claude-sonnet",
+        "selected_model": "gpt-5.6-luna",
         "selected_reasoning_effort": "low",
         "mode": "observe",
         "cache_allowed": True,
@@ -2358,15 +2384,15 @@ CODEX_MODEL_POLICIES: Dict[str, Dict[str, Any]] = {
         "downgrade_blocked": False,
     },
     "MEDIUM": {
-        "selected_model": "claude-sonnet",
-        "selected_reasoning_effort": "medium",
+        "selected_model": "gpt-5.6-terra",
+        "selected_reasoning_effort": "high",
         "mode": "observe",
         "cache_allowed": True,
         "force_review_required": False,
         "downgrade_blocked": False,
     },
     "HIGH": {
-        "selected_model": "claude-sonnet",
+        "selected_model": "gpt-5.6-sol",
         "selected_reasoning_effort": "high",
         "mode": "enforce",
         "cache_allowed": "limited",
@@ -2374,8 +2400,8 @@ CODEX_MODEL_POLICIES: Dict[str, Dict[str, Any]] = {
         "downgrade_blocked": True,
     },
     "CRITICAL": {
-        "selected_model": "claude-opus",
-        "selected_reasoning_effort": "high",
+        "selected_model": "gpt-5.6-sol",
+        "selected_reasoning_effort": "max",
         "mode": "enforce",
         "cache_allowed": False,
         "force_review_required": True,
@@ -8088,24 +8114,38 @@ def _classify_codex_review_risk(
         changed_files: 변경된 파일 경로 목록 (None 허용 → 빈 목록으로 처리).
         changed_functions: 변경된 함수명 목록 (None 허용 → 빈 목록으로 처리).
     Returns:
-        {"risk_level": "LOW"|"MEDIUM"|"HIGH"|"CRITICAL", "matched_rule": str,
-         "matched_items": list}.
+        {"risk_level": "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"|"BLOCKED", "matched_rule": str,
+         "matched_items": list, "blocked": bool}.
     """
-    # None 입력 방어: 빈 목록으로 정규화하여 안전하게 순회한다.
-    _files = changed_files if isinstance(changed_files, list) else []
+    # IMP-20260712-DAE1 rework(문제5): fail-closed. changed_files가 None/비list/빈 목록이면
+    #   변경 대상을 관측할 수 없으므로 LOW로 흘려보내지 않고 BLOCKED로 판정한다(fail-closed).
+    #   (functions가 비어 있는 것은 정상 — 많은 PR이 추적 함수 없이 파일만 바꾼다.)
+    if not isinstance(changed_files, list) or len(changed_files) == 0:
+        return {
+            "risk_level": "BLOCKED",
+            "matched_rule": "empty_changeset_fail_closed",
+            "matched_items": [],
+            "blocked": True,
+        }
+    _files = changed_files
     _funcs = changed_functions if isinstance(changed_functions, list) else []
 
-    # CRITICAL: CODEX_CRITICAL_FUNCTIONS에 있는 함수가 변경된 경우 (최우선).
+    # CRITICAL: CODEX_CRITICAL_FUNCTIONS에 있는 함수가 변경된 경우 (최우선, test 파일 제외 무관).
     for func in _funcs:
         if str(func) in CODEX_CRITICAL_FUNCTIONS:
             return {
                 "risk_level": "CRITICAL",
                 "matched_rule": "critical_function",
                 "matched_items": [func],
+                "blocked": False,
             }
 
-    # HIGH: CODEX_HIGH_RISK_PATHS 패턴에 해당하는 파일.
-    for f in _files:
+    # IMP-20260712-DAE1 rework(문제5): tests/** 는 risk를 올리지 않는다. 제품 코드 risk를
+    #   상속하도록, HIGH/MEDIUM 경로 판정에서 test 파일을 제외한다(tests 자체는 risk 상승 안 함).
+    _product_files = [f for f in _files if not _is_codex_test_path(str(f))]
+
+    # HIGH: CODEX_HIGH_RISK_PATHS 패턴에 해당하는 (test 제외) 제품 파일.
+    for f in _product_files:
         _fs = str(f)
         for pat in CODEX_HIGH_RISK_PATHS:
             if _fs == pat or _fs.startswith(pat):
@@ -8113,20 +8153,47 @@ def _classify_codex_review_risk(
                     "risk_level": "HIGH",
                     "matched_rule": "high_risk_path",
                     "matched_items": [f],
+                    "blocked": False,
                 }
 
-    # MEDIUM: 코드 파일 확장자.
+    # MEDIUM: 코드 파일 확장자 (test 제외 제품 파일).
     _code_exts = {".py", ".ts", ".js", ".yaml", ".yml", ".sh", ".ps1", ".json"}
-    for f in _files:
+    for f in _product_files:
         if Path(str(f)).suffix.lower() in _code_exts:
             return {
                 "risk_level": "MEDIUM",
                 "matched_rule": "code_file",
                 "matched_items": [f],
+                "blocked": False,
             }
 
-    # LOW: 기타 (문서, 보고서 등).
-    return {"risk_level": "LOW", "matched_rule": "default", "matched_items": []}
+    # LOW: 기타 (문서/보고서, 또는 test 파일만 변경된 경우 — 제품 코드 risk 없음).
+    return {"risk_level": "LOW", "matched_rule": "default", "matched_items": [], "blocked": False}
+
+
+def _is_codex_test_path(path: str) -> bool:
+    """주어진 경로가 테스트 파일인지 판정한다 (risk 상속용, tests 자체는 risk 상승 안 함).
+
+    Args:
+        path: 저장소 상대 경로 (슬래시/역슬래시 혼용 허용).
+    Returns:
+        tests/ 하위이거나 test_*.py / *_test.py 파일명이면 True.
+    Raises:
+        TypeError: path가 None이거나 str이 아닌 경우 (외부 입력 타입 가드).
+    """
+    if path is None:
+        raise TypeError("path must not be None")
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    norm = path.replace("\\", "/").strip()
+    while norm.startswith("./"):
+        norm = norm[2:]
+    if not norm:
+        return False
+    if norm.startswith("tests/"):
+        return True
+    base = norm.rsplit("/", 1)[-1]
+    return base.startswith("test_") and base.endswith(".py") or base.endswith("_test.py")
 
 
 # IMP-20260712-DAE1 MT-3: risk level → 모델 정책 매핑 + 다운그레이드 차단.
@@ -8150,8 +8217,16 @@ def _build_codex_model_policy(
         ({"result": "BLOCKED", "downgrade_blocked": True, "failure_code": "downgrade_blocked"}).
     """
     _RISK_ORDER: Dict[str, int] = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
-    _risk = (str(risk_level) or "LOW").upper()
-    policy = dict(CODEX_MODEL_POLICIES.get(_risk, CODEX_MODEL_POLICIES["LOW"]))
+    _risk = (str(risk_level) or "").upper()
+    # IMP-20260712-DAE1 rework(문제5): 알 수 없는 risk_level은 LOW로 fallback하지 않고 BLOCKED로
+    #   처리한다(fail-closed). classifier의 "BLOCKED"(빈 changeset)도 여기서 함께 차단된다.
+    if _risk not in CODEX_MODEL_POLICIES:
+        return {
+            "result": "BLOCKED",
+            "failure_code": "unknown_risk_level_blocked",
+            "risk_level": _risk or "UNKNOWN",
+        }
+    policy = dict(CODEX_MODEL_POLICIES[_risk])
 
     # 다운그레이드 차단: downgrade_requested=True이거나 requested_model_tier가 현재보다 낮으면.
     _should_block_downgrade = downgrade_requested
@@ -8168,7 +8243,7 @@ def _build_codex_model_policy(
             "failure_code": "downgrade_blocked",
         }
 
-    return {**policy, "router_version": CODEX_MODEL_ROUTER_VERSION}
+    return {**policy, "risk_level": _risk, "router_version": CODEX_MODEL_ROUTER_VERSION}
 
 
 # IMP-20260712-DAE1 MT-4: Codex CLI capability 감지 + fail-closed capability gate.
@@ -8177,32 +8252,263 @@ def _build_codex_model_policy(
 # [Vulnerability & Risks]: subprocess 호출 실패는 모두 unavailable/unknown으로 흡수한다.
 # [Improvement]: CLI가 모델명을 노출하면 model_source를 version_check→cli_reported로 승격 가능.
 def _detect_codex_cli_capability() -> Dict[str, Any]:
-    """Codex CLI 가용성과 actual_model을 감지. 확인 불가 시 actual_model=unknown.
+    """Codex CLI 가용성을 감지. actual_model은 실제 exec 결과가 없으면 항상 unknown.
 
-    운영자가 실제 사용 모델을 알고 있는 경우 `CODEX_CLI_MODEL` 환경변수로 명시할 수 있다.
-    이 값은 운영자가 제공한 사실이므로 추측/하드코딩이 아니며, CLI가 실제로 가용할 때만 신뢰한다.
-    환경변수가 없으면 CLI 존재만 확인하고 모델명은 unknown으로 남긴다(허위 기록 금지).
+    IMP-20260712-DAE1 rework(문제4): `CODEX_CLI_MODEL` 환경변수는 더 이상 actual_model 증거로
+    인정하지 않는다(힌트일 뿐). actual_model의 유일한 신뢰 증거는 `codex exec ... --json`이
+    실제로 보고한 모델이며(_invoke_codex_exec), version-check 단계에서는 확정할 수 없으므로
+    unknown으로 남긴다(허위 기록 금지). 환경변수는 진단용 env_hint 필드로만 노출한다.
 
     Returns:
-        {"available": bool, "actual_model": str, "model_source": str}.
-        model_source: "env"(운영자 명시) | "version_check"(가용하나 모델 미확인) | "unknown"(미가용).
+        {"available": bool, "actual_model": str, "model_source": str, "env_hint": str}.
+        model_source: "version_check"(가용하나 모델 미확인) | "unknown"(미가용).
     """
-    # 운영자 명시 모델(선택). 값이 있고 CLI가 가용할 때만 신뢰한다.
-    _env_model = str(os.environ.get("CODEX_CLI_MODEL", "") or "").strip()
+    # 운영자 명시 모델(선택). actual_model 증거로 인정하지 않고 진단용 힌트로만 보관한다.
+    _env_hint = str(os.environ.get("CODEX_CLI_MODEL", "") or "").strip()
     try:
         result = subprocess.run(
             ["codex", "--version"],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode == 0:
-            if _env_model:
-                # CLI 가용 확인 + 운영자 명시 모델로 actual_model을 확정한다(known 경로).
-                return {"available": True, "actual_model": _env_model, "model_source": "env"}
             # CLI는 있으나 모델명을 결정적으로 확인할 수 없으므로 unknown으로 남긴다(허위 기록 금지).
-            return {"available": True, "actual_model": "unknown", "model_source": "version_check"}
+            return {
+                "available": True, "actual_model": "unknown",
+                "model_source": "version_check", "env_hint": _env_hint,
+            }
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError, PermissionError):
         pass
-    return {"available": False, "actual_model": "unknown", "model_source": "unknown"}
+    return {
+        "available": False, "actual_model": "unknown",
+        "model_source": "unknown", "env_hint": _env_hint,
+    }
+
+
+# IMP-20260712-DAE1 rework(문제2): 실제 Codex CLI exec 호출 + 모델/effort 인자 전달.
+# [Purpose]: 선택된 모델/사고레벨로 `codex exec --model <m> -c model_reasoning_effort=<e> --json`을
+#            실제로 실행하고, CLI가 --json으로 보고한 actual model/effort와 sanitized 명령을 반환한다.
+# [Assumptions]: fake/real codex 모두 --json 출력의 첫 유효 JSON object에 model/reasoning_effort를
+#            담는다(없으면 unknown). prompt는 stdin으로 전달한다.
+# [Vulnerability & Risks]: subprocess 실패/timeout은 available=False + exit_code=-1로 흡수한다.
+#            actual_model이 확정되지 않으면 unknown으로 남겨 capability gate가 fail-closed 처리한다.
+# [Improvement]: 스트리밍 JSON(NDJSON) 파싱을 지원하면 대형 응답에서 마지막 status를 정확히 잡을 수 있다.
+def _invoke_codex_exec(
+    selected_model: str,
+    reasoning_effort: str,
+    prompt: str,
+    timeout: int = 120,
+) -> Dict[str, Any]:
+    """선택된 모델/effort로 codex exec를 실제 실행하고 결과를 표준 dict로 반환한다.
+
+    Args:
+        selected_model: policy가 선택한 모델 ID (예: gpt-5.6-terra).
+        reasoning_effort: policy가 선택한 사고레벨 (low|high|max).
+        prompt: Codex에 stdin으로 전달할 리뷰 프롬프트.
+        timeout: subprocess 타임아웃(초).
+    Returns:
+        {"available": bool, "exit_code": int, "stdout": str, "stderr": str,
+         "actual_model": str, "actual_effort": str,
+         "codex_cli_command": str(sanitized), "invoked": bool}.
+    Raises:
+        TypeError: selected_model/reasoning_effort/prompt가 None이거나 str이 아닌 경우.
+    """
+    for _n, _v in (("selected_model", selected_model),
+                   ("reasoning_effort", reasoning_effort), ("prompt", prompt)):
+        if _v is None:
+            raise TypeError(f"{_n} must not be None")
+        if not isinstance(_v, str):
+            raise TypeError(f"{_n} must be str, got {type(_v).__name__}")
+    if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+        raise ValueError(f"timeout must be positive int, got {timeout!r}")  # 0/음수 불허: 무한대기/즉시실패 방지
+
+    # Codex 실행 파일 경로를 PATHEXT까지 고려하여 결정적으로 해석한다(.exe/.cmd/.bat 지원).
+    _codex_bin = shutil.which("codex") or "codex"
+    cmd = [
+        _codex_bin, "exec",
+        "--model", selected_model,
+        "-c", f"model_reasoning_effort={reasoning_effort}",
+        "--json", "-",
+    ]
+    # sanitized 명령: nonce/secret이 섞이지 않는 결정적 인자만 기록한다(prompt는 제외).
+    #   실행 파일 경로가 아니라 논리 명령("codex exec ...")으로 기록하여 로컬 경로 노출을 피한다.
+    codex_cli_command = (
+        f"codex exec --model {selected_model} "
+        f"-c model_reasoning_effort={reasoning_effort} --json -"
+    )
+    base = {
+        "available": False,
+        "exit_code": -1,
+        "stdout": "",
+        "stderr": "",
+        "actual_model": "unknown",
+        "actual_effort": "unknown",
+        "codex_cli_command": codex_cli_command,
+        "invoked": False,
+    }
+    try:
+        result = subprocess.run(
+            cmd,
+            input=prompt,
+            capture_output=True, text=True, timeout=timeout,
+            encoding="utf-8", errors="replace",
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError, PermissionError) as _exc:
+        base["stderr"] = f"codex exec 실행 실패: {type(_exc).__name__}: {_exc}"
+        return base
+
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    _actual_model, _actual_effort = _parse_codex_exec_capability(stdout)
+    base.update({
+        "available": True,
+        "invoked": True,
+        "exit_code": int(result.returncode),
+        "stdout": stdout,
+        "stderr": stderr,
+        "actual_model": _actual_model,
+        "actual_effort": _actual_effort,
+    })
+    return base
+
+
+def _parse_codex_exec_capability(stdout: str) -> Tuple[str, str]:
+    """codex exec --json stdout에서 실제 사용된 model/effort를 추출한다(없으면 unknown).
+
+    JSON object(또는 NDJSON 라인들) 중 model/reasoning_effort 키를 가진 첫 항목을 신뢰한다.
+
+    Args:
+        stdout: codex exec --json 표준 출력.
+    Returns:
+        (actual_model, actual_effort). 확인 불가 시 ("unknown", "unknown").
+    """
+    if not isinstance(stdout, str) or not stdout.strip():
+        return ("unknown", "unknown")
+    _model = "unknown"
+    _effort = "unknown"
+
+    def _extract(obj: Any) -> None:
+        nonlocal _model, _effort
+        if not isinstance(obj, dict):
+            return
+        _m = obj.get("model") or obj.get("actual_model")
+        _e = (
+            obj.get("reasoning_effort")
+            or obj.get("model_reasoning_effort")
+            or obj.get("effort")
+            or obj.get("actual_effort")
+        )
+        if _m and _model == "unknown":
+            _model = str(_m)
+        if _e and _effort == "unknown":
+            _effort = str(_e)
+
+    # 1) 전체가 단일 JSON object인 경우.
+    try:
+        _extract(json.loads(stdout))
+        if _model != "unknown":
+            return (_model, _effort)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # 2) NDJSON: 각 줄을 개별 JSON으로 파싱.
+    for _line in stdout.splitlines():
+        _line = _line.strip()
+        if not _line:
+            continue
+        try:
+            _extract(json.loads(_line))
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if _model != "unknown" and _effort != "unknown":
+            break
+    return (_model, _effort)
+
+
+# IMP-20260712-DAE1 rework(문제4): capability 정합성 검사 — actual==selected 강제.
+# [Purpose]: auto-invoke된 Codex CLI가 정책이 선택한 모델/effort를 실제로 사용했는지 검증한다.
+# [Assumptions]: selected_model은 CODEX_MODEL_POLICIES가 정한 값, actual_model/effort는
+#            _invoke_codex_exec가 CLI --json에서 관측한 값이다.
+# [Vulnerability & Risks]: actual이 unknown이면 HIGH/CRITICAL에서 fail-closed BLOCKED. 허용 오차 없음.
+# [Improvement]: effort 동의어(예: "maximum"=="max") 정규화 테이블을 두면 CLI 표기 편차를 흡수 가능.
+def _check_codex_model_capability_match(
+    selected_model: str,
+    selected_effort: str,
+    actual_model: str,
+    actual_effort: str,
+    risk_level: str,
+) -> Dict[str, Any]:
+    """actual model/effort가 selected와 정확히 일치하는지 검증한다(허용 오차 없음).
+
+    Args:
+        selected_model: policy 선택 모델.
+        selected_effort: policy 선택 effort.
+        actual_model: CLI가 실제 사용한 모델("unknown"이면 확인 불가).
+        actual_effort: CLI가 실제 사용한 effort("unknown"이면 확인 불가).
+        risk_level: 현재 risk level.
+    Returns:
+        {"result": "OK"} 또는 {"result": "BLOCKED", "failure_code": str}.
+    """
+    _risk = str(risk_level or "").upper()
+    # actual 미확인: HIGH/CRITICAL은 fail-closed, LOW/MEDIUM은 관용(observe).
+    if str(actual_model) == "unknown" or str(actual_effort) == "unknown":
+        if _risk in {"HIGH", "CRITICAL"}:
+            return {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
+        return {"result": "OK"}
+    # actual이 허용 모델 집합에 없으면 차단.
+    if str(actual_model) not in CODEX_ALLOWED_MODELS:
+        return {"result": "BLOCKED", "failure_code": "disallowed_model"}
+    # actual == selected 강제(허용 오차 없음).
+    if str(actual_model) != str(selected_model):
+        return {"result": "BLOCKED", "failure_code": "model_mismatch"}
+    if str(actual_effort) != str(selected_effort):
+        return {"result": "BLOCKED", "failure_code": "effort_mismatch"}
+    return {"result": "OK"}
+
+
+def _codex_policy_signature(model_policy: Optional[Dict[str, Any]]) -> str:
+    """model_policy에서 cache 무효화용 결정적 서명 문자열을 만든다(문제6: 정책 변경→cache miss).
+
+    Args:
+        model_policy: _build_codex_model_policy 결과(선택). None이면 빈 서명.
+    Returns:
+        "risk:model:effort:mode" 형식 문자열(정책 없으면 "").
+    """
+    if not isinstance(model_policy, dict):
+        return ""
+    return ":".join(str(model_policy.get(_k, "")) for _k in (
+        "risk_level", "selected_model", "selected_reasoning_effort", "mode",
+    ))
+
+
+def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> str:
+    """Codex exec stdin에 전달할 리뷰 프롬프트를 조립한다(bundle 요약 + 판정 규칙).
+
+    Args:
+        bundle: _build_codex_review_bundle이 만든 review bundle dict.
+        pipeline_id: 현재 파이프라인 ID.
+    Returns:
+        Codex에 stdin으로 넘길 프롬프트 문자열.
+    Raises:
+        TypeError: bundle이 None/비dict이거나 pipeline_id가 None/비str인 경우.
+    """
+    if bundle is None or not isinstance(bundle, dict):
+        raise TypeError("bundle must be a dict")
+    if pipeline_id is None or not isinstance(pipeline_id, str):
+        raise TypeError("pipeline_id must be str")
+    _changed = list(bundle.get("changed_files", []) or [])
+    _funcs = list(bundle.get("included_functions", []) or [])
+    lines = [
+        f"[Codex Review] pipeline_id={pipeline_id}",
+        f"changed_files_count={bundle.get('changed_files_count', len(_changed))}",
+        "changed_files:",
+    ]
+    lines += [f"  - {f}" for f in _changed[:200]]
+    if _funcs:
+        lines.append("included_functions:")
+        lines += [f"  - {fn}" for fn in _funcs[:200]]
+    lines.append(
+        "출력 첫 줄은 정확히 APPROVE_TO_USER 또는 REJECT - <사유>여야 합니다."
+    )
+    return "\n".join(lines)
 
 
 def _check_codex_capability_gate(actual_model: str, risk_level: str) -> Dict[str, Any]:
@@ -8612,14 +8918,23 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
 #            32bit×2 입력 조합의 충돌 확률은 실무상 무시 가능하다.
 # [Vulnerability & Risks]: None/비str 입력은 즉시 TypeError로 차단하여 잘못된 키로 캐시 오염을 막는다.
 # [Improvement]: 키에 pipeline_id를 접두로 붙이면 파이프라인 간 캐시 분리를 더 명확히 할 수 있다.
-def _codex_cache_key(contract_sha256: str, review_bundle_sha256: str) -> str:
-    """contract_sha256 + review_bundle_sha256로 결정적 16자 캐시 키를 계산한다.
+def _codex_cache_key(
+    contract_sha256: str,
+    review_bundle_sha256: str,
+    policy_signature: str = "",
+) -> str:
+    """contract + bundle + policy 서명으로 결정적 16자 캐시 키를 계산한다.
+
+    IMP-20260712-DAE1 rework(문제6): policy_signature(모델/effort/정책)를 키에 포함하여,
+    같은 contract+bundle이라도 모델/effort/정책이 바뀌면 cache miss가 되게 한다.
+    기본값 ""은 기존 호출자와의 하위 호환을 보존한다.
 
     Args:
         contract_sha256: 계약 파일 SHA-256.
         review_bundle_sha256: review bundle 파일 SHA-256.
+        policy_signature: 모델 정책 서명(선택, _codex_policy_signature 결과).
     Returns:
-        sha256(contract + ":" + bundle)의 앞 16자 hex 문자열.
+        sha256(contract + ":" + bundle + ":" + policy)의 앞 16자 hex 문자열.
     Raises:
         TypeError: 인자가 None이거나 str이 아닌 경우.
     """
@@ -8635,7 +8950,13 @@ def _codex_cache_key(contract_sha256: str, review_bundle_sha256: str) -> str:
         raise TypeError(
             f"review_bundle_sha256 must be str, got {type(review_bundle_sha256).__name__}"
         )
-    raw = f"{contract_sha256}:{review_bundle_sha256}".encode("utf-8")
+    if policy_signature is None:
+        raise TypeError("policy_signature must not be None")
+    if not isinstance(policy_signature, str):
+        raise TypeError(
+            f"policy_signature must be str, got {type(policy_signature).__name__}"
+        )
+    raw = f"{contract_sha256}:{review_bundle_sha256}:{policy_signature}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
@@ -8711,7 +9032,12 @@ def _check_codex_cache(
     if not isinstance(pipeline_id, str):
         raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
 
-    cache_key = _codex_cache_key(contract_sha256, review_bundle_sha256)
+    # IMP-20260712-DAE1 rework(문제6): 모델/effort/정책 변경 시 cache miss가 되도록 정책 서명을
+    #   cache key에 포함한다. model_policy가 없으면 빈 서명(하위 호환).
+    cache_key = _codex_cache_key(
+        contract_sha256, review_bundle_sha256,
+        _codex_policy_signature(model_policy),
+    )
     miss: dict = {
         "hit": False,
         "cached_verdict": None,
@@ -23545,10 +23871,19 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _explicit_verdict = getattr(args, "verdict", None) is not None
     _explicit_cli = getattr(args, "codex_cli_exit_code", None) is not None
     _explicit_injection = _explicit_verdict or _explicit_cli
+    # IMP-20260712-DAE1 rework(문제2): --auto-codex-cli 시 선택 모델/effort로 실제 codex exec 호출.
+    _auto_codex_cli = bool(getattr(args, "auto_codex_cli", False))
+
+    # IMP-20260712-DAE1 rework(문제2/4): auto-invoke 결과를 담을 override 및 실제 명령/능력 기록 변수.
+    _auto_cli_override: Optional[Dict[str, Any]] = None
+    _codex_cli_command_real = ""
+    _actual_effort_str = "unknown"
+    _model_source_str = "unknown"
 
     # actual_model/model_source는 기록용으로 항상 감지한다(추측/하드코딩 금지 — 확인 불가 시 unknown).
     _cap_info = _detect_codex_cli_capability()
     _actual_model_str = str(_cap_info.get("actual_model", "unknown") or "unknown")
+    _model_source_str = str(_cap_info.get("model_source", "unknown") or "unknown")
     # capability gate(fail-closed)는 오직 실제 Codex CLI를 자동 실행하는 경로에만 적용한다.
     if not _explicit_injection:
         _cap_gate = _check_codex_capability_gate(_actual_model_str, _risk_level_str)
@@ -23616,13 +23951,60 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             print("  [CACHE REUSE] Codex CLI 호출 없이 캐시된 APPROVE verdict를 재사용합니다.")
     else:
         print(f"  [CACHE MISS] {_cache_probe.get('reason')}")
-        # 명시적 verdict/CLI 결과가 없고 cache도 miss면 재사용 근거가 없으므로 BLOCKED.
+        # IMP-20260712-DAE1 rework(문제2/4): --auto-codex-cli 이면 선택된 모델/effort로 실제
+        #   codex exec를 호출한다. 호출 후 actual model/effort를 capability match로 검증하고,
+        #   실패하면 fail-closed BLOCKED. cache miss + 명시적 verdict/CLI가 없고 auto도 아니면 기존 BLOCKED.
         if not _explicit_verdict and not _explicit_cli:
-            _die(
-                "[BLOCKED] failure_code=codex_verdict_required\n"
-                f"  cache miss({_cache_probe.get('reason')})이고 --verdict/--codex-cli-exit-code도 없습니다.\n"
-                "  --verdict APPROVE_TO_USER|REJECT 또는 --codex-cli-exit-code로 CLI 결과를 넘기세요."
-            )
+            if _auto_codex_cli:
+                _auto_run = _invoke_codex_exec(
+                    str(_model_policy.get("selected_model", "")),
+                    str(_model_policy.get("selected_reasoning_effort", "")),
+                    _build_codex_prompt_for_review(_preflight_bundle, pipeline_id),
+                )
+                _codex_cli_command_real = str(_auto_run.get("codex_cli_command", "") or "")
+                _actual_model_str = str(_auto_run.get("actual_model", "unknown") or "unknown")
+                _actual_effort_str = str(_auto_run.get("actual_effort", "unknown") or "unknown")
+                _model_source_str = "codex_exec_json"
+                if not _auto_run.get("invoked"):
+                    # CLI 실행 자체 실패 → ERROR로 기록(REJECT 아님, reject_count 미증가).
+                    _auto_cli_run_error = _run_codex_cli_review(
+                        int(_auto_run.get("exit_code", -1) or -1),
+                        str(_auto_run.get("stdout", "") or ""),
+                        str(_auto_run.get("stderr", "") or "codex exec 실행 실패"),
+                    )
+                    _finish_codex_review_error(
+                        state, pipeline_id, _auto_cli_run_error,
+                        prev_reject_count, prev_cli_error_count,
+                        attempt_id=_generate_attempt_id(),
+                        review_bundle_sha256=_review_bundle_sha256,
+                    )
+                    return  # unreachable (_finish_codex_review_error가 sys.exit)
+                # capability match(fail-closed): actual == selected(모델/effort), 허용 모델 집합.
+                _match = _check_codex_model_capability_match(
+                    str(_model_policy.get("selected_model", "")),
+                    str(_model_policy.get("selected_reasoning_effort", "")),
+                    _actual_model_str, _actual_effort_str, _risk_level_str,
+                )
+                if _match.get("result") == "BLOCKED":
+                    _die(
+                        f"[BLOCKED] failure_code={_match.get('failure_code', 'model_mismatch')}\n"
+                        f"  selected_model={_model_policy.get('selected_model')!r}/"
+                        f"{_model_policy.get('selected_reasoning_effort')!r} "
+                        f"!= actual_model={_actual_model_str!r}/{_actual_effort_str!r} "
+                        f"(risk_level={_risk_level_str!r}) — Codex Review 차단 (fail-closed)."
+                    )
+                # auto-invoke 결과를 아래 CLI 분류 경로로 넘긴다(exit/stdout/stderr override).
+                _auto_cli_override = {
+                    "exit_code": int(_auto_run.get("exit_code", -1) or -1),
+                    "stdout": str(_auto_run.get("stdout", "") or ""),
+                    "stderr": str(_auto_run.get("stderr", "") or ""),
+                }
+            else:
+                _die(
+                    "[BLOCKED] failure_code=codex_verdict_required\n"
+                    f"  cache miss({_cache_probe.get('reason')})이고 --verdict/--codex-cli-exit-code도 없습니다.\n"
+                    "  --verdict APPROVE_TO_USER|REJECT, --codex-cli-exit-code, 또는 --auto-codex-cli 를 사용하세요."
+                )
 
     # BUG-20260702-E69E REJECT-1: attempt 단위 상태 모델 — 이번 시도의 고유 식별자를 발급한다.
     attempt_id = _generate_attempt_id()
@@ -23687,6 +24069,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     cli_run: Optional[Dict[str, Any]] = None
     if _cache_hit:
         verdict = _cache_verdict_from_cache
+    elif _auto_cli_override is not None:
+        # IMP-20260712-DAE1 rework(문제2): auto-invoke된 실제 codex exec 결과를 분류한다.
+        cli_run = _run_codex_cli_review(
+            int(_auto_cli_override["exit_code"]),
+            str(_auto_cli_override["stdout"]),
+            str(_auto_cli_override["stderr"]),
+        )
+        # 실제 CLI에서 도출된 판정임을 표시(external_verdict 아님 → capability 검증을 이미 통과함).
+        if isinstance(cli_run, dict):
+            cli_run["verdict_source"] = "codex_cli"
     elif _cli_exit_arg is not None:
         try:
             _cli_exit = int(_cli_exit_arg)
@@ -23698,6 +24090,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         _cli_stdout = str(getattr(args, "codex_cli_stdout", "") or "")
         _cli_stderr = str(getattr(args, "codex_cli_stderr", "") or "")
         cli_run = _run_codex_cli_review(_cli_exit, _cli_stdout, _cli_stderr)
+        # --codex-cli-* 주입은 외부에서 넣은 원시값이므로 external_cli_injection으로 표시.
+        if isinstance(cli_run, dict):
+            cli_run["verdict_source"] = "external_cli_injection"
 
     if cli_run is not None:
         run_status = str(cli_run.get("status", "ERROR"))
@@ -23962,6 +24357,22 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     new_cli_error_count = prev_cli_error_count  # ERROR 경로는 별도 함수에서 처리됨
     acceptance_eligible = review_status == "APPROVED"
 
+    # IMP-20260712-DAE1 rework(문제3): 순수 --verdict 주입(external_verdict)은 capability gate를
+    #   우회하는 "맨몸 판정 주장"이므로 운영 환경에서 acceptance_eligible=true를 기록하지 못하게 한다.
+    #   verdict_source=external_verdict이면 acceptance_eligible=false 강제.
+    #   단, 테스트 격리 모드(PIPELINE_TEST_MODE=1)에서는 허용한다(진단/회귀 테스트용).
+    #   주의: --codex-cli-*(external_cli_injection)는 실제 CLI 원시 출력(exit/stdout/stderr)을
+    #   _run_codex_cli_review로 분류한 결과이므로 별도 차단하지 않는다(E69E 설계 계약 보존).
+    #   auto-invoke(codex_cli)는 이미 capability match 검증을 통과한 실제 CLI 실행이므로 그대로 eligible.
+    _verdict_source_now = str(
+        (cli_run.get("verdict_source") if isinstance(cli_run, dict) else None)
+        or ("codex_cli" if _auto_cli_override is not None else "external_verdict")
+    )
+    _test_mode = str(os.environ.get("PIPELINE_TEST_MODE", "") or "") == "1"
+    if _verdict_source_now == "external_verdict" and not _test_mode:
+        # 운영 환경: 맨몸 --verdict 주입은 승인 코드 발급 자격을 갖지 못한다(capability 우회 차단).
+        acceptance_eligible = False
+
     # BUG-20260702-E69E REJECT-1: 이번 attempt가 검토한 snapshot identity를 중첩 dict로 기록한다.
     #   top-level 개별 필드(packet_sha256/pr_head_sha/pr_body_candidate_sha256)는 하위 호환을 위해
     #   유지하되, 6개 차원 전체(review_bundle/contract/staging 포함)를 snapshot_identity에 담아
@@ -23991,7 +24402,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "codex_cli_stdout_excerpt": (cli_run.get("codex_cli_stdout_excerpt", "") if cli_run else ""),
         "codex_cli_stderr_excerpt": (cli_run.get("codex_cli_stderr_excerpt", "") if cli_run else ""),
         "verdict": verdict,
-        "verdict_source": (cli_run.get("verdict_source") if cli_run else "external_verdict"),
+        "verdict_source": _verdict_source_now,
         "reject_reason": (cli_run.get("reject_reason") if cli_run else (reason or None)),
         "reason": reason or ("Codex 검토 통과" if verdict == "APPROVE_TO_USER" else "Codex 검토 거절"),
         "packet_sha256": packet_sha,
@@ -24020,23 +24431,27 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         ),
         "included_functions": list(_preflight_bundle.get("included_functions", []) or []),
         "excluded_files": list(_preflight_bundle.get("excluded_files", []) or []),
-        # Codex CLI 실제 호출 정보. cache hit이면 CLI 미호출을 명시한다. CLI 버전/모델을 결정적으로
-        # 확인할 수 없는 경우 gpt-5.5 등 특정 모델을 기록하지 않고 "unknown"으로 남긴다(허위 기록 금지).
+        # IMP-20260712-DAE1 rework(문제2): 실제 실행한 codex exec 명령을 기록한다(sanitized).
+        #   auto-invoke이면 실제 model/effort가 담긴 명령, cache hit이면 미호출, 그 외는 external.
         "codex_cli_command": (
             "N/A (cache hit)" if _cache_hit
-            else ("codex exec -" if cli_run is not None else "N/A (external verdict)")
+            else (_codex_cli_command_real if _auto_cli_override is not None
+                  else ("external CLI injection (--codex-cli-*)" if cli_run is not None
+                        else "N/A (external verdict)"))
         ),
         "codex_cli_version": "unknown",
-        "codex_model": "unknown",
-        "model_source": "unknown",
+        "codex_model": _actual_model_str,
+        "model_source": _model_source_str,
     }
 
-    # IMP-20260712-DAE1 MT-6: Codex Model Router 결과 필드를 result에 기록한다.
+    # IMP-20260712-DAE1 MT-6/rework: Codex Model Router 결과 필드를 result에 기록한다.
     result["router_version"] = CODEX_MODEL_ROUTER_VERSION
     result["risk_level"] = _risk_level_str
     result["selected_model"] = str(_model_policy.get("selected_model", "unknown"))
+    result["selected_reasoning_effort"] = str(_model_policy.get("selected_reasoning_effort", "unknown"))
     result["actual_model"] = _actual_model_str
-    result["model_source"] = str(_cap_info.get("model_source", "unknown"))
+    result["actual_effort"] = _actual_effort_str
+    result["model_source"] = _model_source_str
     result["review_mode"] = str(_model_policy.get("mode", "observe"))
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
@@ -24147,7 +24562,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _cache_changed_crit = [str(x) for x in _b_cc]
         _cache_entry = {
             "cache_key": _codex_cache_key(
-                _contract_sha256_for_cache, _review_bundle_sha256
+                _contract_sha256_for_cache, _review_bundle_sha256,
+                _codex_policy_signature(_model_policy),
             ),
             "contract_sha256": _contract_sha256_for_cache,
             "review_bundle_sha256": _review_bundle_sha256,
@@ -29752,6 +30168,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_codex.add_argument(
         "--retry-cli-error", dest="retry_cli_error", action="store_true", default=False,
         help="이전 결과가 ERROR인 경우에만 재실행을 허용한다 (REJECTED 우회 불가).",
+    )
+    # IMP-20260712-DAE1 rework(문제2): 선택된 모델/effort로 실제 codex exec를 호출한다.
+    p_gate_codex.add_argument(
+        "--auto-codex-cli", dest="auto_codex_cli", action="store_true", default=False,
+        help="cache miss 시 selected_model/effort로 실제 codex exec를 호출하여 verdict를 도출한다.",
     )
     p_gate_codex.add_argument(
         "--force-review", dest="force_review", action="store_true", default=False,
