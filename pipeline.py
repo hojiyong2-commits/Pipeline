@@ -24258,12 +24258,29 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     review_bundle_sha256=_review_bundle_sha256,
                 )
                 return  # unreachable (_finish_codex_review_error가 sys.exit)
+            # IMP-20260712-DAE1 bugfix#2: invoked=True이지만 exit_code!=0인 경우,
+            # capability match 전에 CLI 결과를 먼저 분류한다. 사용량 한도/네트워크 오류 등
+            # 운영상 오류는 model_verification_unverified가 아니라 올바른 error_type으로 기록해야
+            # --retry-cli-error 흐름이 정확한 error_type을 볼 수 있다(fail-closed 완화 대상 아님).
+            _raw_exit = _auto_run.get("exit_code")
+            if _raw_exit != 0:
+                _auto_cli_run_nonzero = _run_codex_cli_review(
+                    int(_raw_exit if _raw_exit is not None else -1),
+                    str(_auto_run.get("stdout", "") or ""),
+                    str(_auto_run.get("stderr", "") or ""),
+                )
+                _finish_codex_review_error(
+                    state, pipeline_id, _auto_cli_run_nonzero,
+                    prev_reject_count, prev_cli_error_count,
+                    attempt_id=_generate_attempt_id(),
+                    review_bundle_sha256=_review_bundle_sha256,
+                )
+                return  # unreachable
             # capability match(fail-closed): invoked==selected, actual 보고 시 selected 일치,
             #   HIGH/CRITICAL은 최소 invocation_verified. verification_level을 함께 산출한다(요구4).
             # IMP-20260712-DAE1 bugfix: exit_code=0은 Python에서 falsy이므로
             # `(0 or -1) == -1`이 되어 invocation_ok가 항상 False가 되는 버그 수정.
             # `.get("exit_code")` 반환값 자체가 None인 경우에만 미실행으로 간주한다.
-            _raw_exit = _auto_run.get("exit_code")
             _invocation_ok = _raw_exit == 0
             _match = _check_codex_model_capability_match(
                 _selected_model_now, _selected_effort_now,
