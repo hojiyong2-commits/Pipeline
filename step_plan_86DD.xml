@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PM Planner Agent Output for IMP-20260711-86DD -->
+<!-- 사용자 승인 요청 출력 권한 SSoT 정리와 dead code 제거로 중복 출력 문제 근본 수정 -->
+
+<decomposition_audit>
+  <pipeline_id>IMP-20260711-86DD</pipeline_id>
+  <audit_timestamp>2026-07-11T09:10:00Z</audit_timestamp>
+  <audit_result>DECOMPOSITION_COMPLETE</audit_result>
+  <micro_task_count>5</micro_task_count>
+  <grep_executions>7</grep_executions>
+
+  <module_decomposition>
+    <module id="M-1" name="Output Authority Inventory">
+      <description>approval 출력 권한 전체 inventory 작성 및 분류 보고서 생성</description>
+      <ambiguity_triggers>
+        <trigger id="T-1" category="output_format" fired="false">보고서 형식 — MD 파일 사용 (비코드 산출물)</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-2" name="pipeline.py Machine-Readable Cleanup">
+      <description>approval_display deprecated 처리, machine-readable stdout에서 이중 출력 경로 제거</description>
+      <ambiguity_triggers>
+        <trigger id="T-2" category="backward_compat" fired="false">approval_display 필드 유지 여부 — DEPRECATED 주석 추가 후 유지 (하위 호환)</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-3" name="pipeline-manager-agent.md Relay Section Unification">
+      <description>승인 요청 relay 관련 복수 섹션을 단일 섹션으로 통합</description>
+      <ambiguity_triggers>
+        <trigger id="T-3" category="content_scope" fired="false">섹션 통합 방식 — 기존 섹션 제거 후 신규 단일 섹션 작성</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-4" name="Dead Code Test File Deletion">
+      <description>hook 참조 테스트 파일 2개 git rm으로 삭제</description>
+      <ambiguity_triggers>
+        <trigger id="T-4" category="blast_radius" fired="false">삭제 대상 확인 — 두 파일 모두 import가 없는 dead code 확인 필요</trigger>
+      </ambiguity_triggers>
+    </module>
+    <module id="M-5" name="E2E Approval Authority Test">
+      <description>tests/e2e/test_approval_authority_86dd.py 작성 (TC-1~TC-7)</description>
+      <ambiguity_triggers>
+        <trigger id="T-5" category="test_isolation" fired="false">PIPELINE_STATE_PATH 격리 — 각 TC마다 임시 state 사용</trigger>
+      </ambiguity_triggers>
+    </module>
+  </module_decomposition>
+
+  <call_site_analysis>
+    <site id="S-1">
+      <function>_cmd_gates_request_accept</function>
+      <file>pipeline.py</file>
+      <grep_evidence>
+        <pattern>_cmd_gates_request_accept</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <notes>machine-readable 분기에서 이중 출력 발생 지점</notes>
+    </site>
+    <site id="S-2">
+      <function>_build_approval_request_output</function>
+      <file>pipeline.py</file>
+      <grep_evidence>
+        <pattern>_build_approval_request_output</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <notes>canonical source — approval message 생성 단일 경로</notes>
+    </site>
+    <site id="S-3">
+      <function>approval_display</function>
+      <file>pipeline.py</file>
+      <grep_evidence>
+        <pattern>approval_display</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <notes>deprecated 처리 대상 필드</notes>
+    </site>
+  </call_site_analysis>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260711-86DD</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <description>사용자 승인 요청 출력 권한 SSoT 정리와 dead code 제거로 중복 출력 문제 근본 수정</description>
+  <created_at>2026-07-11T09:10:00Z</created_at>
+  <planner_run_id>pm_planner-736e09c1aacc55df</planner_run_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py와 .claude/agents/pipeline-manager-agent.md (trust-root 파일) 수정 포함</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>4</expected_changed_files>
+      <expected_changed_functions>3</expected_changed_functions>
+      <expected_changed_lines>120</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_shown_to_user>true</module_split_shown_to_user>
+    <maintainability_priority>true</maintainability_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 구현 취향 질문 없음 (변수명, 코드 스타일 등)</filter_summary>
+    <p0_questions_cleared>true</p0_questions_cleared>
+    <user_answer>NO_ASKUSER_REQUIRED</user_answer>
+  </design_confirmation>
+
+  <clarification>
+    <questions_asked>0</questions_asked>
+    <questions_resolved>0</questions_resolved>
+    <p0_count>0</p0_count>
+    <p1_count>1</p1_count>
+    <p1_items>
+      <item id="P1-1">MT-2에서 approval_display 필드를 완전 삭제할지 deprecated 주석만 달지 — deprecated 주석 유지로 결정 (하위 호환)</item>
+    </p1_items>
+  </clarification>
+
+  <roadmap>
+    <phase name="PM" status="COMPLETING">PM 완료 기록 및 phase attestation → GitHub CI</phase>
+    <phase name="DEV" status="PENDING">MT-1 → MT-2 → MT-3 → MT-4 → MT-5 순서 Incremental Module Gate</phase>
+    <phase name="QA" status="PENDING">7개 카테고리 검증, 숫자 점수 96/120 이상 필요</phase>
+    <phase name="SEC" status="SKIP">네트워크/DB/인증 없음 — sec --skip</phase>
+    <phase name="BUILD" status="NA">meta-task — N/A build</phase>
+    <phase name="EXTERNAL_GATES" status="PENDING">Technical, Oracle, GitHub CI, User Acceptance</phase>
+    <phase name="ARCHITECT" status="PENDING">Phase 8 RCA</phase>
+  </roadmap>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept --machine-readable 실행 시 stdout이 JSON 전용이며 "사용자 승인 요청" 블록이 top-level에 출력되지 않는다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>pipeline-manager-agent.md에 승인 요청 relay 관련 섹션이 정확히 1개 존재한다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>tests/test_codex_review_hook_cd3c.py와 tests/test_codex_review_loop_4121.py 파일이 삭제된다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>tests/e2e/test_approval_authority_86dd.py의 TC-1~TC-7이 모두 PASS한다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="false">
+      <text>approval_display 필드에 DEPRECATED 주석이 추가되어 신규 코드에서 읽지 않는다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>cleanup_report_86dd.md (비코드 산출물)</affected_function>
+      <target_files>
+        <file>cleanup_report_86dd.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>approval_display|approval_request_message|final_user_message</pattern>
+        <match_count>20</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>출력 권한 inventory 분류 보고서 작성</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>_cmd_gates_request_accept, _build_approval_request_output</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept</site>
+        <site>_build_approval_request_output</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>approval_display|machine.readable.*approval|approval.*machine.readable</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>approval_display DEPRECATED 처리, machine-readable 이중 출력 경로 제거</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-1, AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>승인 요청 relay 섹션 (pipeline-manager-agent.md)</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>승인 요청|request-accept 중계|Output Authority</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>relay 관련 복수 섹션을 단일 섹션으로 통합</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-2</covers_ac>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>test_codex_review_hook_cd3c.py, test_codex_review_loop_4121.py (삭제)</affected_function>
+      <target_files>
+        <file>tests/test_codex_review_hook_cd3c.py</file>
+        <file>tests/test_codex_review_loop_4121.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_codex_review_hook_cd3c|test_codex_review_loop_4121</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>hook 참조 dead code 테스트 파일 2개 git rm</change_summary>
+      <line_estimate>0</line_estimate>
+      <covers_ac>AC-3</covers_ac>
+    </micro_task>
+    <micro_task id="MT-5">
+      <affected_function>test_approval_authority_86dd.py (신규)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_approval_authority_86dd.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_approval_authority|TC-1|TC-7</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TC-1~TC-7 E2E 승인 권한 테스트 작성</change_summary>
+      <line_estimate>180</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4</covers_ac>
+    </micro_task>
+  </micro_tasks>
+</step_plan>

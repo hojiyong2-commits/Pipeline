@@ -1,0 +1,35 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\hojiy\AppData\Local\Programs\Python\Python312\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra
+configfile: pyproject.toml
+plugins: anyio-4.13.0
+collecting ... collected 25 items
+
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc1_usage_limit_is_error_not_reject PASSED [  4%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc2_explicit_reject_increments_reject_count PASSED [  8%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc3_timeout_is_error PASSED [ 12%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc4_nonzero_exit_not_marked_reject PASSED [ 16%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc5_parse_failure_is_error PASSED [ 20%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc6_error_does_not_trigger_reject_rate_limit PASSED [ 24%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc7_retry_cli_error_allowed_on_error_state PASSED [ 28%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc8_retry_cli_error_blocked_on_rejected_state PASSED [ 32%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc9_retry_cli_error_same_snapshot_allows_new_attempt PASSED [ 36%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc10_snapshot_changed_blocked PASSED [ 40%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc13_parse_failure_and_json_verdict_cases PASSED [ 44%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc14_reject_count_not_increased_on_parse_failure PASSED [ 48%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc10_error_then_retry_success_preserves_verdict PASSED [ 52%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc11_error_not_reused_as_approved PASSED [ 56%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc12_user_output_shows_codex_cli_error PASSED [ 60%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc15_approved_records_attempt_and_snapshot_identity PASSED [ 64%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc16_error_records_attempt_and_snapshot_identity PASSED [ 68%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc17_warning_prefixed_approve_not_misclassified PASSED [ 72%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc_reject_misformat_parse_failure PASSED [ 76%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_tc_json_verdict_reject_count PASSED [ 80%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_bundle_sha256_nonempty_in_approved PASSED [ 84%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_bundle_sha256_nonempty_in_error PASSED [ 88%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_retry_empty_prev_bundle_sha_blocked PASSED [ 92%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_final_packet_no_stale_skip_count PASSED [ 96%]
+tests/e2e/test_codex_cost_optimization_9f5e.py::test_final_packet_test_count_not_stale PASSED [100%]
+
+============================= 25 passed in 36.40s =============================

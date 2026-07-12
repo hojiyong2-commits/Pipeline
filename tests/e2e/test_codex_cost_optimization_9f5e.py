@@ -158,11 +158,16 @@ def _write_codex_result(tmp_path: Path, data: dict):
     )
 
 
-def _run_codex_review(tmp_path, state_file, *extra):
-    """gates codex-review를 CLI로 실행한다."""
+def _run_codex_review(tmp_path, state_file, *extra, env_extra=None):
+    """gates codex-review를 CLI로 실행한다.
+
+    IMP-20260712-DAE1 rework#2(요구3): --codex-cli-* 주입은 운영 환경에서 acceptance_eligible=true를
+    만들 수 없다. 주입 경로의 승인 자격을 검증하는 회귀 테스트는 env_extra로 PIPELINE_TEST_MODE=1을
+    전달하여 테스트 격리 모드에서 실행한다.
+    """
     return run_pipeline(
         "gates", "codex-review", *extra,
-        state_path=state_file, cwd=tmp_path,
+        state_path=state_file, cwd=tmp_path, env_extra=env_extra,
     )
 
 
@@ -309,6 +314,7 @@ def test_tc7_retry_cli_error_allowed_on_error_state(isolated_pipeline):
         "--codex-cli-stdout", "APPROVE_TO_USER",
         "--packet-sha256", DUMMY_PACKET_SHA,
         "--retry-cli-error",
+        env_extra={"PIPELINE_TEST_MODE": "1"},  # 요구3: --codex-cli-* 주입 승인 자격은 테스트 격리에서만
     )
     final = _read_codex_result(tmp_path)
     # ERROR 상태에서 재시도 성공 → APPROVED로 전환 가능.
@@ -381,6 +387,7 @@ def test_tc9_retry_cli_error_same_snapshot_allows_new_attempt(isolated_pipeline)
         "--codex-cli-stdout", "APPROVE_TO_USER",
         "--packet-sha256", DUMMY_PACKET_SHA,
         "--retry-cli-error",
+        env_extra={"PIPELINE_TEST_MODE": "1"},  # 요구3: --codex-cli-* 주입 승인 자격은 테스트 격리에서만
     )
     combined = result.stdout + result.stderr
     assert "codex_snapshot_changed_need_new_review" not in combined, combined

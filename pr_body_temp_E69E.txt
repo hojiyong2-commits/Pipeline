@@ -1,0 +1,20 @@
+﻿## 작업 요약
+
+Codex Review 상태 모델 분리: CLI 오류(usage limit/timeout/nonzero exit/network)를 verdict=REJECT로 오기록하던 구조적 결함을 수정합니다. reject_count/cli_error_count 분리, rate-limit은 실제 REJECT 2회 이상만 적용, --retry-cli-error 복구 명령 추가, request-accept는 status=APPROVED 시에만 승인 코드 발급합니다.
+
+## 사용자가 확인할 결과물
+
+pipeline.py 수정 (6개 신규/개선 함수), tests/e2e/test_codex_cost_optimization_9f5e.py (TC-1~TC-12, 11 passed 1 skipped), tests/oracles/BUG-20260702-E69E/ (5개 케이스 oracle 파일)
+
+## 기대 결과와 실제 결과
+
+기대: usage limit/timeout/nonzero exit은 status=ERROR, 실제 "REJECT -" 시작 응답만 REJECTED로 분류됩니다.
+실제: TC-1~TC-12 테스트 11 passed, 1 skipped (TC-9 gh CLI skip) — 기대 결과 충족.
+
+## 중요한 선택과 트레이드오프
+
+3-way 상태 모델(APPROVED/REJECTED/ERROR) 도입으로 schema_version=3으로 확장. ERROR 상태는 reject_rate_limit 미적용, acceptance_eligible=false로 APPROVED cache 재사용 불가합니다.
+
+## 검증
+
+pytest: 11 passed, 1 skipped (TC-9 gh CLI 미설치 환경 skip). ruff: All checks passed. F52C 회귀: 51 passed.

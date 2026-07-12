@@ -1,0 +1,33 @@
+{
+  "scenario": "edge_stale_sha",
+  "description": "codex_review_result.json status=APPROVED이나 SHA 값이 현재 PR/packet과 불일치하는 회귀 케이스. pipeline_id는 현재와 일치시켜 pipeline_id 우회가 아닌 SHA 독립 검증을 강제한다.",
+  "pipeline_id": "BUG-20260627-C81C",
+  "codex_review_result_exists": true,
+  "stored_status": "APPROVED",
+  "stored_pipeline_id": "BUG-20260627-C81C",
+  "current_pipeline_id": "BUG-20260627-C81C",
+  "independent_field_checks": [
+    {
+      "field": "pr_head_sha",
+      "stored_value": "oldsha1234",
+      "current_value": "newsha5678",
+      "expected_failure_code": "stale_codex_review",
+      "expected_stale_field_in_message": "pr_head_sha"
+    },
+    {
+      "field": "pr_body_sha256",
+      "stored_value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "current_value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "expected_failure_code": "stale_codex_review",
+      "expected_stale_field_in_message": "pr_body_sha256"
+    },
+    {
+      "field": "packet_sha256",
+      "stored_value": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "current_value": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "expected_failure_code": "stale_codex_review",
+      "expected_stale_field_in_message": "packet_sha256"
+    }
+  ],
+  "notes": "pipeline_id 일치 상태에서 pr_head_sha / pr_body_sha256 / packet_sha256 가 각각 독립적으로 stale로 차단되어야 한다. pipeline_id 불일치로 우회되지 않는다."
+}

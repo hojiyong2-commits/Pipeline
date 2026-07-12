@@ -1,0 +1,14 @@
+{
+  "scenario": "edge_stale_sha",
+  "description": "APPROVED이나 pr_head_sha/pr_body_sha256/packet_sha256 중 어느 하나라도 현재 실제 값과 불일치하면 failure_code=stale_codex_review BLOCKED. 각 필드는 독립적으로 검증되며 stale 필드명이 메시지에 포함된다.",
+  "exit_code": 1,
+  "failure_code": "stale_codex_review",
+  "blocked": true,
+  "stale_field_in_message": true,
+  "independent_field_verification": true,
+  "verified_fields": ["pr_head_sha", "pr_body_sha256", "packet_sha256"],
+  "pipeline_id_mismatch_used_as_bypass": false,
+  "rerun_instruction_present": true,
+  "accept_code_issued": false,
+  "notes": "pipeline_id 일치 상태에서도 세 SHA가 각각 독립적으로 stale 검증된다. gates codex-review 재실행 안내 포함. acceptance_request.json 유무와 무관하게 현재 실제 packet/PR 본문 SHA와 비교한다."
+}

@@ -9169,6 +9169,10 @@ def _check_codex_cache(
         "block_reason": "",
         "live_sha_snapshot": _live_snap if isinstance(_live_snap, dict) else {},
         "excluded_files": _cached_excl if isinstance(_cached_excl, list) else [],
+        # IMP-20260712-DAE1 rework#2(요구4): 원 codex_cli 실행이 기록한 actual model/effort를
+        #   재사용 경로로 전달한다(request-accept 신뢰 게이트의 selected==actual 검증용).
+        "cached_actual_model": str(cached.get("actual_model", "") or "") or None,
+        "cached_actual_effort": str(cached.get("actual_effort", "") or "") or None,
     }
 
 
@@ -23871,8 +23875,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _explicit_verdict = getattr(args, "verdict", None) is not None
     _explicit_cli = getattr(args, "codex_cli_exit_code", None) is not None
     _explicit_injection = _explicit_verdict or _explicit_cli
-    # IMP-20260712-DAE1 rework(문제2): --auto-codex-cli 시 선택 모델/effort로 실제 codex exec 호출.
-    _auto_codex_cli = bool(getattr(args, "auto_codex_cli", False))
+    # IMP-20260712-DAE1 rework#2(요구1): --auto-codex-cli는 더 이상 opt-in 플래그가 아니다.
+    #   cache miss + 비명시 주입이면 항상 실제 codex exec를 실행한다(아래 참조). 플래그는
+    #   하위 호환을 위해 argparse에 남겨두되 동작에는 영향을 주지 않는다(no-op).
 
     # IMP-20260712-DAE1 rework(문제2/4): auto-invoke 결과를 담을 override 및 실제 명령/능력 기록 변수.
     _auto_cli_override: Optional[Dict[str, Any]] = None
@@ -23881,18 +23886,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _model_source_str = "unknown"
 
     # actual_model/model_source는 기록용으로 항상 감지한다(추측/하드코딩 금지 — 확인 불가 시 unknown).
+    # IMP-20260712-DAE1 rework#2(요구5): capability gate를 CLI 실행 "이전"에서 제거한다.
+    #   과거에는 _detect_codex_cli_capability()가 항상 unknown을 반환하므로 HIGH/CRITICAL을
+    #   CLI 실행 전에 무조건 차단하는 구조였다. 이제는 실제 codex exec 실행 후 관측된 actual_model로만
+    #   capability를 검증한다(_check_codex_model_capability_match). 여기서 미리 차단하지 않는다.
     _cap_info = _detect_codex_cli_capability()
     _actual_model_str = str(_cap_info.get("actual_model", "unknown") or "unknown")
     _model_source_str = str(_cap_info.get("model_source", "unknown") or "unknown")
-    # capability gate(fail-closed)는 오직 실제 Codex CLI를 자동 실행하는 경로에만 적용한다.
-    if not _explicit_injection:
-        _cap_gate = _check_codex_capability_gate(_actual_model_str, _risk_level_str)
-        if _cap_gate.get("result") == "BLOCKED":
-            _die(
-                f"[BLOCKED] failure_code={_cap_gate.get('failure_code', 'unknown_model_critical_blocked')}\n"
-                f"  actual_model={_actual_model_str!r} + risk_level={_risk_level_str!r}: "
-                "Codex Review 차단 (fail-closed)."
-            )
 
     # IMP-20260710-DB54 rework MT-4(문제2): cache check — 동일 contract+bundle SHA의 이전 verdict.
     #   현재 bundle을 함께 넘겨 excluded critical/critical_file_shas 부재를 판정한다.
@@ -23948,63 +23948,68 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _cache_hit = True
             _cache_verdict_from_cache = "APPROVE_TO_USER"
             _cache_reason = str(_cache_probe.get("reason", "") or "")
+            # IMP-20260712-DAE1 rework#2(요구4): verified cache 재사용은 원(原) codex_cli 실행이
+            #   기록한 actual_model/actual_effort를 복원한다. request-accept 신뢰 게이트가
+            #   selected==actual을 검증할 수 있도록 캐시 저장 값을 그대로 사용한다(placeholder 금지).
+            _cached_actual_model = str(_cache_probe.get("cached_actual_model") or "").strip()
+            _cached_actual_effort = str(_cache_probe.get("cached_actual_effort") or "").strip()
+            if _cached_actual_model:
+                _actual_model_str = _cached_actual_model
+            if _cached_actual_effort:
+                _actual_effort_str = _cached_actual_effort
+            _model_source_str = "verified_cache"
             print("  [CACHE REUSE] Codex CLI 호출 없이 캐시된 APPROVE verdict를 재사용합니다.")
     else:
         print(f"  [CACHE MISS] {_cache_probe.get('reason')}")
-        # IMP-20260712-DAE1 rework(문제2/4): --auto-codex-cli 이면 선택된 모델/effort로 실제
-        #   codex exec를 호출한다. 호출 후 actual model/effort를 capability match로 검증하고,
-        #   실패하면 fail-closed BLOCKED. cache miss + 명시적 verdict/CLI가 없고 auto도 아니면 기존 BLOCKED.
+        # IMP-20260712-DAE1 rework#2(요구1/2): cache miss + 명시적 주입(--verdict/--codex-cli-*)이
+        #   없으면 기본 동작으로 실제 codex exec를 자동 실행한다(--auto-codex-cli 플래그 불필요).
+        #   실행 순서: risk 분류 → selected_model/effort 결정 → 실제 codex exec → actual 관측 →
+        #   selected==actual capability match 검증 → 통과 시에만 verdict 반영(APPROVED 가능).
+        #   HIGH/CRITICAL에서 actual==unknown이면 capability match가 fail-closed BLOCKED 처리한다.
         if not _explicit_verdict and not _explicit_cli:
-            if _auto_codex_cli:
-                _auto_run = _invoke_codex_exec(
-                    str(_model_policy.get("selected_model", "")),
-                    str(_model_policy.get("selected_reasoning_effort", "")),
-                    _build_codex_prompt_for_review(_preflight_bundle, pipeline_id),
+            _auto_run = _invoke_codex_exec(
+                str(_model_policy.get("selected_model", "")),
+                str(_model_policy.get("selected_reasoning_effort", "")),
+                _build_codex_prompt_for_review(_preflight_bundle, pipeline_id),
+            )
+            _codex_cli_command_real = str(_auto_run.get("codex_cli_command", "") or "")
+            _actual_model_str = str(_auto_run.get("actual_model", "unknown") or "unknown")
+            _actual_effort_str = str(_auto_run.get("actual_effort", "unknown") or "unknown")
+            _model_source_str = "codex_exec_json"
+            if not _auto_run.get("invoked"):
+                # CLI 실행 자체 실패 → ERROR로 기록(REJECT 아님, reject_count 미증가).
+                _auto_cli_run_error = _run_codex_cli_review(
+                    int(_auto_run.get("exit_code", -1) or -1),
+                    str(_auto_run.get("stdout", "") or ""),
+                    str(_auto_run.get("stderr", "") or "codex exec 실행 실패"),
                 )
-                _codex_cli_command_real = str(_auto_run.get("codex_cli_command", "") or "")
-                _actual_model_str = str(_auto_run.get("actual_model", "unknown") or "unknown")
-                _actual_effort_str = str(_auto_run.get("actual_effort", "unknown") or "unknown")
-                _model_source_str = "codex_exec_json"
-                if not _auto_run.get("invoked"):
-                    # CLI 실행 자체 실패 → ERROR로 기록(REJECT 아님, reject_count 미증가).
-                    _auto_cli_run_error = _run_codex_cli_review(
-                        int(_auto_run.get("exit_code", -1) or -1),
-                        str(_auto_run.get("stdout", "") or ""),
-                        str(_auto_run.get("stderr", "") or "codex exec 실행 실패"),
-                    )
-                    _finish_codex_review_error(
-                        state, pipeline_id, _auto_cli_run_error,
-                        prev_reject_count, prev_cli_error_count,
-                        attempt_id=_generate_attempt_id(),
-                        review_bundle_sha256=_review_bundle_sha256,
-                    )
-                    return  # unreachable (_finish_codex_review_error가 sys.exit)
-                # capability match(fail-closed): actual == selected(모델/effort), 허용 모델 집합.
-                _match = _check_codex_model_capability_match(
-                    str(_model_policy.get("selected_model", "")),
-                    str(_model_policy.get("selected_reasoning_effort", "")),
-                    _actual_model_str, _actual_effort_str, _risk_level_str,
+                _finish_codex_review_error(
+                    state, pipeline_id, _auto_cli_run_error,
+                    prev_reject_count, prev_cli_error_count,
+                    attempt_id=_generate_attempt_id(),
+                    review_bundle_sha256=_review_bundle_sha256,
                 )
-                if _match.get("result") == "BLOCKED":
-                    _die(
-                        f"[BLOCKED] failure_code={_match.get('failure_code', 'model_mismatch')}\n"
-                        f"  selected_model={_model_policy.get('selected_model')!r}/"
-                        f"{_model_policy.get('selected_reasoning_effort')!r} "
-                        f"!= actual_model={_actual_model_str!r}/{_actual_effort_str!r} "
-                        f"(risk_level={_risk_level_str!r}) — Codex Review 차단 (fail-closed)."
-                    )
-                # auto-invoke 결과를 아래 CLI 분류 경로로 넘긴다(exit/stdout/stderr override).
-                _auto_cli_override = {
-                    "exit_code": int(_auto_run.get("exit_code", -1) or -1),
-                    "stdout": str(_auto_run.get("stdout", "") or ""),
-                    "stderr": str(_auto_run.get("stderr", "") or ""),
-                }
-            else:
+                return  # unreachable (_finish_codex_review_error가 sys.exit)
+            # capability match(fail-closed): actual == selected(모델/effort), 허용 모델 집합.
+            _match = _check_codex_model_capability_match(
+                str(_model_policy.get("selected_model", "")),
+                str(_model_policy.get("selected_reasoning_effort", "")),
+                _actual_model_str, _actual_effort_str, _risk_level_str,
+            )
+            if _match.get("result") == "BLOCKED":
                 _die(
-                    "[BLOCKED] failure_code=codex_verdict_required\n"
-                    f"  cache miss({_cache_probe.get('reason')})이고 --verdict/--codex-cli-exit-code도 없습니다.\n"
-                    "  --verdict APPROVE_TO_USER|REJECT, --codex-cli-exit-code, 또는 --auto-codex-cli 를 사용하세요."
+                    f"[BLOCKED] failure_code={_match.get('failure_code', 'model_mismatch')}\n"
+                    f"  selected_model={_model_policy.get('selected_model')!r}/"
+                    f"{_model_policy.get('selected_reasoning_effort')!r} "
+                    f"!= actual_model={_actual_model_str!r}/{_actual_effort_str!r} "
+                    f"(risk_level={_risk_level_str!r}) — Codex Review 차단 (fail-closed)."
                 )
+            # auto-invoke 결과를 아래 CLI 분류 경로로 넘긴다(exit/stdout/stderr override).
+            _auto_cli_override = {
+                "exit_code": int(_auto_run.get("exit_code", -1) or -1),
+                "stdout": str(_auto_run.get("stdout", "") or ""),
+                "stderr": str(_auto_run.get("stderr", "") or ""),
+            }
 
     # BUG-20260702-E69E REJECT-1: attempt 단위 상태 모델 — 이번 시도의 고유 식별자를 발급한다.
     attempt_id = _generate_attempt_id()
@@ -24357,20 +24362,23 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     new_cli_error_count = prev_cli_error_count  # ERROR 경로는 별도 함수에서 처리됨
     acceptance_eligible = review_status == "APPROVED"
 
-    # IMP-20260712-DAE1 rework(문제3): 순수 --verdict 주입(external_verdict)은 capability gate를
-    #   우회하는 "맨몸 판정 주장"이므로 운영 환경에서 acceptance_eligible=true를 기록하지 못하게 한다.
-    #   verdict_source=external_verdict이면 acceptance_eligible=false 강제.
-    #   단, 테스트 격리 모드(PIPELINE_TEST_MODE=1)에서는 허용한다(진단/회귀 테스트용).
-    #   주의: --codex-cli-*(external_cli_injection)는 실제 CLI 원시 출력(exit/stdout/stderr)을
-    #   _run_codex_cli_review로 분류한 결과이므로 별도 차단하지 않는다(E69E 설계 계약 보존).
-    #   auto-invoke(codex_cli)는 이미 capability match 검증을 통과한 실제 CLI 실행이므로 그대로 eligible.
-    _verdict_source_now = str(
-        (cli_run.get("verdict_source") if isinstance(cli_run, dict) else None)
-        or ("codex_cli" if _auto_cli_override is not None else "external_verdict")
-    )
+    # IMP-20260712-DAE1 rework#2(요구3): 운영 환경에서 acceptance_eligible=true를 만들 수 없는
+    #   경로를 완전 차단한다. --verdict(external_verdict)와 --codex-cli-*(external_cli_injection)는
+    #   모두 실제 codex exec capability 검증을 거치지 않은 "주입" 경로이므로, 운영 환경에서는
+    #   acceptance_eligible=false로 강제한다. 테스트 격리 모드(PIPELINE_TEST_MODE=1)에서만 허용한다.
+    #   verified_cache(원 codex_cli 실행 승계)와 codex_cli(실제 실행 + capability match 통과)만
+    #   운영 환경에서 승인 자격을 가진다.
+    if _cache_hit:
+        _verdict_source_now = "verified_cache"
+    elif isinstance(cli_run, dict) and cli_run.get("verdict_source"):
+        _verdict_source_now = str(cli_run.get("verdict_source"))
+    elif _auto_cli_override is not None:
+        _verdict_source_now = "codex_cli"
+    else:
+        _verdict_source_now = "external_verdict"
     _test_mode = str(os.environ.get("PIPELINE_TEST_MODE", "") or "") == "1"
-    if _verdict_source_now == "external_verdict" and not _test_mode:
-        # 운영 환경: 맨몸 --verdict 주입은 승인 코드 발급 자격을 갖지 못한다(capability 우회 차단).
+    if _verdict_source_now in ("external_verdict", "external_cli_injection") and not _test_mode:
+        # 운영 환경: 주입 경로(--verdict/--codex-cli-*)는 승인 코드 발급 자격을 갖지 못한다.
         acceptance_eligible = False
 
     # BUG-20260702-E69E REJECT-1: 이번 attempt가 검토한 snapshot identity를 중첩 dict로 기록한다.
@@ -24453,6 +24461,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     result["actual_effort"] = _actual_effort_str
     result["model_source"] = _model_source_str
     result["review_mode"] = str(_model_policy.get("mode", "observe"))
+    # IMP-20260712-DAE1 rework#2(요구4): request-accept 신뢰 게이트가 정책 서명 존재를 검증한다.
+    result["model_policy_signature"] = _codex_policy_signature(_model_policy)
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
     # github_canonical_pr_body_sha256 필드는 acceptance_request에서 가져온다 (fail-closed).
@@ -24574,6 +24584,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "changed_critical_files": _cache_changed_crit,
             # cache hit 재사용 전 재검증할 7개 live SHA snapshot(문제2).
             "live_sha_snapshot": _codex_live_sha_snapshot(state, pipeline_id),
+            # IMP-20260712-DAE1 rework#2(요구4): 이번 실행의 실제 model/effort와 정책 값을 캐시에
+            #   저장한다. verified cache 재사용 시 이 값을 복원하여 request-accept 신뢰 게이트의
+            #   selected==actual 검증을 통과할 수 있게 한다(원 codex_cli 실행 증거 승계).
+            "actual_model": _actual_model_str,
+            "actual_effort": _actual_effort_str,
+            "selected_model": str(_model_policy.get("selected_model", "")),
+            "selected_reasoning_effort": str(_model_policy.get("selected_reasoning_effort", "")),
+            "risk_level": _risk_level_str,
+            "verdict_source": _verdict_source_now,
+            "model_policy_signature": _codex_policy_signature(_model_policy),
             "cached_at": _now(),
         }
         _cache_path = _codex_review_cache_path()
@@ -24982,6 +25002,105 @@ def _codex_review_error_blocker(pipeline_id: str) -> Optional[Dict[str, Any]]:
         lines.append(f"retry_after: {retry_after}")
     lines.append("복구 명령: python pipeline.py gates codex-review --retry-cli-error")
     return {"error_type": error_type, "message": "\n".join(lines)}
+
+
+# [Purpose]: IMP-20260712-DAE1 rework#2(요구4) — request-accept 직전 codex_review_result.json이
+#            실제 codex exec 실행(또는 검증된 cache)에서 도출된 신뢰 가능한 승인인지 fail-closed로
+#            검증한다. 맨몸 --verdict/--codex-cli-* 주입, actual_model 미확인(HIGH/CRITICAL),
+#            selected!=actual, placeholder codex_cli_command, 정책 메타데이터 누락을 모두 차단한다.
+# [Assumptions]: result는 gates codex-review가 기록한 router-era codex_review_result.json이며
+#            router_version/risk_level/selected_model/actual_model 등을 포함한다.
+# [Vulnerability & Risks]: router_version이 없는 legacy 결과(구 스키마)는 이 게이트가 아니라
+#            호출자(운영 모드 판정)에서 처리한다. 이 함수는 순수 판정만 수행한다(파일 IO 없음).
+# [Improvement]: effort 동의어 정규화 테이블을 도입하면 CLI 표기 편차를 흡수할 수 있다.
+def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, Any]:
+    """codex_review_result가 실제 codex 실행/검증된 cache 기반 승인인지 fail-closed 검증한다.
+
+    Args:
+        result: codex_review_result.json에서 로드한 dict.
+    Returns:
+        {"status": "PASS"} 또는 {"status": "BLOCKED", "failure_code": str, "message": str}.
+    Raises:
+        TypeError: result가 None이거나 dict가 아닌 경우.
+    """
+    if result is None:
+        raise TypeError("result must not be None")
+    if not isinstance(result, dict):
+        raise TypeError(f"result must be dict, got {type(result).__name__}")
+
+    def _blocked(code: str, msg: str) -> Dict[str, Any]:
+        return {"status": "BLOCKED", "failure_code": code, "message": msg}
+
+    verdict_source = str(result.get("verdict_source", "") or "")
+    # (1) verdict_source는 실제 codex 실행(codex_cli) 또는 검증된 cache만 신뢰한다.
+    if verdict_source not in ("codex_cli", "verified_cache"):
+        return _blocked(
+            "codex_review_untrusted_verdict_source",
+            f"verdict_source={verdict_source or '(없음)'} — 실제 codex exec 또는 검증된 cache가 "
+            "아닙니다. 맨몸 --verdict/--codex-cli-* 주입은 운영 승인 자격이 없습니다 (fail-closed).",
+        )
+    # (2) 승인 자격 플래그가 반드시 true여야 한다.
+    if not result.get("acceptance_eligible"):
+        return _blocked(
+            "codex_review_not_acceptance_eligible",
+            "codex_review_result.acceptance_eligible이 true가 아닙니다 — 승인 코드 발급 불가 (fail-closed).",
+        )
+    # (3) 정책 메타데이터 존재 검증.
+    if not str(result.get("router_version", "") or "").strip():
+        return _blocked(
+            "codex_review_router_version_missing",
+            "codex_review_result에 router_version이 없습니다 (fail-closed).",
+        )
+    risk_level = str(result.get("risk_level", "") or "").upper()
+    if risk_level not in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+        return _blocked(
+            "codex_review_risk_level_missing",
+            f"codex_review_result의 risk_level이 유효하지 않습니다: {risk_level or '(없음)'} (fail-closed).",
+        )
+    if not str(result.get("model_policy_signature", "") or "").strip():
+        return _blocked(
+            "codex_review_model_policy_signature_missing",
+            "codex_review_result에 model_policy_signature가 없습니다 (fail-closed).",
+        )
+    # (4) sanitized codex_cli_command 존재 + placeholder 금지.
+    cli_command = str(result.get("codex_cli_command", "") or "").strip()
+    if verdict_source == "verified_cache":
+        # cache 재사용은 이번엔 CLI를 호출하지 않으므로 "N/A (cache hit)" 마커를 허용한다.
+        if cli_command != "N/A (cache hit)" and "codex exec" not in cli_command:
+            return _blocked(
+                "codex_review_cli_command_invalid",
+                f"verified_cache codex_cli_command가 유효하지 않습니다: {cli_command or '(없음)'} (fail-closed).",
+            )
+    else:  # codex_cli
+        if "codex exec" not in cli_command:
+            return _blocked(
+                "codex_review_cli_command_placeholder",
+                f"codex_cli_command가 실제 codex exec 명령이 아닙니다: {cli_command or '(없음)'} "
+                "(placeholder 금지, fail-closed).",
+            )
+    # (5) actual_model/effort 검증: HIGH/CRITICAL은 actual!=unknown 강제, selected==actual 일치.
+    selected_model = str(result.get("selected_model", "") or "")
+    actual_model = str(result.get("actual_model", "") or "")
+    selected_effort = str(result.get("selected_reasoning_effort", "") or "")
+    actual_effort = str(result.get("actual_effort", "") or "")
+    if risk_level in {"HIGH", "CRITICAL"} and actual_model == "unknown":
+        return _blocked(
+            "codex_review_unknown_model_high_critical",
+            f"risk_level={risk_level}에서 actual_model=unknown — 실제 모델 확인 불가 (fail-closed).",
+        )
+    if not selected_model or selected_model != actual_model:
+        return _blocked(
+            "codex_review_model_mismatch",
+            f"selected_model={selected_model or '(없음)'} != actual_model={actual_model or '(없음)'} "
+            "(fail-closed).",
+        )
+    if not selected_effort or selected_effort != actual_effort:
+        return _blocked(
+            "codex_review_effort_mismatch",
+            f"selected_reasoning_effort={selected_effort or '(없음)'} != actual_effort="
+            f"{actual_effort or '(없음)'} (fail-closed).",
+        )
+    return {"status": "PASS"}
 
 
 # [Purpose]: PENDING acceptance_request가 있을 때, 디스크 packet이 기록된 packet_sha256과
@@ -26537,6 +26656,45 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             _save(state)
             _die(_codex_error_block["message"])
             return  # unreachable
+
+        # IMP-20260712-DAE1 rework#2(요구4): request-accept 직전 codex_review_result fail-closed 신뢰
+        #   검증. router-era 결과에 대해 실제 codex exec 실행(또는 검증된 cache) 승인만 허용한다.
+        #   맨몸 --verdict/--codex-cli-* 주입은 운영 환경에서 acceptance_eligible=false이므로 여기서
+        #   BLOCKED된다. 테스트 격리 모드(PIPELINE_TEST_MODE=1)에서는 주입 회귀 테스트를 위해 생략한다.
+        #   legacy 스키마(router_version 없음)는 이 게이트 대상이 아니며 기존 SHA 검증만 적용한다.
+        if str(os.environ.get("PIPELINE_TEST_MODE", "") or "") != "1":
+            _cx_trust_raw: Dict[str, Any] = {}
+            try:
+                _cx_trust_path = _codex_review_result_path()
+                if _cx_trust_path.exists():
+                    _cx_trust_loaded = json.loads(
+                        _cx_trust_path.read_text(encoding="utf-8", errors="replace")
+                    )
+                    if isinstance(_cx_trust_loaded, dict):
+                        _cx_trust_raw = _cx_trust_loaded
+            except (OSError, json.JSONDecodeError, ValueError):
+                _cx_trust_raw = {}
+            # router-era 결과(router_version 존재)만 신뢰 게이트를 적용한다.
+            if (
+                isinstance(_cx_trust_raw, dict)
+                and str(_cx_trust_raw.get("router_version", "") or "").strip()
+                and str(_cx_trust_raw.get("pipeline_id", "") or "") == pipeline_id
+            ):
+                _cx_trust = _check_codex_review_operational_trust(_cx_trust_raw)
+                if _cx_trust.get("status") != "PASS":
+                    _log_event(
+                        state,
+                        f"request-accept blocked by codex operational trust gate: "
+                        f"{_cx_trust.get('failure_code')}",
+                    )
+                    _save(state)
+                    _die(
+                        f"[BLOCKED] failure_code={_cx_trust.get('failure_code')}\n"
+                        f"  {_cx_trust.get('message')}\n"
+                        "  실제 Codex CLI 실행(gates codex-review, cache miss 시 자동)으로 재검토하세요."
+                    )
+                    return  # unreachable
+
         codex_result = _codex_review_snapshot(
             pipeline_id, staged_sha_manifest, state,
             staged_pr_body_sha256=staged_pr_body_sha,
@@ -30169,10 +30327,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--retry-cli-error", dest="retry_cli_error", action="store_true", default=False,
         help="이전 결과가 ERROR인 경우에만 재실행을 허용한다 (REJECTED 우회 불가).",
     )
-    # IMP-20260712-DAE1 rework(문제2): 선택된 모델/effort로 실제 codex exec를 호출한다.
+    # IMP-20260712-DAE1 rework#2(요구1): --auto-codex-cli는 더 이상 opt-in이 아니다(no-op, 하위 호환).
+    #   cache miss + 비명시 주입이면 항상 selected_model/effort로 실제 codex exec를 호출한다.
     p_gate_codex.add_argument(
         "--auto-codex-cli", dest="auto_codex_cli", action="store_true", default=False,
-        help="cache miss 시 selected_model/effort로 실제 codex exec를 호출하여 verdict를 도출한다.",
+        help="[deprecated no-op] cache miss 시 실제 codex exec 자동 호출은 이제 기본 동작입니다.",
     )
     p_gate_codex.add_argument(
         "--force-review", dest="force_review", action="store_true", default=False,

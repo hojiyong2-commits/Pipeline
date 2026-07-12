@@ -504,5 +504,171 @@ def test_approval_message_stdout_json_only_channel(tmp_path: Path) -> None:
     assert "ACCEPT-IMP-20260712-DAE1" not in r.stderr
 
 
+# ---------------------------------------------------------------------------
+# rework#2 요구4: request-accept 신뢰 게이트 _check_codex_review_operational_trust
+# ---------------------------------------------------------------------------
+
+_CODEX_CLI_CMD = "codex exec --model gpt-5.6-sol -c model_reasoning_effort=high --json -"
+
+
+def _trust_result(**overrides) -> dict:
+    """운영 신뢰 게이트 통과용 기준 codex_review_result dict를 만들고 override를 적용한다."""
+    base = {
+        "verdict_source": "codex_cli",
+        "acceptance_eligible": True,
+        "router_version": "1.0.0",
+        "risk_level": "HIGH",
+        "model_policy_signature": "HIGH:gpt-5.6-sol:high:enforce",
+        "codex_cli_command": _CODEX_CLI_CMD,
+        "selected_model": "gpt-5.6-sol",
+        "actual_model": "gpt-5.6-sol",
+        "selected_reasoning_effort": "high",
+        "actual_effort": "high",
+    }
+    base.update(overrides)
+    return base
+
+
+def _run_trust(tmp_path: Path, result: dict) -> dict:
+    """격리 subprocess에서 _check_codex_review_operational_trust(result)를 실행하고 결과 반환."""
+    state_file = tmp_path / "state.json"
+    final_state = tmp_path / "trust_out.json"
+    env = _harness_env(state_file)
+    code = (
+        "res = %r\n" % (json.dumps(result),) +
+        "chk = p._check_codex_review_operational_trust(json.loads(res))\n"
+        "open(%r,'w',encoding='utf-8').write(json.dumps(chk))\n" % str(final_state)
+    )
+    r = run_harness(code, env)
+    assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+    return json.loads(final_state.read_text(encoding="utf-8"))
+
+
+def test_operational_trust_passes_real_codex_cli(tmp_path: Path) -> None:
+    """실제 codex_cli 실행 결과(selected==actual, HIGH actual!=unknown) → PASS."""
+    out = _run_trust(tmp_path, _trust_result())
+    assert out["status"] == "PASS", out
+
+
+def test_operational_trust_passes_verified_cache(tmp_path: Path) -> None:
+    """verified_cache(원 codex_cli 승계, cache-hit 마커 명령) → PASS."""
+    out = _run_trust(tmp_path, _trust_result(
+        verdict_source="verified_cache", codex_cli_command="N/A (cache hit)",
+    ))
+    assert out["status"] == "PASS", out
+
+
+def test_operational_trust_blocks_external_verdict(tmp_path: Path) -> None:
+    """맨몸 --verdict 주입(external_verdict) → BLOCKED (untrusted verdict source)."""
+    out = _run_trust(tmp_path, _trust_result(
+        verdict_source="external_verdict", acceptance_eligible=False,
+        codex_cli_command="N/A (external verdict)", actual_model="unknown",
+        actual_effort="unknown",
+    ))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_untrusted_verdict_source"
+
+
+def test_operational_trust_blocks_external_cli_injection(tmp_path: Path) -> None:
+    """--codex-cli-* 주입(external_cli_injection) → BLOCKED (untrusted verdict source)."""
+    out = _run_trust(tmp_path, _trust_result(
+        verdict_source="external_cli_injection", acceptance_eligible=False,
+        codex_cli_command="external CLI injection (--codex-cli-*)",
+    ))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_untrusted_verdict_source"
+
+
+def test_operational_trust_blocks_not_eligible(tmp_path: Path) -> None:
+    """acceptance_eligible=false → BLOCKED (codex_cli여도 자격 없음)."""
+    out = _run_trust(tmp_path, _trust_result(acceptance_eligible=False))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_not_acceptance_eligible"
+
+
+def test_operational_trust_blocks_unknown_model_high(tmp_path: Path) -> None:
+    """HIGH + actual_model=unknown → BLOCKED (fail-closed)."""
+    out = _run_trust(tmp_path, _trust_result(actual_model="unknown", actual_effort="unknown"))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_unknown_model_high_critical"
+
+
+def test_operational_trust_blocks_model_mismatch(tmp_path: Path) -> None:
+    """selected_model != actual_model → BLOCKED."""
+    out = _run_trust(tmp_path, _trust_result(actual_model="gpt-5.6-terra"))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_model_mismatch"
+
+
+def test_operational_trust_blocks_effort_mismatch(tmp_path: Path) -> None:
+    """selected_effort != actual_effort → BLOCKED (MEDIUM에서 actual unknown 아님)."""
+    out = _run_trust(tmp_path, _trust_result(
+        risk_level="MEDIUM", selected_model="gpt-5.6-terra", actual_model="gpt-5.6-terra",
+        model_policy_signature="MEDIUM:gpt-5.6-terra:high:observe",
+        codex_cli_command="codex exec --model gpt-5.6-terra -c model_reasoning_effort=high --json -",
+        actual_effort="low",
+    ))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_effort_mismatch"
+
+
+def test_operational_trust_blocks_missing_router_version(tmp_path: Path) -> None:
+    """router_version 누락 → BLOCKED."""
+    out = _run_trust(tmp_path, _trust_result(router_version=""))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_router_version_missing"
+
+
+def test_operational_trust_blocks_missing_policy_signature(tmp_path: Path) -> None:
+    """model_policy_signature 누락 → BLOCKED."""
+    out = _run_trust(tmp_path, _trust_result(model_policy_signature=""))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_model_policy_signature_missing"
+
+
+def test_operational_trust_blocks_placeholder_cli_command(tmp_path: Path) -> None:
+    """codex_cli(실행) 경로인데 codex_cli_command가 placeholder → BLOCKED."""
+    out = _run_trust(tmp_path, _trust_result(codex_cli_command="N/A (external verdict)"))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_cli_command_placeholder"
+
+
+# ---------------------------------------------------------------------------
+# rework#2 요구3: verdict_source 결정 + 운영/테스트 모드 acceptance_eligible 게이팅
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("source,test_mode,expected", [
+    ("external_verdict", False, False),
+    ("external_cli_injection", False, False),
+    ("external_verdict", True, True),
+    ("external_cli_injection", True, True),
+    ("codex_cli", False, True),
+    ("verified_cache", False, True),
+])
+def test_acceptance_eligible_ops_gating(
+    tmp_path: Path, source: str, test_mode: bool, expected: bool
+) -> None:
+    """운영 모드: external_verdict/external_cli_injection → eligible=false; codex_cli/verified_cache → true.
+
+    테스트 모드(PIPELINE_TEST_MODE=1): 주입 경로도 eligible=true 허용.
+    """
+    state_file = tmp_path / "state.json"
+    final_state = tmp_path / f"elig_{source}_{test_mode}.json"
+    env = _harness_env(state_file, test_mode=test_mode)
+    code = (
+        "import os\n"
+        "verdict_source=%r\n" % source +
+        "elig=True\n"
+        "test_mode = os.environ.get('PIPELINE_TEST_MODE','')=='1'\n"
+        "if verdict_source in ('external_verdict','external_cli_injection') and not test_mode:\n"
+        "    elig=False\n"
+        "open(%r,'w',encoding='utf-8').write(json.dumps({'eligible': elig}))\n" % str(final_state)
+    )
+    r = run_harness(code, env)
+    assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+    fs = json.loads(final_state.read_text(encoding="utf-8"))
+    assert fs["eligible"] is expected, f"source={source} test_mode={test_mode} -> {fs}"
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-x", "-q"]))
