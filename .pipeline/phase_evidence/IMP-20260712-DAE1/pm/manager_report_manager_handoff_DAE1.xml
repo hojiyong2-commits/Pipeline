@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-fe3f5bbe5d091b37</planner_run_id>
+  <step_plan_sha256>b2fd30864464df7d005cee144d13c50a46926832e702c26dd433e60a14ff6e73</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <execution_profile>HIGH_RISK</execution_profile>
+  <description>Codex Review 모델/사고레벨 자동 라우터를 trust-chain risk 기반 SSoT로 구현</description>
+  <branch>impl/IMP-20260712-DAE1</branch>
+  <module_summary>
+    <module id="MOD-1" name="Codex Model Router SSoT" files="pipeline.py" micro_tasks="MT-1,MT-2,MT-3,MT-4,MT-5,MT-6,MT-7"/>
+    <module id="MOD-2" name="Test Suite" files="tests/e2e/test_codex_model_router_dae1.py" micro_tasks="MT-9"/>
+    <module id="MOD-3" name="Documentation" files=".claude/agents/pipeline-manager-agent.md,codex_model_router_report.md" micro_tasks="MT-8,MT-10"/>
+  </module_summary>
+  <oracle_summary>
+    <oracle id="OC-1" case_kind="normal" path="tests/oracles/IMP-20260712-DAE1/tc01_low_risk_docs/"/>
+    <oracle id="OC-2" case_kind="normal" path="tests/oracles/IMP-20260712-DAE1/tc04_high_risk_pipeline/"/>
+    <oracle id="OC-3" case_kind="edge" path="tests/oracles/IMP-20260712-DAE1/tc05_critical_acceptance/"/>
+    <oracle id="OC-4" case_kind="error" path="tests/oracles/IMP-20260712-DAE1/tc08_downgrade_blocked/"/>
+    <oracle id="OC-5" case_kind="error" path="tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/"/>
+  </oracle_summary>
+  <key_decisions>
+    <decision id="DQ-1">LOW/MEDIUM은 observe 기본, HIGH/CRITICAL은 enforce 기본 (계층형). 전역 전환 미사용.</decision>
+    <decision id="DQ-2">actual_model=unknown + HIGH/CRITICAL → BLOCKED (fail-closed). actual_model=unknown + LOW/MEDIUM → WARN 후 진행.</decision>
+  </key_decisions>
+  <manager_notes>Pipeline Manager가 step_plan을 수정하지 않고 MT-1~MT-10 순서대로 Incremental Module Gate 방식으로 실행합니다.</manager_notes>
+</manager_handoff>
