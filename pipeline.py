@@ -8367,10 +8367,14 @@ def _invoke_codex_exec(
     # Codex 실행 파일 경로를 PATHEXT까지 고려하여 결정적으로 해석한다(.exe/.cmd/.bat 지원).
     _codex_bin = str(codex_bin) if codex_bin else (shutil.which("codex") or "codex")
     _repo_root = str(repo_root) if repo_root else str(BASE_DIR)
+    # IMP-20260712-DAE1 CLI 정규화: 내부 정책값 'max'는 CLI 0.130.0이 지원하는 'xhigh'로 변환.
+    # invoked_effort는 정책 선택값(reasoning_effort)을 그대로 기록하고, CLI 인자에만 정규화를 적용한다.
+    _CLI_EFFORT_ALIAS: Dict[str, str] = {"max": "xhigh"}
+    _cli_effort = _CLI_EFFORT_ALIAS.get(reasoning_effort, reasoning_effort)
     cmd = [
         _codex_bin, "exec",
         "--model", selected_model,
-        "-c", f"model_reasoning_effort={reasoning_effort}",
+        "-c", f"model_reasoning_effort={_cli_effort}",
         "--sandbox", "read-only",
         "--ephemeral",
         "--json",
@@ -8380,7 +8384,7 @@ def _invoke_codex_exec(
     # sanitized 명령: nonce/secret이 섞이지 않는 결정적 인자만 기록한다(prompt/경로 제외).
     codex_cli_command = (
         f"codex exec --model {selected_model} "
-        f"-c model_reasoning_effort={reasoning_effort} "
+        f"-c model_reasoning_effort={_cli_effort} "
         "--sandbox read-only --ephemeral --json -C <repo-root> -"
     )
     # 요구3: ChatGPT Plus 인증만 사용하도록 OPENAI_API_KEY를 subprocess 환경에서 제거한다.
