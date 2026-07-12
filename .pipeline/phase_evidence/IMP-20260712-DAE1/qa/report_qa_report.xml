@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <qa_round>4</qa_round>
+  <agent_run_id>qa-4512aec6cb1e7132</agent_run_id>
+
+  <category_check>
+    <wa>N-A — HTTP 네트워크 카테고리 아님. Codex 상호작용은 subprocess(codex exec) 기반이며 classic WA 대상 아님.</wa>
+    <ui>N-A — GUI 위젯 없음. pipeline.py 내부 로직 태스크.</ui>
+    <fs>N-A — 파일 IO는 utf-8 + errors=replace로 방어되나 FS 카테고리 태스크 아님.</fs>
+    <pd>PASS — 6개 단일책임 helper(_classify_codex_review_risk / _build_codex_model_policy / _detect_codex_cli_capability / _invoke_codex_exec / _check_codex_capability_gate / _check_codex_review_operational_trust)로 관심사 분리. SSoT 상수(CODEX_MODEL_ROUTER_VERSION 등) 사용. 각 함수 반환 dict 계약 docstring 명시.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — TypeError guard(None/비dict), isinstance 방어, 빈 changeset fail-closed(BLOCKED), unknown risk_level fail-closed, 알 수 없는 model+HIGH/CRITICAL fail-closed 전방위 예외 처리.</al>
+    <build>N-A — meta-task(pipeline.py 로직 변경). EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VSCE 태그 없음.</vsce>
+  </category_check>
+
+  <numeric_score>108</numeric_score>
+  <numeric_score_detail>
+    <wa score="20" max="20">N/A — 해당 카테고리 요구 없음, 배점 credited.</wa>
+    <ui score="20" max="20">N/A — 해당 카테고리 요구 없음, 배점 credited.</ui>
+    <fs score="20" max="20">N/A — 해당 카테고리 요구 없음, 배점 credited.</fs>
+    <pd score="10" max="10">모듈분리 5/5 (Codex 라우터 로직 helper 분리), 인터페이스계약 5/5 (반환 dict 구조 docstring 명시, SSoT 상수).</pd>
+    <al score="20" max="20">0나눗셈 방어 5/5, 범위/빈데이터 fail-closed 5/5, 입력 타입 검증(TypeError/isinstance) 5/5, unknown/edge fail-closed 5/5.</al>
+    <build score="0" max="0">N/A — BUILD 태그 없음.</build>
+    <sec score="0" max="0">Phase 5 전담 — QA 미채점.</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+    <note>적용 카테고리(PD 10/10 + AL 20/20)는 만점. 비적용 카테고리(WA/UI/FS/BUILD)는 태스크 성격상 요구 없음으로 배점 credited. test-only helper _check_codex_capability_gate 중복(-12) 반영하여 108/120.</note>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover verification 블록에 py_compile PASS + pytest 증거. QA 재실행으로 80 passed 재확인.</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님.</vsce_build_evidence>
+    <functional_binding_verified>PASS — fail-closed 신뢰 게이트가 실제 호출 경로에 배선됨: _check_codex_review_operational_trust는 _cmd_gates_request_accept(line 26683)에서 호출, unknown+HIGH/CRITICAL 차단은 프로덕션 3곳(8454/9063/25086) 인라인 배선, 기본 경로=실제 codex exec 자동 실행(23969-23978) 확인.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>7</scope_files_declared>
+    <evidence_files_submitted>10</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음 — manager_handoff_DAE1.xml / step_plan_DAE1.xml은 PM 산출물, tests/oracles/IMP-20260712-DAE1/** 은 DAE1 자체 oracle로 허용됨</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>6</declared_functions>
+    <actual_modified_functions>6</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <mt_verdict>PASS</mt_verdict>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>1</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <dead_code>
+    <symbol>pipeline._check_codex_capability_gate</symbol>
+    <defined_at>pipeline.py:8514</defined_at>
+    <call_sites>0(프로덕션) / 5(tests/e2e/test_codex_model_router_dae1.py TC-11~14 + e2e)</call_sites>
+    <verdict>KEEP_REASON — 프로덕션에서는 동등 fail-closed 로직이 인라인(8454/9063/25086)으로 배선되어 있고, 본 helper는 TC-11~14로 단위 검증되는 tested helper. 0-call 아님(테스트가 호출). 다만 프로덕션 미배선이므로 향후 인라인을 이 helper 호출로 통합 권고.</verdict>
+  </dead_code>
+
+  <result>[PASS]</result>
+  <verdict>PASS</verdict>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음. Round 3 FAIL 원인(scope 외 파일 29개)은 d0f09b8d 커밋에서 해소됨. git diff origin/main...HEAD 결과 모든 변경 파일이 scope_manifest MT(MT-1~10) 또는 허용된 PM 산출물/DAE1 oracle에 매핑됨. pytest 80 passed, ruff clean, REJECT 5개 핵심 수정 모두 프로덕션 배선 확인.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. _check_codex_capability_gate(pipeline.py:8514)는 tests에서만 호출되고 프로덕션은 동일 로직을 3곳(8454/9063/25086)에 인라인 중복. 향후 인라인 검사를 이 helper 호출로 통합하면 DRY 개선(본 라운드 감점 -12 반영).
+    2. dev_handover.xml scope_declaration은 4개 test + pipeline.py만 나열하나 SSoT scope_manifest.json은 7개 파일(+ pipeline-manager-agent.md, codex_model_router_report.md) 포함. 실제 diff와 scope_manifest는 일치하므로 scope 위반 아님이나, handover XML scope_declaration을 scope_manifest와 동기화 권고.
+  </improvement_suggestions>
+</qa_report>
