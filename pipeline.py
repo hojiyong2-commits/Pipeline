@@ -8179,15 +8179,25 @@ def _build_codex_model_policy(
 def _detect_codex_cli_capability() -> Dict[str, Any]:
     """Codex CLI 가용성과 actual_model을 감지. 확인 불가 시 actual_model=unknown.
 
+    운영자가 실제 사용 모델을 알고 있는 경우 `CODEX_CLI_MODEL` 환경변수로 명시할 수 있다.
+    이 값은 운영자가 제공한 사실이므로 추측/하드코딩이 아니며, CLI가 실제로 가용할 때만 신뢰한다.
+    환경변수가 없으면 CLI 존재만 확인하고 모델명은 unknown으로 남긴다(허위 기록 금지).
+
     Returns:
         {"available": bool, "actual_model": str, "model_source": str}.
+        model_source: "env"(운영자 명시) | "version_check"(가용하나 모델 미확인) | "unknown"(미가용).
     """
+    # 운영자 명시 모델(선택). 값이 있고 CLI가 가용할 때만 신뢰한다.
+    _env_model = str(os.environ.get("CODEX_CLI_MODEL", "") or "").strip()
     try:
         result = subprocess.run(
             ["codex", "--version"],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode == 0:
+            if _env_model:
+                # CLI 가용 확인 + 운영자 명시 모델로 actual_model을 확정한다(known 경로).
+                return {"available": True, "actual_model": _env_model, "model_source": "env"}
             # CLI는 있으나 모델명을 결정적으로 확인할 수 없으므로 unknown으로 남긴다(허위 기록 금지).
             return {"available": True, "actual_model": "unknown", "model_source": "version_check"}
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError, PermissionError):
@@ -23527,15 +23537,27 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             f"[BLOCKED] failure_code={_model_policy.get('failure_code', 'downgrade_blocked')}\n"
             "  모델 정책 위반으로 Codex Review가 차단됩니다."
         )
+    # IMP-20260712-DAE1 rework(문제1/2/3): explicit verdict/CLI 주입 여부를 capability gate보다
+    #   먼저 판정한다. --verdict 또는 --codex-cli-exit-code로 결과를 명시적으로 주입하는 경우는
+    #   auto-Codex-CLI를 자동 실행하지 않으므로, auto-CLI의 actual_model 신뢰성을 판정하는
+    #   capability gate 대상이 아니다(fail-closed 대상 아님). explicit 경로에서는 gate probe를
+    #   실행하지 않고, 주입된 결과 분류(usage_limit/network/timeout/REJECT 등)가 그대로 흐르게 한다.
+    _explicit_verdict = getattr(args, "verdict", None) is not None
+    _explicit_cli = getattr(args, "codex_cli_exit_code", None) is not None
+    _explicit_injection = _explicit_verdict or _explicit_cli
+
+    # actual_model/model_source는 기록용으로 항상 감지한다(추측/하드코딩 금지 — 확인 불가 시 unknown).
     _cap_info = _detect_codex_cli_capability()
     _actual_model_str = str(_cap_info.get("actual_model", "unknown") or "unknown")
-    _cap_gate = _check_codex_capability_gate(_actual_model_str, _risk_level_str)
-    if _cap_gate.get("result") == "BLOCKED":
-        _die(
-            f"[BLOCKED] failure_code={_cap_gate.get('failure_code', 'unknown_model_critical_blocked')}\n"
-            f"  actual_model={_actual_model_str!r} + risk_level={_risk_level_str!r}: "
-            "Codex Review 차단 (fail-closed)."
-        )
+    # capability gate(fail-closed)는 오직 실제 Codex CLI를 자동 실행하는 경로에만 적용한다.
+    if not _explicit_injection:
+        _cap_gate = _check_codex_capability_gate(_actual_model_str, _risk_level_str)
+        if _cap_gate.get("result") == "BLOCKED":
+            _die(
+                f"[BLOCKED] failure_code={_cap_gate.get('failure_code', 'unknown_model_critical_blocked')}\n"
+                f"  actual_model={_actual_model_str!r} + risk_level={_risk_level_str!r}: "
+                "Codex Review 차단 (fail-closed)."
+            )
 
     # IMP-20260710-DB54 rework MT-4(문제2): cache check — 동일 contract+bundle SHA의 이전 verdict.
     #   현재 bundle을 함께 넘겨 excluded critical/critical_file_shas 부재를 판정한다.
@@ -23544,14 +23566,17 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _cache_verdict_from_cache = ""
     _cache_key_used = ""
     _cache_reason = ""
-    _explicit_verdict = getattr(args, "verdict", None) is not None
-    _explicit_cli = getattr(args, "codex_cli_exit_code", None) is not None
     try:
+        # IMP-20260712-DAE1 rework(문제2): explicit 주입 시에는 cache의 capability/정책 기반 블록
+        #   (unknown-model+HIGH/CRITICAL, cache_allowed=False)을 적용하지 않는다. explicit 경로는
+        #   캐시를 재사용하지 않고 주입 결과를 그대로 사용하므로, capability 파라미터를 None으로 넘겨
+        #   해당 블록을 건너뛴다. 단, current_bundle 기반 excluded-critical 안전 검사는 그대로 유지한다.
         _cache_probe = _check_codex_cache(
             _contract_sha256_for_cache, _review_bundle_sha256, state, pipeline_id,
             current_bundle=_preflight_bundle,
-            model_policy=_model_policy, actual_model=_actual_model_str,
-            risk_level=_risk_level_str,
+            model_policy=None if _explicit_injection else _model_policy,
+            actual_model=None if _explicit_injection else _actual_model_str,
+            risk_level=None if _explicit_injection else _risk_level_str,
         )
     except SystemExit:
         raise
