@@ -165,9 +165,9 @@ def run_harness(code: str, env: Dict[str, str], timeout: int = 60) -> subprocess
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("risk,exp_model,exp_effort", [
-    ("MEDIUM", "gpt-5.5", "high"),
-    ("HIGH", "gpt-5.5", "high"),
-    ("CRITICAL", "gpt-5.5", "xhigh"),
+    ("MEDIUM", "gpt-5.6-terra", "high"),
+    ("HIGH", "gpt-5.6-sol", "high"),
+    ("CRITICAL", "gpt-5.6-sol", "max"),
 ])
 def test_real_codex_exec_passes_model_and_effort(
     tmp_path: Path, risk: str, exp_model: str, exp_effort: str
@@ -214,19 +214,23 @@ def test_real_codex_exec_passes_model_and_effort(
 # 문제4: capability — actual != selected → BLOCKED
 # ---------------------------------------------------------------------------
 
-def test_capability_model_mismatch_blocked(tmp_path: Path) -> None:
-    """CLI가 허용되지 않은 모델을 보고하면 capability match BLOCKED (disallowed_model)."""
+def test_capability_actual_reported_mismatch_blocked(tmp_path: Path) -> None:
+    """CLI가 selected와 다른 모델을 보고하면 capability match BLOCKED (actual_model_mismatch).
+
+    IMP-20260712-DAE1 REJECT#3: invoked==selected(gpt-5.6-sol)이지만 CLI가 gpt-4o를 보고하면
+    actual!=selected → BLOCKED.
+    """
     state_file = tmp_path / "state.json"
     shim = tmp_path / "shim"
     final_state = tmp_path / "final.json"
-    # 정책은 gpt-5.5를 선택하지만 fake codex는 허용되지 않은 모델을 echo → 차단.
     make_fake_codex(shim, override_model="gpt-4o", override_effort="high")
     env = _harness_env(state_file, shim_dir=shim)
     code = (
         "pol = p._build_codex_model_policy('HIGH')\n"
         "run = p._invoke_codex_exec(pol['selected_model'], pol['selected_reasoning_effort'], 'x')\n"
         "chk = p._check_codex_model_capability_match(pol['selected_model'], pol['selected_reasoning_effort'],\n"
-        "       run['actual_model'], run['actual_effort'], 'HIGH')\n"
+        "       run['invoked_model'], run['invoked_effort'],\n"
+        "       run['actual_model'], run['actual_effort'], 'HIGH', invocation_ok=(run['exit_code']==0))\n"
         "open(%r,'w',encoding='utf-8').write(json.dumps({'actual': run['actual_model'], 'chk': chk}))\n"
         % str(final_state)
     )
@@ -235,16 +239,15 @@ def test_capability_model_mismatch_blocked(tmp_path: Path) -> None:
     fs = json.loads(final_state.read_text(encoding="utf-8"))
     assert fs["actual"] == "gpt-4o"
     assert fs["chk"]["result"] == "BLOCKED"
-    assert fs["chk"]["failure_code"] == "disallowed_model"
+    assert fs["chk"]["failure_code"] == "actual_model_mismatch"
 
 
-def test_capability_unreported_model_exit0_trusts_invoked(tmp_path: Path) -> None:
-    """exit 0인데 CLI가 모델을 보고하지 않으면 invoked 파라미터를 신뢰한다(Bug#3 fallback).
+def test_capability_unreported_model_exit0_invocation_verified(tmp_path: Path) -> None:
+    """exit 0인데 CLI가 모델을 보고하지 않으면 invocation_verified로 통과한다(요구4).
 
-    실제 codex exec NDJSON은 model/effort 필드를 보고하지 않으므로, exit_code=0 성공 시
-    _invoke_codex_exec가 unknown을 selected로 승계한다. 따라서 HIGH에서도 actual==selected로
-    관측되어 capability match가 OK가 된다. (진짜 unknown→BLOCKED 경로는
-    test_capability_unknown_model_critical_blocked가 직접 호출로 검증한다.)
+    실제 codex exec NDJSON은 model/effort 필드를 보고하지 않는다. _invoke_codex_exec는
+    actual을 unknown으로 남기고(허위 기록 금지), capability match는 invoked==selected +
+    exit 0 성공이므로 invocation_verified로 판정하여 HIGH에서 OK가 된다.
     """
     state_file = tmp_path / "state.json"
     shim = tmp_path / "shim"
@@ -255,24 +258,27 @@ def test_capability_unreported_model_exit0_trusts_invoked(tmp_path: Path) -> Non
         "pol = p._build_codex_model_policy('HIGH')\n"
         "run = p._invoke_codex_exec(pol['selected_model'], pol['selected_reasoning_effort'], 'x')\n"
         "chk = p._check_codex_model_capability_match(pol['selected_model'], pol['selected_reasoning_effort'],\n"
-        "       run['actual_model'], run['actual_effort'], 'HIGH')\n"
+        "       run['invoked_model'], run['invoked_effort'],\n"
+        "       run['actual_model'], run['actual_effort'], 'HIGH', invocation_ok=(run['exit_code']==0))\n"
         "open(%r,'w',encoding='utf-8').write(json.dumps({'actual': run['actual_model'], 'chk': chk}))\n"
         % str(final_state)
     )
     r = run_harness(code, env)
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     fs = json.loads(final_state.read_text(encoding="utf-8"))
-    assert fs["actual"] == "gpt-5.5"  # Bug#3: exit0 미보고 → invoked selected 신뢰
+    assert fs["actual"] == "unknown"  # 허위 기록 금지: 미보고는 unknown 유지
     assert fs["chk"]["result"] == "OK"
+    assert fs["chk"]["model_verification_level"] == "invocation_verified"
 
 
-def test_capability_unknown_model_critical_blocked(tmp_path: Path) -> None:
-    """unknown model + CRITICAL → BLOCKED (fail-closed)."""
+def test_capability_unverified_critical_blocked(tmp_path: Path) -> None:
+    """unknown model + invocation 실패(exit≠0) + CRITICAL → BLOCKED (unverified, fail-closed)."""
     state_file = tmp_path / "state.json"
     final_state = tmp_path / "final.json"
     env = _harness_env(state_file)
     code = (
-        "chk = p._check_codex_model_capability_match('gpt-5.5','xhigh','unknown','unknown','CRITICAL')\n"
+        "chk = p._check_codex_model_capability_match('gpt-5.6-sol','max','gpt-5.6-sol','max',\n"
+        "       'unknown','unknown','CRITICAL', invocation_ok=False)\n"
         "leg = p._check_codex_capability_gate('unknown','CRITICAL')\n"
         "open(%r,'w',encoding='utf-8').write(json.dumps({'chk': chk, 'leg': leg}))\n"
         % str(final_state)
@@ -281,7 +287,7 @@ def test_capability_unknown_model_critical_blocked(tmp_path: Path) -> None:
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     fs = json.loads(final_state.read_text(encoding="utf-8"))
     assert fs["chk"]["result"] == "BLOCKED"
-    assert fs["chk"]["failure_code"] == "unknown_model_critical_blocked"
+    assert fs["chk"]["failure_code"] == "model_verification_unverified"
     assert fs["leg"]["result"] == "BLOCKED"
 
 
@@ -289,37 +295,32 @@ def test_capability_unknown_model_critical_blocked(tmp_path: Path) -> None:
 # 문제3: external_verdict → acceptance_eligible=false (운영), test-mode에서만 허용
 # ---------------------------------------------------------------------------
 
-def test_external_verdict_acceptance_eligible_gating(tmp_path: Path) -> None:
-    """운영 모드에서 external_verdict → acceptance_eligible=false; test-mode에서만 true."""
+def test_external_verdict_acceptance_eligible_always_false(tmp_path: Path) -> None:
+    """external_verdict → acceptance_eligible=false (요구5: PIPELINE_TEST_MODE 우회 제거).
+
+    이제 어떤 환경에서도 manual/external 주입은 승인 자격이 없다. 운영 신뢰 게이트가
+    verdict_source in (codex_cli, verified_cache)만 허용하므로 external은 항상 차단된다.
+    """
     state_file = tmp_path / "state.json"
     final_state = tmp_path / "final.json"
-
-    # 운영 모드(PIPELINE_TEST_MODE 미설정): external_verdict는 eligible=false여야 한다.
-    env_ops = _harness_env(state_file, test_mode=False)
+    env = _harness_env(state_file)
     code = (
-        "import os\n"
-        "review_status='APPROVED'\n"
-        "verdict_source='external_verdict'\n"
-        "elig = review_status=='APPROVED'\n"
-        "test_mode = os.environ.get('PIPELINE_TEST_MODE','')=='1'\n"
-        "if verdict_source in ('external_verdict','external_cli_injection') and not test_mode:\n"
-        "    elig=False\n"
-        "open(%r,'w',encoding='utf-8').write(json.dumps({'eligible': elig, 'test_mode': test_mode}))\n"
+        "chk = p._check_codex_review_operational_trust({\n"
+        "  'verdict_source': 'external_verdict', 'acceptance_eligible': True,\n"
+        "  'router_version': '2.0.0', 'risk_level': 'HIGH',\n"
+        "  'model_policy_signature': 'sig', 'codex_cli_command': 'N/A (external verdict)',\n"
+        "  'selected_model': 'gpt-5.6-sol', 'selected_reasoning_effort': 'high',\n"
+        "  'invoked_model': 'gpt-5.6-sol', 'invoked_effort': 'high',\n"
+        "  'actual_model': 'unknown', 'actual_effort': 'unknown',\n"
+        "  'model_verification_level': 'invocation_verified', 'auth_source': 'chatgpt'})\n"
+        "open(%r,'w',encoding='utf-8').write(json.dumps(chk))\n"
         % str(final_state)
     )
-    r = run_harness(code, env_ops)
+    r = run_harness(code, env)
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     fs = json.loads(final_state.read_text(encoding="utf-8"))
-    assert fs["test_mode"] is False
-    assert fs["eligible"] is False, "운영 모드에서 external_verdict는 acceptance_eligible=false여야 함"
-
-    # test-mode: 허용
-    env_test = _harness_env(state_file, test_mode=True)
-    r2 = run_harness(code, env_test)
-    assert r2.returncode == 0
-    fs2 = json.loads(final_state.read_text(encoding="utf-8"))
-    assert fs2["test_mode"] is True
-    assert fs2["eligible"] is True, "test-mode에서는 external_verdict 허용"
+    assert fs["status"] == "BLOCKED"
+    assert fs["failure_code"] == "codex_review_untrusted_verdict_source"
 
 
 # ---------------------------------------------------------------------------
@@ -434,7 +435,7 @@ def test_risk_fail_closed_and_tests_inheritance(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_model_policies_are_gpt56(tmp_path: Path) -> None:
-    """LOW=gpt-5.5/low, MEDIUM=gpt-5.5/high, HIGH=gpt-5.5/high, CRITICAL=gpt-5.5/xhigh (Claude 아님)."""
+    """LOW=luna/low, MEDIUM=terra/high, HIGH=sol/high, CRITICAL=sol/max (모두 gpt-5.6 계열)."""
     state_file = tmp_path / "state.json"
     final_state = tmp_path / "final.json"
     env = _harness_env(state_file)
@@ -449,13 +450,14 @@ def test_model_policies_are_gpt56(tmp_path: Path) -> None:
     r = run_harness(code, env)
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     fs = json.loads(final_state.read_text(encoding="utf-8"))
-    assert fs["LOW"] == ["gpt-5.5", "low"]
-    assert fs["MEDIUM"] == ["gpt-5.5", "high"]
-    assert fs["HIGH"] == ["gpt-5.5", "high"]
-    assert fs["CRITICAL"] == ["gpt-5.5", "xhigh"]
+    assert fs["LOW"] == ["gpt-5.6-luna", "low"]
+    assert fs["MEDIUM"] == ["gpt-5.6-terra", "high"]
+    assert fs["HIGH"] == ["gpt-5.6-sol", "high"]
+    assert fs["CRITICAL"] == ["gpt-5.6-sol", "max"]
     for m in fs["LOW"][0], fs["MEDIUM"][0], fs["HIGH"][0], fs["CRITICAL"][0]:
-        assert "claude" not in m, f"Claude 모델이 남아 있음: {m}"
-    assert fs["allowed"] == ["gpt-5.5"]
+        assert m.startswith("gpt-5.6-"), f"gpt-5.6 계열이 아님: {m}"
+        assert "claude" not in m and "5.5" not in m, f"구 모델이 남아 있음: {m}"
+    assert fs["allowed"] == ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"]
 
 
 # ---------------------------------------------------------------------------
@@ -513,22 +515,33 @@ def test_approval_message_stdout_json_only_channel(tmp_path: Path) -> None:
 # rework#2 요구4: request-accept 신뢰 게이트 _check_codex_review_operational_trust
 # ---------------------------------------------------------------------------
 
-_CODEX_CLI_CMD = "codex exec --model gpt-5.5 -c model_reasoning_effort=high --json -"
+_CODEX_CLI_CMD = (
+    "codex exec --model gpt-5.6-sol -c model_reasoning_effort=high "
+    "--sandbox read-only --ephemeral --json -C <repo-root> -"
+)
 
 
 def _trust_result(**overrides) -> dict:
-    """운영 신뢰 게이트 통과용 기준 codex_review_result dict를 만들고 override를 적용한다."""
+    """운영 신뢰 게이트 통과용 기준 codex_review_result dict를 만들고 override를 적용한다.
+
+    IMP-20260712-DAE1 REJECT#3: gpt-5.6 + invoked/verification_level/auth_source 반영.
+    기본은 HIGH + invocation_verified(actual 미보고) 통과 케이스.
+    """
     base = {
         "verdict_source": "codex_cli",
         "acceptance_eligible": True,
-        "router_version": "1.0.0",
+        "router_version": "2.0.0",
         "risk_level": "HIGH",
-        "model_policy_signature": "HIGH:gpt-5.5:high:enforce",
+        "model_policy_signature": "HIGH:gpt-5.6-sol:high:enforce",
         "codex_cli_command": _CODEX_CLI_CMD,
-        "selected_model": "gpt-5.5",
-        "actual_model": "gpt-5.5",
+        "selected_model": "gpt-5.6-sol",
         "selected_reasoning_effort": "high",
-        "actual_effort": "high",
+        "invoked_model": "gpt-5.6-sol",
+        "invoked_effort": "high",
+        "actual_model": "unknown",
+        "actual_effort": "unknown",
+        "model_verification_level": "invocation_verified",
+        "auth_source": "chatgpt",
     }
     base.update(overrides)
     return base
@@ -559,6 +572,8 @@ def test_operational_trust_passes_verified_cache(tmp_path: Path) -> None:
     """verified_cache(원 codex_cli 승계, cache-hit 마커 명령) → PASS."""
     out = _run_trust(tmp_path, _trust_result(
         verdict_source="verified_cache", codex_cli_command="N/A (cache hit)",
+        risk_level="MEDIUM", model_policy_signature="MEDIUM:gpt-5.6-terra:high:observe",
+        selected_model="gpt-5.6-terra", invoked_model="gpt-5.6-terra",
     ))
     assert out["status"] == "PASS", out
 
@@ -591,28 +606,36 @@ def test_operational_trust_blocks_not_eligible(tmp_path: Path) -> None:
     assert out["failure_code"] == "codex_review_not_acceptance_eligible"
 
 
-def test_operational_trust_blocks_unknown_model_high(tmp_path: Path) -> None:
-    """HIGH + actual_model=unknown → BLOCKED (fail-closed)."""
-    out = _run_trust(tmp_path, _trust_result(actual_model="unknown", actual_effort="unknown"))
+def test_operational_trust_blocks_unverified_high(tmp_path: Path) -> None:
+    """HIGH + model_verification_level=unverified → BLOCKED (fail-closed).
+
+    IMP-20260712-DAE1 REJECT#3: actual 미보고라도 invocation_verified면 통과하지만,
+    verification_level이 unverified면 HIGH/CRITICAL에서 차단된다.
+    """
+    out = _run_trust(tmp_path, _trust_result(model_verification_level="unverified"))
     assert out["status"] == "BLOCKED"
-    assert out["failure_code"] == "codex_review_unknown_model_high_critical"
+    assert out["failure_code"] == "codex_review_unverified_high_critical"
 
 
 def test_operational_trust_blocks_model_mismatch(tmp_path: Path) -> None:
-    """selected_model != actual_model → BLOCKED."""
-    out = _run_trust(tmp_path, _trust_result(actual_model="gpt-4o"))
+    """selected_model != invoked_model → BLOCKED (요구9.7)."""
+    out = _run_trust(tmp_path, _trust_result(invoked_model="gpt-5.6-luna"))
     assert out["status"] == "BLOCKED"
     assert out["failure_code"] == "codex_review_model_mismatch"
 
 
-def test_operational_trust_blocks_effort_mismatch(tmp_path: Path) -> None:
-    """selected_effort != actual_effort → BLOCKED (MEDIUM에서 actual unknown 아님)."""
+def test_operational_trust_blocks_actual_reported_mismatch(tmp_path: Path) -> None:
+    """CLI actual 보고했는데 selected 불일치 → BLOCKED (요구4)."""
     out = _run_trust(tmp_path, _trust_result(
-        risk_level="MEDIUM", selected_model="gpt-5.5", actual_model="gpt-5.5",
-        model_policy_signature="MEDIUM:gpt-5.5:high:observe",
-        codex_cli_command="codex exec --model gpt-5.5 -c model_reasoning_effort=high --json -",
-        actual_effort="low",
+        actual_model="gpt-4o", actual_effort="high", model_verification_level="unverified",
     ))
+    assert out["status"] == "BLOCKED"
+    assert out["failure_code"] == "codex_review_actual_model_mismatch"
+
+
+def test_operational_trust_blocks_effort_mismatch(tmp_path: Path) -> None:
+    """selected_effort != invoked_effort → BLOCKED (요구9.8)."""
+    out = _run_trust(tmp_path, _trust_result(invoked_effort="low"))
     assert out["status"] == "BLOCKED"
     assert out["failure_code"] == "codex_review_effort_mismatch"
 
@@ -642,37 +665,38 @@ def test_operational_trust_blocks_placeholder_cli_command(tmp_path: Path) -> Non
 # rework#2 요구3: verdict_source 결정 + 운영/테스트 모드 acceptance_eligible 게이팅
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("source,test_mode,expected", [
-    ("external_verdict", False, False),
-    ("external_cli_injection", False, False),
-    ("external_verdict", True, True),
-    ("external_cli_injection", True, True),
-    ("codex_cli", False, True),
-    ("verified_cache", False, True),
+@pytest.mark.parametrize("source,trusted", [
+    ("external_verdict", False),
+    ("external_cli_injection", False),
+    ("codex_cli", True),
+    ("verified_cache", True),
 ])
 def test_acceptance_eligible_ops_gating(
-    tmp_path: Path, source: str, test_mode: bool, expected: bool
+    tmp_path: Path, source: str, trusted: bool
 ) -> None:
-    """운영 모드: external_verdict/external_cli_injection → eligible=false; codex_cli/verified_cache → true.
-
-    테스트 모드(PIPELINE_TEST_MODE=1): 주입 경로도 eligible=true 허용.
-    """
+    """요구5/9: codex_cli/verified_cache만 신뢰. external/manual 주입은 PIPELINE_TEST_MODE와 무관하게 차단."""
     state_file = tmp_path / "state.json"
-    final_state = tmp_path / f"elig_{source}_{test_mode}.json"
-    env = _harness_env(state_file, test_mode=test_mode)
+    final_state = tmp_path / f"elig_{source}.json"
+    env = _harness_env(state_file)
+    _cmd = (
+        "codex exec --model gpt-5.6-sol -c model_reasoning_effort=high "
+        "--sandbox read-only --ephemeral --json -C <repo-root> -"
+    ) if trusted else "N/A (external verdict)"
     code = (
-        "import os\n"
-        "verdict_source=%r\n" % source +
-        "elig=True\n"
-        "test_mode = os.environ.get('PIPELINE_TEST_MODE','')=='1'\n"
-        "if verdict_source in ('external_verdict','external_cli_injection') and not test_mode:\n"
-        "    elig=False\n"
-        "open(%r,'w',encoding='utf-8').write(json.dumps({'eligible': elig}))\n" % str(final_state)
+        "res = {'verdict_source': %r, 'acceptance_eligible': True,\n" % source +
+        "  'router_version': '2.0.0', 'risk_level': 'HIGH',\n"
+        "  'model_policy_signature': 'sig', 'codex_cli_command': %r,\n" % _cmd +
+        "  'selected_model': 'gpt-5.6-sol', 'selected_reasoning_effort': 'high',\n"
+        "  'invoked_model': 'gpt-5.6-sol', 'invoked_effort': 'high',\n"
+        "  'actual_model': 'unknown', 'actual_effort': 'unknown',\n"
+        "  'model_verification_level': 'invocation_verified', 'auth_source': 'chatgpt'}\n"
+        "chk = p._check_codex_review_operational_trust(res)\n"
+        "open(%r,'w',encoding='utf-8').write(json.dumps(chk))\n" % str(final_state)
     )
     r = run_harness(code, env)
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     fs = json.loads(final_state.read_text(encoding="utf-8"))
-    assert fs["eligible"] is expected, f"source={source} test_mode={test_mode} -> {fs}"
+    assert (fs["status"] == "PASS") is trusted, f"source={source} -> {fs}"
 
 
 if __name__ == "__main__":

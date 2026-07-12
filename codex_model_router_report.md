@@ -6,9 +6,56 @@ Codex Review 모델/사고레벨 자동 라우터입니다. `gates codex-review`
 
 핵심 설계 결정:
 - **DQ-1**: LOW/MEDIUM은 observe 모드 기본, HIGH/CRITICAL은 enforce 모드 기본 (계층형, 전역 전환 없음).
-- **DQ-2**: actual_model=unknown + HIGH/CRITICAL → BLOCKED (fail-closed).
+- **DQ-2**: HIGH/CRITICAL은 최소 `invocation_verified` 이상이어야 통과 (fail-closed).
+- **DQ-3 (REJECT#3)**: Codex Review는 GPT-5.6 계열 모델을 사용하며(claude-* 아님), cache miss 시 실제 `codex exec`를 자동 실행합니다. 수동 verdict/CLI 주입은 운영 승인 자격이 없습니다(acceptance_eligible=false).
 
-라우터 버전: `CODEX_MODEL_ROUTER_VERSION = "1.0.0"`.
+라우터 버전: `CODEX_MODEL_ROUTER_VERSION = "2.0.0"`.
+
+## REJECT#3 재구현 요약 (GPT-5.6 라우터)
+
+### 모델 정책 SSoT (`CODEX_MODEL_POLICIES`)
+
+| Risk | selected_model | selected_effort | mode | cache_allowed | force_review |
+|---|---|---|---|---|---|
+| LOW | gpt-5.6-luna | low | observe | true | false |
+| MEDIUM | gpt-5.6-terra | high | observe | true | false |
+| HIGH | gpt-5.6-sol | high | enforce | limited | false |
+| CRITICAL | gpt-5.6-sol | max | enforce | false | true |
+
+### 실제 실행 (요구2/3)
+
+```
+codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> \
+  --sandbox read-only --ephemeral --json -C <repo-root> -
+```
+
+- 실행 전 `codex login status`로 ChatGPT Plus 인증 강제 (정확히 `Logged in using ChatGPT`).
+- Codex subprocess 환경에서 `OPENAI_API_KEY` 제거.
+- timeout=600초. review bundle을 stdin으로 전달.
+
+### 모델 증거 필드 분리 (요구4)
+
+- `selected_model/effort`: 정책 선택값.
+- `invoked_model/effort`: `--model`에 실제 전달한 값(= selected).
+- `actual_model/effort`: CLI가 `--json`으로 명시 보고한 경우만(아니면 `unknown`).
+- `model_verification_level`: `actual_verified` | `invocation_verified` | `unverified`.
+  - HIGH/CRITICAL 최소: `invocation_verified`.
+
+### verdict 스키마 (요구6)
+
+- 승인: `{"verdict": "APPROVE_TO_USER"}`
+- 거절: `{"verdict": "REJECT", "root_cause": "...", "reproduction": "...", "required_fix": "...", "acceptance_criteria": ["..."]}`
+- REJECT 4필드 중 하나라도 누락 → parse_failure ERROR.
+
+### 승인 자격/테스트 seam (요구5)
+
+- `--verdict` / `--codex-cli-*` (external injection) → 어떤 환경에서도 `acceptance_eligible=false`.
+- 테스트 주입 seam은 fake executable(`CODEX_REVIEW_FAKE_BIN`) + `PIPELINE_STATE_PATH` 격리 + `environment=test` 기록 + `acceptance_eligible=false` 강제. `PIPELINE_TEST_MODE` 우회 제거.
+
+### cache 정책 (요구11)
+
+- CRITICAL은 cache 절대 금지. environment=test / external / non-eligible 결과도 cache 저장 금지.
+- cache key는 contract+bundle+router_version+risk+selected_model+selected_effort+model_policy_signature 조합.
 
 ## 2. Risk 분류 규칙
 

@@ -91,13 +91,13 @@ def _run(code: str, env: Dict[str, str], timeout: int = 60) -> subprocess.Comple
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("risk,model,effort,mode", [
-    ("LOW", "gpt-5.5", "low", "observe"),
-    ("MEDIUM", "gpt-5.5", "high", "observe"),
-    ("HIGH", "gpt-5.5", "high", "enforce"),
-    ("CRITICAL", "gpt-5.5", "xhigh", "enforce"),
+    ("LOW", "gpt-5.6-luna", "low", "observe"),
+    ("MEDIUM", "gpt-5.6-terra", "high", "observe"),
+    ("HIGH", "gpt-5.6-sol", "high", "enforce"),
+    ("CRITICAL", "gpt-5.6-sol", "max", "enforce"),
 ])
 def test_router_selects_gpt56_policy(tmp_path: Path, risk, model, effort, mode) -> None:
-    """risk별로 gpt-5.5 모델/effort/mode를 선택한다(Claude 모델 제거 검증)."""
+    """risk별로 gpt-5.6 계열 모델/effort/mode를 선택한다(Claude/gpt-5.5 제거 검증)."""
     state_file = tmp_path / "state.json"
     final_state = tmp_path / "final.json"
     env = _env(state_file)
@@ -116,7 +116,7 @@ def test_router_selects_gpt56_policy(tmp_path: Path, risk, model, effort, mode) 
 
 
 def test_real_codex_exec_carries_selected_model(tmp_path: Path) -> None:
-    """실제 codex exec 호출에 HIGH 정책의 gpt-5.5/high가 argv로 전달된다."""
+    """실제 codex exec 호출에 HIGH 정책의 gpt-5.6-sol/high가 argv로 전달된다."""
     state_file = tmp_path / "state.json"
     shim = tmp_path / "shim"
     argv_cap = tmp_path / "argv.json"
@@ -133,12 +133,12 @@ def test_real_codex_exec_carries_selected_model(tmp_path: Path) -> None:
     r = _run(code, env)
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     argv = json.loads(argv_cap.read_text(encoding="utf-8"))
-    assert "--model" in argv and "gpt-5.5" in argv
+    assert "--model" in argv and "gpt-5.6-sol" in argv
     assert any(a == "model_reasoning_effort=high" for a in argv)
     fs = json.loads(final_state.read_text(encoding="utf-8"))
     assert fs["invoked"] is True
-    assert "gpt-5.5" in fs["cmd"] and "model_reasoning_effort=high" in fs["cmd"]
-    assert fs["am"] == "gpt-5.5" and fs["ae"] == "high"
+    assert "gpt-5.6-sol" in fs["cmd"] and "model_reasoning_effort=high" in fs["cmd"]
+    assert fs["am"] == "gpt-5.6-sol" and fs["ae"] == "high"
 
 
 def test_codex_review_result_schema_is_current(tmp_path: Path) -> None:
