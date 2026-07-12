@@ -219,6 +219,56 @@ def test_tc15b_approve_json_ok() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# TC-15c: NDJSON agent_message.text에 JSON 형식 verdict가 포함된 경우 파싱.
+# IMP-20260712-DAE1 bugfix#5: _parse_json_verdict가 agent_message.text에 적용되지 않아
+# parse_failure가 발생하던 버그 수정 회귀 테스트.
+# --------------------------------------------------------------------------- #
+def _ndjson_agent_json(verdict_json_str: str) -> str:
+    """agent_message.text에 JSON 형식 verdict가 포함된 NDJSON stdout 생성."""
+    import json as _json
+    lines = [
+        _json.dumps({"type": "thread.started", "thread_id": "test-abc"}),
+        _json.dumps({"type": "turn.started"}),
+        _json.dumps({
+            "type": "item.completed",
+            "item": {"id": "item_0", "type": "agent_message", "text": verdict_json_str},
+        }),
+    ]
+    return "\n".join(lines)
+
+
+def test_tc15c_ndjson_approve_json_in_text_ok() -> None:
+    """agent_message.text = '{"verdict":"APPROVE_TO_USER"}' → APPROVED (bugfix#5 회귀 테스트)."""
+    stdout = _ndjson_agent_json('{"verdict":"APPROVE_TO_USER"}')
+    r = pipeline._run_codex_cli_review(0, stdout, "")
+    assert r["status"] == "APPROVED", f"예상 APPROVED, 실제: {r}"
+    assert r["verdict"] == "APPROVE_TO_USER"
+    assert r["error_type"] is None
+
+
+def test_tc15c_ndjson_reject_json_in_text_ok() -> None:
+    """agent_message.text = '{verdict:REJECT,4필드}' → REJECTED (bugfix#5 회귀 테스트)."""
+    verdict_json = (
+        '{"verdict":"REJECT","root_cause":"rc","reproduction":"rp",'
+        '"required_fix":"rf","acceptance_criteria":["ac1"]}'
+    )
+    stdout = _ndjson_agent_json(verdict_json)
+    r = pipeline._run_codex_cli_review(0, stdout, "")
+    assert r["status"] == "REJECTED", f"예상 REJECTED, 실제: {r}"
+    assert r["verdict"] == "REJECT"
+    assert r["error_type"] is None
+
+
+def test_tc15c_ndjson_reject_json_missing_fields_parse_failure() -> None:
+    """agent_message.text = '{"verdict":"REJECT"}' (4필드 누락) → parse_failure (fail-closed)."""
+    stdout = _ndjson_agent_json('{"verdict":"REJECT"}')
+    r = pipeline._run_codex_cli_review(0, stdout, "")
+    assert r["status"] == "ERROR"
+    assert r["error_type"] == "parse_failure"
+    assert r["verdict"] is None
+
+
+# --------------------------------------------------------------------------- #
 # TC-12: usage limit → ERROR, reject_count와 무관.
 # TC-13: timeout → ERROR.
 # TC-14: network → ERROR.

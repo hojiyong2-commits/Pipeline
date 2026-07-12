@@ -9792,6 +9792,34 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                         "verdict": "APPROVE_TO_USER",
                         "reject_reason": None,
                     }
+                # IMP-20260712-DAE1 bugfix#5: 모델이 agent_message.text에 JSON 형식으로
+                # verdict를 반환하는 경우 처리. 프롬프트가 JSON 출력을 요청하므로
+                # text가 {"verdict":"APPROVE_TO_USER"} 또는 {"verdict":"REJECT",...} 형태일 수 있음.
+                if _agent_text.startswith("{"):
+                    _inner_parsed = _parse_json_verdict(_agent_text)
+                    if _inner_parsed is not None:
+                        if _inner_parsed["verdict"] == "APPROVED":
+                            return {
+                                "status": "APPROVED",
+                                "error_type": None,
+                                "error_retryable": False,
+                                "codex_cli_exit_code": exit_code,
+                                "codex_cli_stdout_excerpt": stdout[:200],
+                                "codex_cli_stderr_excerpt": stderr[:200],
+                                "verdict": "APPROVE_TO_USER",
+                                "reject_reason": None,
+                            }
+                        if _inner_parsed["verdict"] == "REJECTED":
+                            return {
+                                "status": "REJECTED",
+                                "error_type": None,
+                                "error_retryable": False,
+                                "codex_cli_exit_code": exit_code,
+                                "codex_cli_stdout_excerpt": stdout[:200],
+                                "codex_cli_stderr_excerpt": stderr[:200],
+                                "verdict": "REJECT",
+                                "reject_reason": _inner_parsed.get("reason") or None,
+                            }
                 _m_reject = re.match(r"^REJECT\s+-\s+\S", _agent_text, re.IGNORECASE)
                 if _m_reject:
                     _reason = ""
