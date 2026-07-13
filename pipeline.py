@@ -8683,7 +8683,12 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
 
     _fas = bundle.get("function_before_after_shas") or {}
     if _fas:
-        lines += ["", "## 함수 변경 SHA (before → after)"]
+        lines += [
+            "",
+            "## 함수 변경 SHA (before → after)",
+            "# 주의: 실제로 변경된 함수(before != after)만 아래에 표시됩니다.",
+            "# 이 목록에 없는 함수는 변경되지 않았습니다.",
+        ]
         for _fn_id, _shas in _fas.items():
             _b = str(_shas.get("before", "") or "")
             _a = str(_shas.get("after", "") or "")
@@ -8930,14 +8935,13 @@ def _build_codex_semantic_evidence(
         for _fn in _funcs:
             _bs = _before_bodies.get(_fn, "")
             _as = _after_bodies.get(_fn, "")
-            _fas[f"pipeline.py::{_fn}"] = {
-                "before": (
-                    hashlib.sha256(_bs.encode("utf-8")).hexdigest() if _bs else ""
-                ),
-                "after": (
-                    hashlib.sha256(_as.encode("utf-8")).hexdigest() if _as else ""
-                ),
-            }
+            _b_sha = hashlib.sha256(_bs.encode("utf-8")).hexdigest() if _bs else ""
+            _a_sha = hashlib.sha256(_as.encode("utf-8")).hexdigest() if _as else ""
+            # IMP-20260712-DAE1 REJECT#6: 실제로 변경된 함수(before != after)만 포함한다.
+            # 변경 없는 함수를 SHA 목록에 포함하면 Codex가 diff 없는 이유를 오해하여
+            # evidence_complete=True인데도 REJECT한다.
+            if _b_sha and _a_sha and _b_sha != _a_sha:
+                _fas[f"pipeline.py::{_fn}"] = {"before": _b_sha, "after": _a_sha}
     except Exception:  # noqa: BLE001
         _fas = {}
     sem["function_before_after_shas"] = _fas
