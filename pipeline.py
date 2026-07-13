@@ -9663,16 +9663,10 @@ def _check_codex_cache(
             _miss["reason"] = "CRITICAL risk: 캐시 항상 금지 (cache_allowed=False) — CLI 직접 실행으로 진행"
             return _miss
 
-    # REJECT#11 fix: actual_model=unknown + HIGH/CRITICAL 시 cache probe 자체를 blocked로
-    #   차단하지 않는다. 대신 plain cache miss를 반환해 CLI 실행 경로로 진행하고, 실행 후
-    #   _check_codex_model_capability_match로 검증한다(캐시 재사용 시 검증은 별도 경로).
-    if actual_model == "unknown" and str(risk_level or "").upper() in {"HIGH", "CRITICAL"}:
-        _miss2 = dict(miss)
-        _miss2["reason"] = (
-            "actual_model=unknown + HIGH/CRITICAL: cache miss "
-            "(사전 감지 불가, CLI 실행 후 _check_codex_model_capability_match로 검증)"
-        )
-        return _miss2
+    # REJECT#11/12 fix: actual_model=unknown 시 blocked=True 반환 및 cache miss 조기 반환을
+    #   모두 제거한다. HIGH+unknown은 캐시를 먼저 조회하여 valid entry가 있으면 Fix2 검증을 거쳐
+    #   재사용한다. cache miss이면 CLI를 실행하고 _check_codex_model_capability_match로 검증한다.
+    #   (CRITICAL은 위 cache_allowed=False 블록에서 이미 miss를 반환하므로 여기에 도달하지 않는다.)
 
     # IMP-20260710-DB54 rework MT-4(문제5): 현재 bundle의 excluded_files에 critical 파일이 있으면
     #   Codex가 그 파일을 못 본 것이므로 캐시 사용 자체를 금지한다(BLOCKED). 캐시 유무와 무관.

@@ -318,9 +318,12 @@ def test_tc7_retry_cli_error_allowed_on_error_state(isolated_pipeline):
     )
     final = _read_codex_result(tmp_path)
     # ERROR 상태에서 재시도 성공 → APPROVED로 전환 가능.
+    # IMP-20260712-DAE1: external CLI 주입(--codex-cli-*)은 항상 acceptance_eligible=false(운영 신뢰 게이트).
     assert result.returncode == 0, f"ERROR 상태 재시도는 허용되어야 함 (stderr={result.stderr})"
     assert final["status"] == "APPROVED", final
-    assert final["acceptance_eligible"] is True, final
+    assert final["acceptance_eligible"] is False, (
+        "external CLI 주입은 acceptance_eligible=false여야 한다 (IMP-20260712-DAE1)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -628,7 +631,7 @@ def test_tc15_approved_records_attempt_and_snapshot_identity(isolated_pipeline):
     # attempt 단위 상태 모델: attempt_id + effective 포인터.
     assert final.get("attempt_id", "").startswith("cr-"), final
     assert final.get("effective") is True, "APPROVED result는 effective=true여야 함"
-    assert final.get("schema_version") == 4, "attempt-model은 schema_version 4"
+    assert final.get("schema_version") == 5, "attempt-model은 schema_version 5 (IMP-20260712-DAE1)"
     # snapshot_identity 중첩 dict가 6개 차원을 포함해야 한다.
     ident = final.get("snapshot_identity")
     assert isinstance(ident, dict), final

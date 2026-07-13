@@ -905,14 +905,35 @@ def test_tc28c_cache_hit_verification_insufficient_code_in_source() -> None:
 
 
 def test_tc28d_cache_probe_unknown_not_blocked_source_check() -> None:
-    """REJECT#11 AC#1: _check_codex_cache 소스에서 actual_model=unknown+HIGH 시
-    blocked=True를 반환하지 않음을 소스 구조로 검증한다."""
+    """REJECT#11/12 AC#4: _check_codex_cache에서 actual_model=unknown+HIGH 시
+    blocked=True 조기 반환이 없어야 한다(캐시 조회가 정상 진행되어 limited cache가 동작).
+    REJECT#12: early miss return 제거 → cache lookup 진행 → Fix2 verification 검증."""
     import inspect
     src = inspect.getsource(pipeline._check_codex_cache)
-    # 수정 후에는 "blocked=True"와 "block_reason"이 unknown+HIGH 분기에 없어야 한다.
-    # 대신 plain miss 반환(reason만 설정, hit=False).
-    # "CLI 실행 후 _check_codex_model_capability_match로 검증" 문구로 의도 확인.
-    assert "_check_codex_model_capability_match" in src, (
-        "REJECT#11: _check_codex_cache 소스에 CLI 실행 후 capability match 안내가 없습니다 "
-        "(unknown+HIGH miss reason이 누락됨)"
+    # REJECT#12 fix 후: actual_model=unknown+HIGH 분기의 blocked=True가 없어야 한다.
+    # 그리고 REJECT#11/12 의도 설명 주석이 있어야 한다.
+    assert "cache_allowed=False" in src, (
+        "REJECT#12: _check_codex_cache에 CRITICAL cache_allowed=False miss 블록이 있어야 한다"
+    )
+    assert "CLI를 실행하고 _check_codex_model_capability_match로 검증" in src, (
+        "REJECT#12: _check_codex_cache에 REJECT#11/12 fix 의도 주석이 없습니다 "
+        "(unknown+HIGH early miss 제거 확인)"
+    )
+
+
+def test_tc28e_tc11_oracle_unknown_model_critical_gate() -> None:
+    """REJECT#12 AC#3: TC-11 oracle — actual_model=unknown + CRITICAL 시
+    _check_codex_capability_gate가 expected.json과 일치하는 BLOCKED를 반환해야 한다."""
+    # oracle input
+    actual_model = "unknown"
+    risk_level = "CRITICAL"
+    # oracle expected: {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
+    result = pipeline._check_codex_capability_gate(actual_model, risk_level)
+    assert result.get("result") == "BLOCKED", (
+        f"REJECT#12 TC-11 oracle: actual_model=unknown+CRITICAL은 BLOCKED여야 한다. "
+        f"got result={result.get('result')!r}"
+    )
+    assert result.get("failure_code") == "unknown_model_critical_blocked", (
+        f"REJECT#12 TC-11 oracle: failure_code는 unknown_model_critical_blocked여야 한다. "
+        f"got failure_code={result.get('failure_code')!r}"
     )
