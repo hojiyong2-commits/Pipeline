@@ -635,7 +635,7 @@ def test_tc25g_semantic_evidence_deterministic_and_redacted() -> None:
     import pytest
     # None pipeline_id 방어(AL: None 입력 방어).
     with pytest.raises(TypeError):
-        pipeline._build_codex_semantic_evidence(None, [], [])
+        pipeline._build_codex_semantic_evidence(None, [], [])  # type: ignore[arg-type]
     # 빈 changed_files + critical 파일 없음 → evidence_complete=False(fail-closed).
     sem = pipeline._build_codex_semantic_evidence("TEST", [], [])
     assert sem["evidence_complete"] is False
