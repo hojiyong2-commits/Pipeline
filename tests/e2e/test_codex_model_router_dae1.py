@@ -1728,3 +1728,137 @@ def test_tc37c_write_blocked_invalidation_called_before_model_mismatch_die() -> 
     assert "_codex_review_snapshot" in inspect.getsource(pipeline._cmd_gates_request_accept), (
         "REJECT#22 AC#3: request-accept에 _codex_review_snapshot 호출이 없어 BLOCKED 결과 차단 불가"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-38: REJECT#23 — auth_source 검증 강화 + snapshot 실패 specific failure_code + 문서 일치.
+# --------------------------------------------------------------------------- #
+
+def test_tc38a_auth_source_invalid_blocked_in_source() -> None:
+    """REJECT#23 AC#1: _cmd_gates_codex_review 소스에 auth_source 기본값 폴백이 없고
+    'chatgpt'가 아닌 경우 codex_auth_source_invalid BLOCKED invalidation을 저장하는 코드가 존재한다.
+
+    AC#1: auth_source가 누락되거나 chatgpt가 아니면 BLOCKED + 정확한 인증 failure_code 저장.
+    """
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+
+    # REJECT#23 fix: auth_source 기본값 폴백 제거 — 'chatgpt' 기본값이 _auth_source_str 할당에 없어야 함.
+    # 현재 코드: _auth_source_str = str(_auth.get("auth_source", "") or "")
+    # 이전 코드: _auth_source_str = str(_auth.get("auth_source", "chatgpt") or "chatgpt")  ← 버그
+    auth_source_lines = [
+        line for line in src.splitlines()
+        if "_auth_source_str" in line and "_auth.get" in line
+    ]
+    assert auth_source_lines, (
+        "REJECT#23 AC#1: _auth_source_str 할당 라인이 소스에 없음"
+    )
+    for line in auth_source_lines:
+        assert '("auth_source", "chatgpt")' not in line, (
+            f"REJECT#23 AC#1: auth_source 기본값 'chatgpt' 폴백이 여전히 존재함 — "
+            f"auth_source 누락 시 chatgpt로 보정될 수 있음\n  line={line!r}"
+        )
+
+    # codex_auth_source_invalid failure_code가 소스에 존재해야 한다.
+    assert "codex_auth_source_invalid" in src, (
+        "REJECT#23 AC#1: codex_auth_source_invalid failure_code가 소스에 없음 — "
+        "auth_source가 chatgpt가 아닌 경우 차단 로직이 없음"
+    )
+
+    # auth_source != 'chatgpt' 검증 라인이 존재해야 한다.
+    assert '_auth_source_str != "chatgpt"' in src, (
+        "REJECT#23 AC#1: auth_source 명시적 검증 (_auth_source_str != 'chatgpt')이 소스에 없음"
+    )
+
+    # REJECT#23: 인증 실패 직전 _write_codex_review_blocked_invalidation 호출이 존재해야 한다.
+    # 인증 실패(_auth.get('result') != 'OK') 처리 블록에서 invalidation이 먼저 저장되어야 한다.
+    assert "_auth_fc" in src, (
+        "REJECT#23 AC#1: 인증 failure_code 변수(_auth_fc)가 소스에 없음 — "
+        "auth 실패 직전 specific failure_code로 invalidation을 저장하지 않음"
+    )
+
+
+def test_tc38b_snapshot_changed_specific_failure_code_in_source() -> None:
+    """REJECT#23 AC#2: pre-CLI 및 post-CLI snapshot 실패 직전 codex_review_snapshot_changed
+    failure_code로 _write_codex_review_blocked_invalidation 호출이 소스에 존재한다.
+
+    AC#2: pre-CLI 및 post-CLI HEAD/semantic/함수 SHA 검증 실패마다
+    effective BLOCKED 결과에 codex_review_snapshot_changed가 저장된다.
+    """
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+
+    # pre-CLI HEAD SHA 실패 전 codex_review_snapshot_changed 저장.
+    # 패턴: _write_codex_review_blocked_invalidation(... "codex_review_snapshot_changed" ...) 다음 _die(...)
+    # 소스 내 codex_review_snapshot_changed와 _write_codex_review_blocked_invalidation이
+    # 같은 함수 내 여러 곳에 있어야 한다.
+    snapshot_changed_count = src.count('"codex_review_snapshot_changed"')
+    assert snapshot_changed_count >= 4, (
+        f"REJECT#23 AC#2: codex_review_snapshot_changed 문자열이 소스에 {snapshot_changed_count}개뿐 — "
+        f"pre-CLI(3개) + post-CLI(1개) 총 4개 이상 필요 "
+        f"(pre-CLI HEAD, pre-CLI semantic, preflight mismatch, post-CLI snapshot)"
+    )
+
+    # _write_codex_review_blocked_invalidation 호출에 codex_review_snapshot_changed가 포함된 쌍이 있어야 함.
+    # 소스를 라인 단위로 확인하여 'codex_review_snapshot_changed'가 invalidation 호출 인자로 쓰이는지 검증.
+    lines = src.splitlines()
+    invalidation_with_snapshot = False
+    for i, line in enumerate(lines):
+        if "_write_codex_review_blocked_invalidation" in line:
+            # 다음 몇 줄 안에 codex_review_snapshot_changed가 있으면 인자로 포함된 것.
+            nearby = " ".join(lines[i:i+3])
+            if "codex_review_snapshot_changed" in nearby:
+                invalidation_with_snapshot = True
+                break
+    assert invalidation_with_snapshot, (
+        "REJECT#23 AC#2: _write_codex_review_blocked_invalidation 호출 중 "
+        "codex_review_snapshot_changed 인자를 사용하는 호출이 없음 — "
+        "snapshot 실패 시 generic review_in_progress만 남고 specific failure_code가 저장 안 됨"
+    )
+
+
+def test_tc38c_pipeline_manager_doc_critical_actual_verified_only() -> None:
+    """REJECT#23 AC#3: Pipeline Manager 문서가 CRITICAL의 actual_verified 필수 조건과
+    HIGH의 invocation_verified 허용 조건을 정확히 구분한다.
+
+    AC#3: 문서가 런타임과 일치하도록 CRITICAL actual_verified 필수 / HIGH invocation_verified 허용.
+    """
+    from pathlib import Path
+
+    # Pipeline Manager 문서 경로.
+    agent_md = (
+        Path(__file__).resolve().parent.parent.parent
+        / ".claude" / "agents" / "pipeline-manager-agent.md"
+    )
+    assert agent_md.exists(), (
+        f"REJECT#23 AC#3: pipeline-manager-agent.md가 없음 — {agent_md}"
+    )
+    doc = agent_md.read_text(encoding="utf-8")
+
+    # CRITICAL은 actual_verified 필수임을 문서가 명시해야 한다.
+    assert "actual_verified" in doc and "CRITICAL" in doc, (
+        "REJECT#23 AC#3: 문서에 CRITICAL과 actual_verified가 모두 없음"
+    )
+
+    # 이전 잘못된 문구("HIGH/CRITICAL은 최소 invocation_verified")가 없어야 한다.
+    assert "HIGH/CRITICAL은 최소 `invocation_verified`" not in doc, (
+        "REJECT#23 AC#3: 문서에 CRITICAL도 invocation_verified로 통과 가능하다는 잘못된 문구가 남아 있음 — "
+        "런타임은 CRITICAL+unknown을 unknown_model_critical_blocked로 차단하므로 불일치"
+    )
+
+    # CRITICAL은 actual_verified 필수, HIGH는 invocation_verified 허용이 구분되어야 한다.
+    # 두 조건을 각각 명시한 라인이 있어야 한다.
+    critical_actual_line = any(
+        "CRITICAL" in line and "actual_verified" in line
+        for line in doc.splitlines()
+    )
+    assert critical_actual_line, (
+        "REJECT#23 AC#3: CRITICAL과 actual_verified가 동일 라인에서 구분돼 있지 않음"
+    )
+    high_invocation_line = any(
+        "HIGH" in line and "invocation_verified" in line
+        for line in doc.splitlines()
+    )
+    assert high_invocation_line, (
+        "REJECT#23 AC#3: HIGH와 invocation_verified가 동일 라인에서 구분돼 있지 않음"
+    )

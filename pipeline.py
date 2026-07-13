@@ -24824,11 +24824,31 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             # 요구3: 실제 codex exec 실행 전 ChatGPT Plus 인증을 강제한다(API key/미로그인 차단).
             _auth = _check_codex_chatgpt_auth(codex_bin=_codex_bin_now)
             if _auth.get("result") != "OK":
+                # REJECT#23: 인증 실패 직전 해당 failure_code로 BLOCKED invalidation 저장 (review_in_progress 덮어쓰기).
+                _auth_fc = str(_auth.get("failure_code", "codex_not_chatgpt_authenticated"))
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, _auth_fc,
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
                 _die(
-                    f"[BLOCKED] failure_code={_auth.get('failure_code', 'codex_not_chatgpt_authenticated')}\n"
+                    f"[BLOCKED] failure_code={_auth_fc}\n"
                     f"  {_auth.get('message', 'ChatGPT Plus 인증 실패')} (fail-closed)."
                 )
-            _auth_source_str = str(_auth.get("auth_source", "chatgpt") or "chatgpt")
+            # REJECT#23: auth_source 기본값('chatgpt') 폴백 제거 — 정확히 'chatgpt'가 아니면 차단.
+            #   _check_codex_chatgpt_auth는 OK 시 항상 auth_source='chatgpt'를 반환하지만,
+            #   누락·변조 방어를 위해 명시적으로 검증한다(fail-closed).
+            _auth_source_str = str(_auth.get("auth_source", "") or "")
+            if _auth_source_str != "chatgpt":
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_auth_source_invalid",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
+                _die(
+                    f"[BLOCKED] failure_code=codex_auth_source_invalid\n"
+                    f"  auth_source={_auth_source_str!r}은 허용되지 않습니다. 정확히 'chatgpt'만 허용됩니다 (fail-closed)."
+                )
             # IMP-20260712-DAE1 REJECT#4: prompt는 disk bundle(원문 미포함)이 아니라 full-text
             #   semantic evidence를 주입한 bundle로 생성한다. disk bundle에는 nonce-scan/TC-J
             #   불변식을 위해 diff 원문을 persist하지 않으므로, prompt 생성 시점에 실제 diff hunk를
@@ -24870,12 +24890,24 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             except Exception:  # noqa: BLE001
                 _pre_cli_head_sha = ""
             if not _pre_cli_head_sha:
+                # REJECT#23: pre-CLI snapshot 실패 → codex_review_snapshot_changed로 저장 후 종료.
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_review_snapshot_changed",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
                 _die(
                     "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
                     "  pre-CLI HEAD SHA 수집 실패 — 저장소 상태를 확인하고 재실행하세요 (fail-closed)."
                 )
             _pre_cli_sem_sha = str(_sem_for_prompt.get("semantic_evidence_sha256", "") or "")
             if not _pre_cli_sem_sha:
+                # REJECT#23: pre-CLI semantic SHA 누락 → codex_review_snapshot_changed로 저장.
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_review_snapshot_changed",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
                 _die(
                     "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
                     "  pre-CLI semantic evidence SHA가 비어 있습니다 — bundle을 재생성하고 재실행하세요 (fail-closed)."
@@ -24884,6 +24916,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             #   둘 다 동일 입력으로 계산되므로 다르면 CLI 전에 상태가 변경된 것을 의미한다.
             _preflight_sem_sha = str(_preflight_bundle.get("semantic_evidence_sha256", "") or "")
             if _preflight_sem_sha and _preflight_sem_sha != _pre_cli_sem_sha:
+                # REJECT#23: preflight/prompt SHA 불일치 → codex_review_snapshot_changed로 저장.
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_review_snapshot_changed",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
                 _die(
                     "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
                     "  preflight bundle과 prompt의 semantic SHA가 다릅니다 — bundle이 갱신되었습니다.\n"
@@ -24988,6 +25026,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 elif _post_fn_shas != _pre_cli_fn_shas:
                     _post_snap_changed.append("function_before_after_shas")
             if _post_snap_changed:
+                # REJECT#23: post-CLI snapshot 변경 → codex_review_snapshot_changed로 effective 결과 저장 후 종료.
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_review_snapshot_changed",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
                 _die(
                     "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
                     "  Codex CLI 실행 중 저장소 상태가 변경되었거나 스냅샷 검증 불가입니다.\n"
