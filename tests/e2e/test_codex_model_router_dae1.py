@@ -671,16 +671,22 @@ def test_tc25h_request_accept_trust_gate_fail_closed_on_missing_router_version()
 
 
 def test_tc25i_request_accept_trust_gate_fail_closed_on_pipeline_id_mismatch() -> None:
-    """REJECT#5 회귀: pipeline_id 불일치 결과로 request-accept 경로가 BLOCKED돼야 한다.
-    _check_codex_review_operational_trust 검증 전 pipeline_id 체크 로직의 존재를 테스트.
-    실제 CLI 경로 테스트는 E2E이므로 여기서는 pipeline_id 불일치가 감지 가능한지만 확인."""
-    # pipeline_id가 일치하지 않는 경우 — _check_codex_review_operational_trust 자체는 통과할 수 있으나
-    # _cmd_gates_request_accept 내부에서 pipeline_id 불일치를 먼저 차단한다.
-    # 여기서는 구현에 pipeline_id 불일치 체크 코드가 존재하는지 inspect으로 검증.
+    """REJECT#5/7 회귀: pipeline_id 불일치/누락 차단 코드가 request-accept에 존재해야 한다.
+    REJECT#7: pipeline_id가 빈 문자열일 때도 차단해야 한다(기존 `if _result_pipeline_id and ...`
+    조건은 빈 값이면 검사를 건너뛰는 우회 경로가 있었음)."""
     import inspect
     src = inspect.getsource(pipeline._cmd_gates_request_accept)
-    assert "pipeline_id_mismatch" in src or "codex_review_pipeline_id_mismatch" in src, (
+    # pipeline_id 불일치 차단 코드 존재 확인.
+    assert "codex_review_pipeline_id_mismatch" in src, (
         "request-accept에 pipeline_id 불일치 차단 코드가 없습니다 (REJECT#5 요구사항)"
+    )
+    # REJECT#7: pipeline_id 누락/빈값도 별도 차단 코드가 있어야 한다.
+    assert "codex_review_pipeline_id_missing" in src, (
+        "request-accept에 pipeline_id 누락/빈값 차단 코드가 없습니다 (REJECT#7 요구사항)"
+    )
+    # pipeline_id가 비어 있으면 `not _result_pipeline_id` 분기에서 차단돼야 한다(fail-closed).
+    assert "not _result_pipeline_id" in src, (
+        "request-accept에서 빈 pipeline_id fail-closed 패턴이 없습니다 (REJECT#7 요구사항)"
     )
     assert "router_version_missing" in src, (
         "request-accept에 router_version 누락 차단 코드가 없습니다 (REJECT#5 요구사항)"

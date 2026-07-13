@@ -27541,9 +27541,24 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         #   신뢰 게이트를 우회하는 다운그레이드 경로를 차단한다(fail-closed).
         #   레거시 결과(router_version 없음)는 명시적 마이그레이션 없이 legacy 경로를 허용하지 않는다.
         if isinstance(_cx_trust_raw, dict) and _cx_trust_raw:
-            # (A) pipeline_id 불일치 → 즉시 차단(다른 파이프라인 결과 재사용 금지).
+            # (A) pipeline_id 검증 — 누락/빈값도 차단(fail-closed).
+            #   IMP-20260712-DAE1 REJECT#7: pipeline_id가 없거나 빈 문자열이면 즉시 차단한다.
+            #   기존 `if _result_pipeline_id and _result_pipeline_id != pipeline_id` 조건은
+            #   pipeline_id가 빈 문자열일 때 검사를 건너뛰는 우회 경로가 있었다 — 수정.
             _result_pipeline_id = str(_cx_trust_raw.get("pipeline_id", "") or "")
-            if _result_pipeline_id and _result_pipeline_id != pipeline_id:
+            if not _result_pipeline_id:
+                _log_event(
+                    state,
+                    "request-accept blocked: codex_review_result missing pipeline_id (fail-closed)",
+                )
+                _save(state)
+                _die(
+                    "[BLOCKED] failure_code=codex_review_pipeline_id_missing\n"
+                    "  codex_review_result에 pipeline_id가 없거나 비어 있습니다 (fail-closed).\n"
+                    "  gates codex-review를 재실행하세요."
+                )
+                return  # unreachable
+            if _result_pipeline_id != pipeline_id:
                 _log_event(
                     state,
                     f"request-accept blocked: codex_review_result pipeline_id mismatch "
