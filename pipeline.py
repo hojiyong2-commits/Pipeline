@@ -24596,6 +24596,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _codex_cli_command_real = ""
     # IMP-20260712-DAE1 REJECT#4: 실제 Codex에 전달한 prompt(stdin) 원문과 SHA(증거 기록용).
     _prompt_text = ""
+    # REJECT#16: _sem_for_prompt는 auto-invoke 경로에서만 할당된다. cache/external 경로에서는 {}로
+    #   유지하여 result recording이 _preflight_bundle 값으로 안전하게 fallback한다.
+    _sem_for_prompt: Dict[str, Any] = {}
+    # REJECT#16: pre-CLI snapshot 변수 초기화. auto-invoke 경로에서만 실제 값이 채워진다.
+    _pre_cli_head_sha = ""
+    _pre_cli_sem_sha = ""
+    _pre_cli_fn_shas: Dict[str, Any] = {}
     _actual_effort_str = "unknown"
     _model_source_str = "unknown"
     # IMP-20260712-DAE1 REJECT#3(요구4/8): invoked/verification/auth 증거 필드.
@@ -24761,6 +24768,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     f"  {_pv_exc}\n"
                     "  git diff origin/main...HEAD를 확인하고 bundle을 재생성하세요 (fail-closed)."
                 )
+            # REJECT#16: Codex CLI 실행 직전 — HEAD/bundle SHA/semantic evidence SHA/함수 SHA를
+            #   immutable identity로 고정한다. CLI 종료 후 재계산하여 동일성을 검증한다.
+            try:
+                _hd_r = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    capture_output=True, text=True, timeout=10,
+                    cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+                )
+                if _hd_r.returncode == 0:
+                    _pre_cli_head_sha = _hd_r.stdout.strip()
+            except Exception:  # noqa: BLE001 — git 실패는 검증 skip(빈 문자열 유지)
+                pass
+            _pre_cli_sem_sha = str(_sem_for_prompt.get("semantic_evidence_sha256", "") or "")
+            _pre_cli_fn_shas = dict(_sem_for_prompt.get("function_before_after_shas", {}) or {})
             _auto_run = _invoke_codex_exec(
                 _selected_model_now,
                 _selected_effort_now,
@@ -24812,6 +24833,54 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             # `(0 or -1) == -1`이 되어 invocation_ok가 항상 False가 되는 버그 수정.
             # `.get("exit_code")` 반환값 자체가 None인 경우에만 미실행으로 간주한다.
             _invocation_ok = _raw_exit == 0
+            # REJECT#16: CLI 종료 직후 — HEAD/semantic evidence SHA/함수 SHA를 재계산하고
+            #   pre-CLI snapshot과 비교한다. 하나라도 달라지면 fail-closed로 차단한다.
+            #   (cli가 성공 종료 + pre-CLI snapshot이 기록된 경우에만 검증한다.)
+            if _pre_cli_head_sha:
+                _post_snap_changed: List[str] = []
+                # (a) HEAD SHA 재확인
+                try:
+                    _post_hd = subprocess.run(
+                        ["git", "rev-parse", "HEAD"],
+                        capture_output=True, text=True, timeout=10,
+                        cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+                    )
+                    _post_head_sha = (
+                        _post_hd.stdout.strip() if _post_hd.returncode == 0 else ""
+                    )
+                except Exception:  # noqa: BLE001
+                    _post_head_sha = ""
+                if _post_head_sha and _post_head_sha != _pre_cli_head_sha:
+                    _post_snap_changed.append("head_sha")
+                # (b) semantic evidence SHA 재계산
+                _post_sem_sha = ""
+                _post_fn_shas: Dict[str, Any] = {}
+                try:
+                    _post_sem_data = _build_codex_semantic_evidence(
+                        pipeline_id,
+                        list(_preflight_bundle.get("changed_files", []) or []),
+                        list(_preflight_bundle.get("included_functions", []) or []),
+                    )
+                    _post_sem_sha = str(
+                        _post_sem_data.get("semantic_evidence_sha256", "") or ""
+                    )
+                    _post_fn_shas = dict(
+                        _post_sem_data.get("function_before_after_shas", {}) or {}
+                    )
+                except Exception:  # noqa: BLE001 — 재계산 실패 시 검증 skip(비교 불가)
+                    pass
+                if _pre_cli_sem_sha and _post_sem_sha and _post_sem_sha != _pre_cli_sem_sha:
+                    _post_snap_changed.append("semantic_evidence_sha")
+                if _pre_cli_fn_shas and _post_fn_shas and _post_fn_shas != _pre_cli_fn_shas:
+                    _post_snap_changed.append("function_before_after_shas")
+                if _post_snap_changed:
+                    _die(
+                        "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
+                        "  Codex CLI 실행 중 저장소 상태가 변경되었습니다.\n"
+                        f"  변경된 차원: {', '.join(_post_snap_changed)}\n"
+                        "  승인 결과와 캐시가 무효화됩니다 — gates codex-review를 재실행하세요.\n"
+                        "  (fail-closed: 변경 전 코드를 승인한 결과는 저장되지 않습니다.)"
+                    )
             _match = _check_codex_model_capability_match(
                 _selected_model_now, _selected_effort_now,
                 _invoked_model_str, _invoked_effort_str,
@@ -25310,22 +25379,36 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "codex_model": _actual_model_str,
         "model_source": _model_source_str,
         # IMP-20260712-DAE1 REJECT#4: semantic evidence 증거 필드.
+        # REJECT#16: auto-invoke 경로에서는 _sem_for_prompt(실제 프롬프트 생성에 사용한 evidence)의
+        #   SHA와 함수 SHA를 우선 기록한다. cache/external 경로에서는 _sem_for_prompt={}이므로
+        #   _preflight_bundle 값으로 fallback한다.
         "prompt_sha256": (
             hashlib.sha256(_prompt_text.encode("utf-8")).hexdigest()
             if _prompt_text else ""
         ),
         "semantic_evidence_sha256": str(
-            _preflight_bundle.get("semantic_evidence_sha256", "") or ""
+            _sem_for_prompt.get("semantic_evidence_sha256")
+            or _preflight_bundle.get("semantic_evidence_sha256", "") or ""
         ),
-        "included_diff_hunks": len(_preflight_bundle.get("diff_hunks", []) or []),
+        "included_diff_hunks": (
+            len(_sem_for_prompt["diff_hunks"])
+            if _sem_for_prompt.get("diff_hunks") is not None
+            else len(_preflight_bundle.get("diff_hunks", []) or [])
+        ),
         "included_function_before_after_sha256": dict(
-            _preflight_bundle.get("function_before_after_shas", {}) or {}
-        ),
+            (_sem_for_prompt.get("function_before_after_shas") or {})
+            if _sem_for_prompt.get("function_before_after_shas") is not None
+            else (_preflight_bundle.get("function_before_after_shas", {}) or {})
+        ),  # type: ignore[arg-type]
         "truncated_critical_hunks": int(
-            _preflight_bundle.get("truncated_critical_hunks", 0) or 0
+            (_sem_for_prompt.get("truncated_critical_hunks") or 0)
+            if _sem_for_prompt.get("truncated_critical_hunks") is not None
+            else (_preflight_bundle.get("truncated_critical_hunks", 0) or 0)
         ),
         "evidence_complete": bool(
-            _preflight_bundle.get("evidence_complete", False)
+            _sem_for_prompt.get("evidence_complete")
+            if "evidence_complete" in _sem_for_prompt
+            else _preflight_bundle.get("evidence_complete", False)
         ),
     }
 

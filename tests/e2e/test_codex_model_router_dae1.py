@@ -1069,3 +1069,74 @@ def test_tc30c_evidence_complete_true_with_current_diff() -> None:
         f"REJECT#15: truncated_critical_hunks={bundle.get('truncated_critical_hunks')} != 0 "
         "(tc11 oracle 파일이 아직 예산 초과)"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-31: REJECT#16 — pre/post CLI snapshot 동일성 검증
+# --------------------------------------------------------------------------- #
+
+def test_tc31a_pre_cli_snapshot_capture_exists() -> None:
+    """REJECT#16: _cmd_gates_codex_review에 pre-CLI HEAD/semantic evidence SHA 캡처 코드가 있어야 한다.
+    acceptance_criteria[3]: CLI 종료 후 HEAD, semantic evidence SHA 등이 달라지면 차단."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    assert "_pre_cli_head_sha" in src, (
+        "REJECT#16: _pre_cli_head_sha 변수 없음 — pre-CLI HEAD 캡처 누락"
+    )
+    assert "_pre_cli_sem_sha" in src, (
+        "REJECT#16: _pre_cli_sem_sha 변수 없음 — pre-CLI semantic evidence SHA 캡처 누락"
+    )
+    assert "_pre_cli_fn_shas" in src, (
+        "REJECT#16: _pre_cli_fn_shas 변수 없음 — pre-CLI 함수 SHA 캡처 누락"
+    )
+
+
+def test_tc31b_snapshot_changed_failure_code_exists() -> None:
+    """REJECT#16: _cmd_gates_codex_review에 codex_review_snapshot_changed failure_code가 있어야 한다.
+    acceptance_criteria[1/3]: 변경 감지 시 차단 + 캐시/승인 결과 생성 금지."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    assert "codex_review_snapshot_changed" in src, (
+        "REJECT#16: codex_review_snapshot_changed failure_code 없음 — 변경 감지 차단 미구현"
+    )
+    assert "_post_snap_changed" in src, (
+        "REJECT#16: _post_snap_changed 비교 변수 없음 — post-CLI snapshot 비교 로직 누락"
+    )
+    # fail-closed: 변경 시 _die를 호출해야 함
+    assert "_die(" in src and "codex_review_snapshot_changed" in src, (
+        "REJECT#16: _die(...)를 통한 fail-closed 차단이 없음"
+    )
+
+
+def test_tc31c_sem_sha_stable_when_no_change() -> None:
+    """REJECT#16 acceptance_criteria[2]: 변경이 없을 때 semantic evidence SHA는 두 번 호출해도 동일해야 한다.
+    (no-change 실행에서 pre-CLI == post-CLI → false positive 없음)"""
+    import json
+    from pathlib import Path
+
+    try:
+        ar = Path(".pipeline/active_run.json")
+        ptr = json.loads(ar.read_text(encoding="utf-8"))
+        sp = ptr.get("state_path")
+        state = json.loads(Path(sp).read_text(encoding="utf-8"))
+        pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+    except Exception:
+        state = {}
+        pid = "IMP-20260712-DAE1"
+
+    # bundle에서 changed_files/included_functions를 가져와 동일 입력으로 두 번 호출한다.
+    _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
+    bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
+    cf = list(bundle.get("changed_files", []) or [])
+    funcs = list(bundle.get("included_functions", []) or [])
+
+    sem1 = pipeline._build_codex_semantic_evidence(pid, cf, funcs)
+    sem2 = pipeline._build_codex_semantic_evidence(pid, cf, funcs)
+
+    sha1 = str(sem1.get("semantic_evidence_sha256", "") or "")
+    sha2 = str(sem2.get("semantic_evidence_sha256", "") or "")
+    assert sha1, "REJECT#16: semantic_evidence_sha256가 빈 문자열 — SHA 계산 실패"
+    assert sha1 == sha2, (
+        f"REJECT#16: 동일 입력에서 semantic_evidence_sha256이 달라짐 — false positive 위험\n"
+        f"  sha1={sha1}\n  sha2={sha2}"
+    )
