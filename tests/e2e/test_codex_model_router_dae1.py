@@ -691,3 +691,77 @@ def test_tc25i_request_accept_trust_gate_fail_closed_on_pipeline_id_mismatch() -
     assert "router_version_missing" in src, (
         "request-accept에 router_version 누락 차단 코드가 없습니다 (REJECT#5 요구사항)"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-26 시리즈: REJECT#9 — plaintext REJECT fallback 제거 + structured 필드 보존
+# --------------------------------------------------------------------------- #
+
+def test_tc26a_plaintext_reject_ndjson_becomes_parse_failure() -> None:
+    """REJECT#9: NDJSON agent_message.text의 'REJECT - reason' plaintext는
+    4-필드 검증을 우회하므로 parse_failure ERROR로 처리돼야 한다(REJECTED 아님)."""
+    ndjson_line = (
+        '{"type":"item.completed","item":{"type":"agent_message","text":"REJECT - security issue"}}'
+    )
+    result = pipeline._run_codex_cli_review(0, ndjson_line, "")
+    assert result["status"] != "REJECTED", (
+        f"REJECT#9: NDJSON plaintext REJECT는 REJECTED가 아니라 ERROR여야 한다. got status={result['status']!r}"
+    )
+    assert result.get("error_type") == "parse_failure", (
+        f"REJECT#9: NDJSON plaintext REJECT는 parse_failure ERROR여야 한다. got error_type={result.get('error_type')!r}"
+    )
+
+
+def test_tc26b_plaintext_reject_legacy_becomes_parse_failure() -> None:
+    """REJECT#9: stdout이 'REJECT - reason' plaintext인 경우도
+    4-필드 검증 없이 REJECTED가 아니라 parse_failure ERROR여야 한다."""
+    result = pipeline._run_codex_cli_review(0, "REJECT - unauthorized bypass detected", "")
+    assert result["status"] != "REJECTED", (
+        f"REJECT#9: legacy plaintext REJECT는 REJECTED가 아니라 ERROR여야 한다. got status={result['status']!r}"
+    )
+    assert result.get("error_type") == "parse_failure", (
+        f"REJECT#9: legacy plaintext REJECT는 parse_failure ERROR여야 한다. got error_type={result.get('error_type')!r}"
+    )
+
+
+def test_tc26c_json_reject_preserves_structured_fields() -> None:
+    """REJECT#9: JSON verdict REJECT가 _parse_json_verdict를 통과하면
+    root_cause/reproduction/required_fix/acceptance_criteria가 반환 dict에 보존돼야 한다."""
+    verdict_json = (
+        '{"verdict":"REJECT","root_cause":"test root","reproduction":"repro","'
+        'required_fix":"fix desc","acceptance_criteria":["criteria1"]}'
+    )
+    result = pipeline._run_codex_cli_review(0, verdict_json, "")
+    assert result["status"] == "REJECTED", f"유효한 JSON REJECT는 REJECTED여야 한다. got {result['status']!r}"
+    assert result.get("root_cause") == "test root", f"root_cause 보존 실패: {result.get('root_cause')!r}"
+    assert result.get("reproduction") == "repro", f"reproduction 보존 실패: {result.get('reproduction')!r}"
+    assert result.get("required_fix") == "fix desc", f"required_fix 보존 실패: {result.get('required_fix')!r}"
+    assert result.get("acceptance_criteria") == ["criteria1"], (
+        f"acceptance_criteria 보존 실패: {result.get('acceptance_criteria')!r}"
+    )
+
+
+def test_tc26d_ndjson_json_reject_preserves_structured_fields() -> None:
+    """REJECT#9: NDJSON agent_message.text가 JSON verdict인 경우에도
+    structured 필드가 반환 dict에 보존돼야 한다."""
+    import json as _json
+    inner_json_str = _json.dumps({
+        "verdict": "REJECT",
+        "root_cause": "rc",
+        "reproduction": "rp",
+        "required_fix": "rf",
+        "acceptance_criteria": ["ac1", "ac2"],
+    })
+    # NDJSON 라인을 올바르게 JSON 직렬화한다 (text 안의 큰따옴표가 이스케이프됨).
+    ndjson_line = _json.dumps({
+        "type": "item.completed",
+        "item": {"type": "agent_message", "text": inner_json_str},
+    })
+    result = pipeline._run_codex_cli_review(0, ndjson_line, "")
+    assert result["status"] == "REJECTED", f"NDJSON JSON REJECT는 REJECTED여야 한다. got {result['status']!r}"
+    assert result.get("root_cause") == "rc", f"root_cause 보존 실패: {result.get('root_cause')!r}"
+    assert result.get("reproduction") == "rp", f"reproduction 보존 실패: {result.get('reproduction')!r}"
+    assert result.get("required_fix") == "rf", f"required_fix 보존 실패: {result.get('required_fix')!r}"
+    assert result.get("acceptance_criteria") == ["ac1", "ac2"], (
+        f"acceptance_criteria 보존 실패: {result.get('acceptance_criteria')!r}"
+    )
