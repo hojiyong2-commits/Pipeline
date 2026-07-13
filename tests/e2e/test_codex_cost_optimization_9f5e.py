@@ -196,10 +196,19 @@ def test_tc1_usage_limit_is_error_not_reject(isolated_pipeline):
 # ---------------------------------------------------------------------------
 def test_tc2_explicit_reject_increments_reject_count(isolated_pipeline):
     tmp_path, state_file = isolated_pipeline
+    # REJECT#9: plaintext "REJECT - ..." 대신 4-필드 JSON REJECT를 사용해야 한다.
+    import json as _json
+    _reject_payload = _json.dumps({
+        "verdict": "REJECT",
+        "root_cause": "packet SHA mismatch detected",
+        "reproduction": "run with mismatched packet SHA",
+        "required_fix": "ensure packet SHA matches before acceptance",
+        "acceptance_criteria": ["packet SHA matches on gates accept"],
+    })
     result = _run_codex_review(
         tmp_path, state_file,
         "--codex-cli-exit-code", "0",
-        "--codex-cli-stdout", "REJECT - packet SHA mismatch detected",
+        "--codex-cli-stdout", _reject_payload,
         "--packet-sha256", DUMMY_PACKET_SHA,
     )
     final = _read_codex_result(tmp_path)
@@ -208,7 +217,6 @@ def test_tc2_explicit_reject_increments_reject_count(isolated_pipeline):
     assert final["reject_count"] == 1, final
     assert final["cli_error_count"] == 0, final
     assert final["verdict"] == "REJECT", final
-    assert final["reject_reason"] == "packet SHA mismatch detected", final
     assert final["acceptance_eligible"] is False, final
 
 
@@ -400,7 +408,8 @@ def test_tc9_retry_cli_error_same_snapshot_allows_new_attempt(isolated_pipeline)
     # 새 attempt_id가 생성되어 이전 값과 달라야 한다.
     assert final.get("attempt_id", "").startswith("cr-"), final
     assert final["attempt_id"] != "cr-prevattempt01", "retry는 새 attempt_id를 발급해야 함"
-    assert final["acceptance_eligible"] is True, final
+    # REJECT#12: --codex-cli-* 주입은 항상 acceptance_eligible=False (테스트 격리 주입 경로)
+    assert final["acceptance_eligible"] is False, final
 
 
 # ---------------------------------------------------------------------------
@@ -480,22 +489,39 @@ def test_tc13_parse_failure_and_json_verdict_cases(isolated_pipeline):
     f = run_and_read("--codex-cli-exit-code", "0", "--codex-cli-stdout", "REJECT")
     assert f["status"] == "ERROR" and f["error_type"] == "parse_failure", f
 
-    # valid "REJECT - some reason" → REJECTED (legacy fallback).
+    # REJECT#9: plaintext "REJECT - some reason" → parse_failure ERROR (legacy fallback 제거됨).
     f = run_and_read(
         "--codex-cli-exit-code", "0",
         "--codex-cli-stdout", "REJECT - genuine reason here",
         "--packet-sha256", DUMMY_PACKET_SHA,
     )
-    assert f["status"] == "REJECTED" and f["verdict"] == "REJECT", f
-    assert f["reject_reason"] == "genuine reason here", f
+    assert f["status"] == "ERROR" and f.get("error_type") == "parse_failure", f
 
-    # JSON {"verdict": "REJECT", "reason": "too short"} → REJECTED (JSON protocol).
+    # REJECT#9: JSON REJECT는 4-필드(root_cause/reproduction/required_fix/acceptance_criteria) 필수.
+    # 이전 {"verdict":"REJECT","reason":"..."} 형식 → parse_failure ERROR (필드 부족).
     f = run_and_read(
         "--codex-cli-exit-code", "0",
         "--codex-cli-stdout", '{"verdict": "REJECT", "reason": "too short"}',
         "--packet-sha256", DUMMY_PACKET_SHA,
     )
-    assert f["status"] == "REJECTED" and f["reject_reason"] == "too short", f
+    assert f["status"] == "ERROR" and f.get("error_type") == "parse_failure", f
+
+    # 4-필드 JSON REJECT → REJECTED (올바른 REJECT 프로토콜).
+    import json as _json
+    _valid_reject = _json.dumps({
+        "verdict": "REJECT",
+        "root_cause": "genuine reason here",
+        "reproduction": "reproduce by running review",
+        "required_fix": "fix the genuine issue",
+        "acceptance_criteria": ["issue resolved"],
+    })
+    f = run_and_read(
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", _valid_reject,
+        "--packet-sha256", DUMMY_PACKET_SHA,
+    )
+    assert f["status"] == "REJECTED" and f["verdict"] == "REJECT", f
+    assert f.get("root_cause") == "genuine reason here", f
 
     # JSON {"verdict": "APPROVE_TO_USER"} → APPROVED (JSON protocol).
     f = run_and_read(
@@ -516,11 +542,20 @@ def test_tc13_parse_failure_and_json_verdict_cases(isolated_pipeline):
 def test_tc14_reject_count_not_increased_on_parse_failure(isolated_pipeline):
     tmp_path, state_file = isolated_pipeline
 
-    # 1차: 유효 REJECT → reject_count=1.
+    # 1차: 유효 REJECT (4-필드 JSON) → reject_count=1.
+    # REJECT#9: plaintext "REJECT - ..." 대신 4-필드 JSON REJECT 사용
+    import json as _json
+    _valid_reject_14 = _json.dumps({
+        "verdict": "REJECT",
+        "root_cause": "real reason",
+        "reproduction": "real reproduction steps",
+        "required_fix": "real fix required",
+        "acceptance_criteria": ["real criteria"],
+    })
     _run_codex_review(
         tmp_path, state_file,
         "--codex-cli-exit-code", "0",
-        "--codex-cli-stdout", "REJECT - real reason",
+        "--codex-cli-stdout", _valid_reject_14,
         "--packet-sha256", DUMMY_PACKET_SHA,
     )
     first = _read_codex_result(tmp_path)
@@ -553,10 +588,19 @@ def test_tc10_error_then_retry_success_preserves_verdict(isolated_pipeline):
     first = _read_codex_result(tmp_path)
     assert first["status"] == "ERROR"
     # 2차: --retry-cli-error로 재시도, 이번엔 REJECT verdict.
+    # REJECT#9: 4-필드 JSON REJECT 사용 (plaintext 제거됨)
+    import json as _json
+    _r2_payload = _json.dumps({
+        "verdict": "REJECT",
+        "root_cause": "contract audit failed",
+        "reproduction": "re-run codex review with failed contract",
+        "required_fix": "fix contract audit failures before acceptance",
+        "acceptance_criteria": ["contract audit passes on retry"],
+    })
     _run_codex_review(
         tmp_path, state_file,
         "--codex-cli-exit-code", "0",
-        "--codex-cli-stdout", "REJECT - contract audit failed",
+        "--codex-cli-stdout", _r2_payload,
         "--packet-sha256", DUMMY_PACKET_SHA,
         "--retry-cli-error",
     )
@@ -733,10 +777,25 @@ def test_tc_json_verdict_reject_count():
     sys.path.insert(0, str(Path(__file__).parents[2]))
     from pipeline import _run_codex_cli_review
 
-    json_reject = '{"schema_version":1,"verdict":"REJECT","reason":"security issue"}'
+    # REJECT#9: JSON REJECT는 4-필드(root_cause/reproduction/required_fix/acceptance_criteria) 필수.
+    # {"verdict":"REJECT","reason":"..."} 단순 형식 → parse_failure ERROR (필드 부족).
+    import json as _json_tc
+    _simple_reject = '{"schema_version":1,"verdict":"REJECT","reason":"security issue"}'
+    result_simple = _run_codex_cli_review(0, _simple_reject, "")
+    assert result_simple["status"] == "ERROR", result_simple
+    assert result_simple.get("error_type") == "parse_failure", result_simple
+
+    # 4-필드 JSON REJECT → REJECTED.
+    json_reject = _json_tc.dumps({
+        "verdict": "REJECT",
+        "root_cause": "security issue",
+        "reproduction": "trigger security check",
+        "required_fix": "fix the security issue",
+        "acceptance_criteria": ["security check passes"],
+    })
     result = _run_codex_cli_review(0, json_reject, "")
     assert result["status"] == "REJECTED", result
-    assert result["reject_reason"] == "security issue", result
+    assert result.get("root_cause") == "security issue", result
 
     # verdict 값이 유효 집합(APPROVE_TO_USER/REJECT) 밖이면 승격하지 않고 parse_failure ERROR.
     bad_json = '{"schema_version":1,"verdict":"REJECTED","reason":"oops"}'

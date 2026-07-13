@@ -1010,3 +1010,62 @@ def test_tc29e_effective_force_review_bypasses_cache_in_source() -> None:
     assert "if effective_force_review:" in src, (
         "REJECT#14: _cmd_gates_codex_review에 `if effective_force_review:` 분기가 없습니다"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-30 시리즈: REJECT#15 — evidence_complete=False 이중 계산 버그 + 예산 확장
+#   - 원인 1: tc11 oracle 파일 diff(~640자)가 65000자 예산을 초과해 잘림
+#   - 원인 2: budget 단계 + cross-validation 단계에서 같은 항목이 이중 계산됨
+#   - 수정 1: CODEX_REVIEW_BUNDLE_BUDGET_CHARS 65000→70000
+#   - 수정 2: cross-validation 시작 시 _truncated_crit=0 리셋으로 단일 계산 보장
+# --------------------------------------------------------------------------- #
+
+def test_tc30a_bundle_budget_sufficient_for_tc11_oracles() -> None:
+    """REJECT#15: CODEX_REVIEW_BUNDLE_BUDGET_CHARS가 tc11 oracle 파일 포함 총 diff를
+    수용해야 한다. tc11 diff ~640자 포함 총 ~65270자 수용을 위해 최소 66000자 이상이어야 한다."""
+    assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 66000, (
+        f"REJECT#15: 예산이 tc11 oracle을 수용하지 못합니다: "
+        f"{pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 66000"
+    )
+
+
+def test_tc30b_cross_validation_resets_truncated_crit() -> None:
+    """REJECT#15: _build_codex_semantic_evidence의 cross-validation이 budget 단계의
+    누적값을 덮어쓰지 않도록 _truncated_crit=0 리셋 코드가 있어야 한다."""
+    import inspect
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+    assert "_truncated_crit = 0  # REJECT#15" in src, (
+        "REJECT#15: cross-validation 직전 _truncated_crit=0 리셋 코드가 없습니다 "
+        "(budget 단계 이중 계산 방지 미적용)"
+    )
+
+
+def test_tc30c_evidence_complete_true_with_current_diff() -> None:
+    """REJECT#15: 현재 repo diff로 bundle을 빌드하면 evidence_complete=True여야 한다.
+    tc11 oracle 파일이 예산 내에 들어오고 cross-validation이 통과해야 한다."""
+    import json
+    from pathlib import Path
+
+    # active_run.json에서 pipeline_id + state 로드
+    try:
+        ar = Path(".pipeline/active_run.json")
+        ptr = json.loads(ar.read_text(encoding="utf-8"))
+        sp = ptr.get("state_path")
+        state = json.loads(Path(sp).read_text(encoding="utf-8"))
+        pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+    except Exception:
+        state = {}
+        pid = "IMP-20260712-DAE1"
+
+    _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
+    bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
+
+    assert bundle.get("evidence_complete") is True, (
+        f"REJECT#15: evidence_complete가 True가 아닙니다. "
+        f"truncated_critical_hunks={bundle.get('truncated_critical_hunks')}, "
+        f"budget_used={bundle.get('bundle_budget_chars')}"
+    )
+    assert bundle.get("truncated_critical_hunks", 1) == 0, (
+        f"REJECT#15: truncated_critical_hunks={bundle.get('truncated_critical_hunks')} != 0 "
+        "(tc11 oracle 파일이 아직 예산 초과)"
+    )

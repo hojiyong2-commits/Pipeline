@@ -2447,7 +2447,7 @@ CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
 #   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
 #   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
-CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 65000  # IMP-20260712-DAE1 REJECT#10: 30000→65000 (_cmd_gates_codex_review + 비Python CRITICAL 파일 포함 총 57397자 수용)
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 70000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000 (tc11 oracle 파일 포함 총 ~65270자 수용)
 
 
 class _CodexCacheSkipError(Exception):
@@ -8992,8 +8992,12 @@ def _build_codex_semantic_evidence(
     # function_before_after_shas에 포함된 각 CRITICAL 함수와 비Python CRITICAL 파일이
     # _selected(예산 내 선택된 hunks)에 실제로 포함됐는지 대조한다.
     # 하나라도 누락 → _truncated_crit 증가 → evidence_complete=False (fail-closed).
+    # REJECT#15: cross-validation은 budget 단계의 누적값을 덮어쓴다(이중 계산 방지).
+    #   budget 단계에서 잘린 hunk는 _selected에 없으므로 cross-validation이 자동으로 검출한다.
+    #   _truncated_crit을 0으로 리셋하고 _covered_ids 기준으로 단일 계산한다.
     try:
         _covered_ids = {h["function"] for h in _selected}
+        _truncated_crit = 0  # REJECT#15: budget 이중 계산 방지 — cross-validation만 단일 기준
         for _k in _fas:
             # key 형식: "pipeline.py::함수명" → 함수명 부분만 추출
             _fn_name = _k.split("::")[-1] if "::" in _k else _k
@@ -24664,7 +24668,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         if not _explicit_verdict and not _explicit_cli and _cached_v == "APPROVE":
             # cache hit 재사용 전 7개 live SHA 재검증(문제2). 하나라도 다르면 BLOCKED.
             _live_chk = _verify_codex_cache_live_shas(
-                _cache_probe.get("live_sha_snapshot"), state, pipeline_id
+                _cache_probe.get("live_sha_snapshot"),  # type: ignore[arg-type]
+                state, pipeline_id
             )
             if not _live_chk["ok"]:
                 _die(
