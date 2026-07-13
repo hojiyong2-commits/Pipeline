@@ -2351,6 +2351,14 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_load_acceptance_staging",
     "_check_codex_review_gate",
     "_check_codex_pr_body_sha_invariant",
+    # IMP-20260712-DAE1 REJECT#8: 보안 신뢰 판정·모델 검증·CLI 실행·파싱·캐시 함수 추가.
+    #   이 함수들만 변경해도 Codex Review 보안 경계를 우회할 수 있으므로 CRITICAL 분류.
+    "_check_codex_review_operational_trust",
+    "_run_codex_cli_review",
+    "_parse_json_verdict",
+    "_codex_policy_signature",
+    "_codex_cache_key",
+    "_check_codex_cache",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -2436,7 +2444,7 @@ CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
 #   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
 #   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
-CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 24000  # IMP-20260712-DAE1 REJECT#8: 16000→24000 (CRITICAL hunk 합산 16431자 수용)
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 30000  # IMP-20260712-DAE1 REJECT#8: 16000→24000→30000 (신규 CRITICAL 함수 6개 추가로 총 27151자 수용)
 
 
 class _CodexCacheSkipError(Exception):
