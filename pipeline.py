@@ -10220,7 +10220,10 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
             }
 
     # NDJSON fallback: real codex exec outputs verdict in agent_message items.
+    # REJECT#19: 전체 NDJSON을 끝까지 수집한 뒤 판정을 결정한다.
+    #   복수/상충 판정이 있으면 parse_failure(fail-closed). 단일만 허용.
     if _json_verdict is None:
+        _ndjson_verdicts: List[Dict[str, Any]] = []
         for _ndjson_line in stripped.splitlines():
             _ndjson_line = _ndjson_line.strip()
             if not _ndjson_line:
@@ -10238,57 +10241,64 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                 _agent_text = str(_ndjson_obj["item"].get("text", "") or "").strip()
                 _at_upper = _agent_text.upper()
                 if _at_upper == "APPROVE_TO_USER":
-                    return {
-                        "status": "APPROVED",
-                        "error_type": None,
-                        "error_retryable": False,
-                        "codex_cli_exit_code": exit_code,
-                        "codex_cli_stdout_excerpt": stdout[:200],
-                        "codex_cli_stderr_excerpt": stderr[:200],
-                        "verdict": "APPROVE_TO_USER",
-                        "reject_reason": None,
-                    }
-                # IMP-20260712-DAE1 bugfix#5: 모델이 agent_message.text에 JSON 형식으로
-                # verdict를 반환하는 경우 처리. 프롬프트가 JSON 출력을 요청하므로
-                # text가 {"verdict":"APPROVE_TO_USER"} 또는 {"verdict":"REJECT",...} 형태일 수 있음.
-                if _agent_text.startswith("{"):
+                    _ndjson_verdicts.append({"kind": "APPROVE"})
+                elif _agent_text.startswith("{"):
+                    # IMP-20260712-DAE1 bugfix#5: JSON verdict in agent_message.text
                     _inner_parsed = _parse_json_verdict(_agent_text)
                     if _inner_parsed is not None:
                         if _inner_parsed["verdict"] == "APPROVED":
-                            return {
-                                "status": "APPROVED",
-                                "error_type": None,
-                                "error_retryable": False,
-                                "codex_cli_exit_code": exit_code,
-                                "codex_cli_stdout_excerpt": stdout[:200],
-                                "codex_cli_stderr_excerpt": stderr[:200],
-                                "verdict": "APPROVE_TO_USER",
-                                "reject_reason": None,
-                            }
-                        if _inner_parsed["verdict"] == "REJECTED":
-                            # IMP-20260712-DAE1 REJECT#9: structured 필드 보존.
-                            return {
-                                "status": "REJECTED",
-                                "error_type": None,
-                                "error_retryable": False,
-                                "codex_cli_exit_code": exit_code,
-                                "codex_cli_stdout_excerpt": stdout[:200],
-                                "codex_cli_stderr_excerpt": stderr[:200],
-                                "verdict": "REJECT",
-                                "reject_reason": _inner_parsed.get("reason") or None,
-                                "root_cause": _inner_parsed.get("root_cause") or None,
-                                "reproduction": _inner_parsed.get("reproduction") or None,
-                                "required_fix": _inner_parsed.get("required_fix") or None,
-                                "acceptance_criteria": _inner_parsed.get("acceptance_criteria") or None,
-                            }
-                # IMP-20260712-DAE1 REJECT#9: plaintext "REJECT - reason" in agent_message.text는
-                # _parse_json_verdict의 4-필드 구조화 검증을 우회하므로 parse_failure ERROR로 처리.
-                # 모든 REJECT 경로는 _parse_json_verdict를 통해 4-필드 검증을 반드시 통과해야 한다.
-                _m_reject = re.match(r"^REJECT\s+-\s+\S", _agent_text, re.IGNORECASE)
-                if _m_reject:
-                    base["error_type"] = "parse_failure"
-                    base["error_retryable"] = False
-                    return base
+                            _ndjson_verdicts.append({"kind": "APPROVE"})
+                        elif _inner_parsed["verdict"] == "REJECTED":
+                            _ndjson_verdicts.append({
+                                "kind": "REJECT",
+                                "parsed": _inner_parsed,
+                            })
+                elif re.match(r"^REJECT\s+-\s+\S", _agent_text, re.IGNORECASE):
+                    # IMP-20260712-DAE1 REJECT#9: plaintext REJECT는 구조화 검증 미통과 → INVALID
+                    _ndjson_verdicts.append({"kind": "INVALID"})
+
+        # REJECT#19: 복수(2개 이상) 판정 → parse_failure (AC#3)
+        if len(_ndjson_verdicts) >= 2:
+            base["error_type"] = "parse_failure"
+            base["error_retryable"] = False
+            return base
+
+        # 단일 판정 처리 (AC#4)
+        if len(_ndjson_verdicts) == 1:
+            _vd = _ndjson_verdicts[0]
+            if _vd["kind"] == "APPROVE":
+                return {
+                    "status": "APPROVED",
+                    "error_type": None,
+                    "error_retryable": False,
+                    "codex_cli_exit_code": exit_code,
+                    "codex_cli_stdout_excerpt": stdout[:200],
+                    "codex_cli_stderr_excerpt": stderr[:200],
+                    "verdict": "APPROVE_TO_USER",
+                    "reject_reason": None,
+                }
+            if _vd["kind"] == "REJECT":
+                # IMP-20260712-DAE1 REJECT#9: structured 필드 보존.
+                _p = _vd["parsed"]
+                return {
+                    "status": "REJECTED",
+                    "error_type": None,
+                    "error_retryable": False,
+                    "codex_cli_exit_code": exit_code,
+                    "codex_cli_stdout_excerpt": stdout[:200],
+                    "codex_cli_stderr_excerpt": stderr[:200],
+                    "verdict": "REJECT",
+                    "reject_reason": _p.get("reason") or None,
+                    "root_cause": _p.get("root_cause") or None,
+                    "reproduction": _p.get("reproduction") or None,
+                    "required_fix": _p.get("required_fix") or None,
+                    "acceptance_criteria": _p.get("acceptance_criteria") or None,
+                }
+            # INVALID (plaintext REJECT 등) → parse_failure
+            base["error_type"] = "parse_failure"
+            base["error_retryable"] = False
+            return base
+        # 0 verdicts → fall through to legacy parsing below
 
     up = stripped.upper()
     # IMP-20260712-DAE1 REJECT#9: 기존 legacy "REJECT - <사유>" plaintext REJECT 승격 경로를

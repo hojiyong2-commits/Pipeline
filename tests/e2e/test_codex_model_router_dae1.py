@@ -1297,3 +1297,79 @@ def test_tc32c_cache_miss_on_missing_auth_source() -> None:
             )
         finally:
             pipeline._codex_review_cache_path = original_cache_fn
+
+
+# --------------------------------------------------------------------------- #
+# TC-33: REJECT#19 — NDJSON 복수/상충 판정 fail-closed (AC#1~#4).
+# --------------------------------------------------------------------------- #
+def _ndjson_two_agent_messages(text1: str, text2: str) -> str:
+    """agent_message 두 개를 포함하는 NDJSON stdout 생성."""
+    import json as _json
+    lines = [
+        _json.dumps({"type": "thread.started", "thread_id": "test-33"}),
+        _json.dumps({"type": "turn.started"}),
+        _json.dumps({
+            "type": "item.completed",
+            "item": {"id": "item_0", "type": "agent_message", "text": text1},
+        }),
+        _json.dumps({
+            "type": "item.completed",
+            "item": {"id": "item_1", "type": "agent_message", "text": text2},
+        }),
+    ]
+    return "\n".join(lines)
+
+
+_REJECT_JSON_33 = (
+    '{"verdict":"REJECT","root_cause":"rc","reproduction":"rp",'
+    '"required_fix":"rf","acceptance_criteria":["ac1"]}'
+)
+
+
+def test_tc33a_approve_then_reject_is_parse_failure() -> None:
+    """REJECT#19 AC#1+AC#3: APPROVE 다음 REJECT가 있는 NDJSON은 parse_failure여야 한다.
+    첫 번째 메시지만 처리되어 APPROVED가 반환되는 버그 재현 + 수정 검증."""
+    stdout = _ndjson_two_agent_messages("APPROVE_TO_USER", _REJECT_JSON_33)
+    r = pipeline._run_codex_cli_review(0, stdout, "")
+    assert r["status"] == "ERROR", (
+        f"REJECT#19 AC#1: APPROVE+REJECT NDJSON이 APPROVED를 반환함 — 복수 판정 parse_failure 필요\n  result={r}"
+    )
+    assert r["error_type"] == "parse_failure", (
+        f"REJECT#19 AC#3: error_type이 parse_failure가 아님\n  error_type={r.get('error_type')}"
+    )
+    assert r.get("verdict") is None, (
+        f"REJECT#19: parse_failure인데도 verdict가 채워져 있음\n  verdict={r.get('verdict')}"
+    )
+
+
+def test_tc33b_reject_then_approve_is_parse_failure() -> None:
+    """REJECT#19 AC#2+AC#3: REJECT 다음 APPROVE가 있는 NDJSON도 임의로 첫 판정을 채택하면 안 된다.
+    복수 상충 판정은 parse_failure로 처리된다."""
+    stdout = _ndjson_two_agent_messages(_REJECT_JSON_33, "APPROVE_TO_USER")
+    r = pipeline._run_codex_cli_review(0, stdout, "")
+    assert r["status"] == "ERROR", (
+        f"REJECT#19 AC#2: REJECT+APPROVE NDJSON이 REJECTED를 반환함 — 복수 판정 parse_failure 필요\n  result={r}"
+    )
+    assert r["error_type"] == "parse_failure", (
+        f"REJECT#19 AC#3: error_type이 parse_failure가 아님\n  error_type={r.get('error_type')}"
+    )
+
+
+def test_tc33c_single_approve_and_single_reject_preserved() -> None:
+    """REJECT#19 AC#4: 단일 APPROVE와 단일 REJECT의 기존 정상 동작이 유지되어야 한다."""
+    # 단일 APPROVE_TO_USER literal
+    stdout_approve = _ndjson_agent_json("APPROVE_TO_USER")
+    r_approve = pipeline._run_codex_cli_review(0, stdout_approve, "")
+    assert r_approve["status"] == "APPROVED", (
+        f"REJECT#19 AC#4: 단일 APPROVE_TO_USER가 APPROVED를 반환하지 않음\n  result={r_approve}"
+    )
+    assert r_approve["error_type"] is None
+
+    # 단일 JSON REJECT (4필드 완전)
+    stdout_reject = _ndjson_agent_json(_REJECT_JSON_33)
+    r_reject = pipeline._run_codex_cli_review(0, stdout_reject, "")
+    assert r_reject["status"] == "REJECTED", (
+        f"REJECT#19 AC#4: 단일 구조화 REJECT가 REJECTED를 반환하지 않음\n  result={r_reject}"
+    )
+    assert r_reject["error_type"] is None
+    assert r_reject["root_cause"] == "rc"
