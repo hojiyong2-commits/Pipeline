@@ -24620,23 +24620,32 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _cache_verdict_from_cache = ""
     _cache_key_used = ""
     _cache_reason = ""
-    try:
-        # IMP-20260712-DAE1 rework(문제2): explicit 주입 시에는 cache의 capability/정책 기반 블록
-        #   (unknown-model+HIGH/CRITICAL, cache_allowed=False)을 적용하지 않는다. explicit 경로는
-        #   캐시를 재사용하지 않고 주입 결과를 그대로 사용하므로, capability 파라미터를 None으로 넘겨
-        #   해당 블록을 건너뛴다. 단, current_bundle 기반 excluded-critical 안전 검사는 그대로 유지한다.
-        _cache_probe = _check_codex_cache(
-            _contract_sha256_for_cache, _review_bundle_sha256, state, pipeline_id,
-            current_bundle=_preflight_bundle,
-            model_policy=None if _explicit_injection else _model_policy,
-            actual_model=None if _explicit_injection else _actual_model_str,
-            risk_level=None if _explicit_injection else _risk_level_str,
-        )
-    except SystemExit:
-        raise
-    except Exception as _cache_exc:  # noqa: BLE001 — 캐시 조회 실패는 miss로 간주(fail-safe)
-        _cache_probe = {"hit": False, "reason": f"캐시 조회 실패(무시): {_cache_exc}",
-                        "blocked": False, "cache_key": "", "live_sha_snapshot": {}}
+    # REJECT#14 fix: effective_force_review=true이면 cache를 완전히 우회하여 CLI 강제 실행.
+    #   명시적 --force-review와 CRITICAL 정책의 force_review_required=true 모두 동일 경로 사용.
+    if effective_force_review:
+        _cache_probe = {
+            "hit": False, "blocked": False,
+            "cache_key": "", "live_sha_snapshot": {},
+            "reason": "effective_force_review=true: cache 우회 — CLI 강제 실행",
+        }
+    else:
+        try:
+            # IMP-20260712-DAE1 rework(문제2): explicit 주입 시에는 cache의 capability/정책 기반 블록
+            #   (unknown-model+HIGH/CRITICAL, cache_allowed=False)을 적용하지 않는다. explicit 경로는
+            #   캐시를 재사용하지 않고 주입 결과를 그대로 사용하므로, capability 파라미터를 None으로 넘겨
+            #   해당 블록을 건너뛴다. 단, current_bundle 기반 excluded-critical 안전 검사는 그대로 유지한다.
+            _cache_probe = _check_codex_cache(
+                _contract_sha256_for_cache, _review_bundle_sha256, state, pipeline_id,
+                current_bundle=_preflight_bundle,
+                model_policy=None if _explicit_injection else _model_policy,
+                actual_model=None if _explicit_injection else _actual_model_str,
+                risk_level=None if _explicit_injection else _risk_level_str,
+            )
+        except SystemExit:
+            raise
+        except Exception as _cache_exc:  # noqa: BLE001 — 캐시 조회 실패는 miss로 간주(fail-safe)
+            _cache_probe = {"hit": False, "reason": f"캐시 조회 실패(무시): {_cache_exc}",
+                            "blocked": False, "cache_key": "", "live_sha_snapshot": {}}
     _cache_key_used = str(_cache_probe.get("cache_key", "") or "")
     if _cache_probe.get("blocked"):
         _die(

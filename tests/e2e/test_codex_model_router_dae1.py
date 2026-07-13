@@ -996,3 +996,17 @@ def test_tc29d_critical_router_policy_constants_include_force_review() -> None:
         assert policy_const[level]["force_review_required"] is False, (
             f"REJECT#13: CODEX_MODEL_POLICIES {level}.force_review_required가 False가 아닙니다"
         )
+
+
+def test_tc29e_effective_force_review_bypasses_cache_in_source() -> None:
+    """REJECT#14 AC#2/#4: _cmd_gates_codex_review 소스에서 effective_force_review=true 시
+    cache 조회 자체를 완전히 우회하는 분기가 있어야 한다."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    assert "effective_force_review=true: cache 우회" in src, (
+        "REJECT#14: _cmd_gates_codex_review에 effective_force_review cache 우회 분기가 없습니다 "
+        "(force_review 시 CLI 강제 실행 경로 누락)"
+    )
+    assert "if effective_force_review:" in src, (
+        "REJECT#14: _cmd_gates_codex_review에 `if effective_force_review:` 분기가 없습니다"
+    )
