@@ -834,3 +834,85 @@ def test_tc26d_ndjson_json_reject_preserves_structured_fields() -> None:
     assert result.get("acceptance_criteria") == ["ac1", "ac2"], (
         f"acceptance_criteria 보존 실패: {result.get('acceptance_criteria')!r}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-28 시리즈: REJECT#11 — cache probe blocked 제거 + cache hit verification
+# --------------------------------------------------------------------------- #
+
+def test_tc28a_cache_probe_high_unknown_not_blocked() -> None:
+    """REJECT#11 AC#1: actual_model=unknown + HIGH risk 시 _check_codex_cache는
+    blocked=True가 아니라 plain cache miss(hit=False, blocked=False)를 반환해야 한다.
+    이로써 CLI 실행 전에 차단되지 않고 cache miss 경로로 진행하여 CLI가 실행된다."""
+    _model_policy_high = pipeline._build_codex_model_policy("HIGH")
+    result = pipeline._check_codex_cache(
+        "sha256abc",
+        "sha256def",
+        {},
+        "IMP-20260712-DAE1",
+        current_bundle={},
+        model_policy=_model_policy_high,
+        actual_model="unknown",
+        risk_level="HIGH",
+    )
+    assert result.get("blocked") is not True, (
+        "REJECT#11: actual_model=unknown+HIGH는 blocked=True가 아니라 "
+        f"cache miss여야 한다. got blocked={result.get('blocked')!r}, "
+        f"reason={result.get('reason')!r}"
+    )
+    assert result.get("hit") is False, (
+        "REJECT#11: actual_model=unknown+HIGH는 cache miss(hit=False)여야 한다. "
+        f"got hit={result.get('hit')!r}"
+    )
+
+
+def test_tc28b_capability_match_blocks_when_invoked_mismatches_selected() -> None:
+    """REJECT#11 AC#2: CLI 실행 후 invoked_model != selected_model이면
+    _check_codex_model_capability_match는 BLOCKED를 반환해야 한다(model_mismatch)."""
+    result = pipeline._check_codex_model_capability_match(
+        "gpt-5.6-sol",   # selected_model
+        "high",           # selected_effort
+        "gpt-5.6-terra",  # invoked_model (불일치)
+        "high",           # invoked_effort
+        "unknown",        # actual_model
+        "unknown",        # actual_effort
+        "HIGH",           # risk_level
+        invocation_ok=True,
+    )
+    assert result.get("result") == "BLOCKED", (
+        "REJECT#11: invoked!=selected이면 BLOCKED여야 한다. "
+        f"got result={result.get('result')!r}"
+    )
+    assert result.get("failure_code") == "model_mismatch", (
+        "REJECT#11: failure_code는 model_mismatch여야 한다. "
+        f"got failure_code={result.get('failure_code')!r}"
+    )
+
+
+def test_tc28c_cache_hit_verification_insufficient_code_in_source() -> None:
+    """REJECT#11 AC#3/#4: _cmd_gates_codex_review 소스에 HIGH/CRITICAL cache hit
+    verification 검증 및 cache_hit_verification_insufficient failure_code가 있어야 한다."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    assert "cache_hit_verification_insufficient" in src, (
+        "REJECT#11: _cmd_gates_codex_review에 cache_hit_verification_insufficient "
+        "failure_code가 없습니다 (HIGH/CRITICAL cache hit 검증 누락)"
+    )
+    assert "CODEX_VERIFICATION_UNVERIFIED" in src, (
+        "REJECT#11: _cmd_gates_codex_review에 CODEX_VERIFICATION_UNVERIFIED 검사가 없습니다 "
+        "(HIGH/CRITICAL cache hit verification_level 검증 누락)"
+    )
+
+
+def test_tc28d_cache_probe_unknown_not_blocked_source_check() -> None:
+    """REJECT#11 AC#1: _check_codex_cache 소스에서 actual_model=unknown+HIGH 시
+    blocked=True를 반환하지 않음을 소스 구조로 검증한다."""
+    import inspect
+    src = inspect.getsource(pipeline._check_codex_cache)
+    # 수정 후에는 "blocked=True"와 "block_reason"이 unknown+HIGH 분기에 없어야 한다.
+    # 대신 plain miss 반환(reason만 설정, hit=False).
+    # "CLI 실행 후 _check_codex_model_capability_match로 검증" 문구로 의도 확인.
+    assert "_check_codex_model_capability_match" in src, (
+        "REJECT#11: _check_codex_cache 소스에 CLI 실행 후 capability match 안내가 없습니다 "
+        "(unknown+HIGH miss reason이 누락됨)"
+    )

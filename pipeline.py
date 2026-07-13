@@ -9663,12 +9663,16 @@ def _check_codex_cache(
             _miss["reason"] = "CRITICAL risk: 캐시 항상 금지 (cache_allowed=False) — CLI 직접 실행으로 진행"
             return _miss
 
+    # REJECT#11 fix: actual_model=unknown + HIGH/CRITICAL 시 cache probe 자체를 blocked로
+    #   차단하지 않는다. 대신 plain cache miss를 반환해 CLI 실행 경로로 진행하고, 실행 후
+    #   _check_codex_model_capability_match로 검증한다(캐시 재사용 시 검증은 별도 경로).
     if actual_model == "unknown" and str(risk_level or "").upper() in {"HIGH", "CRITICAL"}:
-        _blocked = dict(miss)
-        _blocked["blocked"] = True
-        _blocked["block_reason"] = "actual_model=unknown + HIGH/CRITICAL: 캐시 금지"
-        _blocked["reason"] = _blocked["block_reason"]
-        return _blocked
+        _miss2 = dict(miss)
+        _miss2["reason"] = (
+            "actual_model=unknown + HIGH/CRITICAL: cache miss "
+            "(사전 감지 불가, CLI 실행 후 _check_codex_model_capability_match로 검증)"
+        )
+        return _miss2
 
     # IMP-20260710-DB54 rework MT-4(문제5): 현재 bundle의 excluded_files에 critical 파일이 있으면
     #   Codex가 그 파일을 못 본 것이므로 캐시 사용 자체를 금지한다(BLOCKED). 캐시 유무와 무관.
@@ -24662,6 +24666,18 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     "  gates request-accept를 재실행한 뒤 gates codex-review를 다시 실행하세요."
                 )
             _cache_hit = True
+            # REJECT#11 fix: HIGH/CRITICAL cache hit — cached_verification_level 검증.
+            # invocation_verified 미만(unverified)이면 캐시 재사용 불가 → BLOCKED(fail-closed).
+            if _risk_level_str.upper() in {"HIGH", "CRITICAL"}:
+                _cv_chk = str(_cache_probe.get("cached_verification_level") or "").strip()
+                if not _cv_chk or _cv_chk == CODEX_VERIFICATION_UNVERIFIED:
+                    _die(
+                        "[BLOCKED] failure_code=cache_hit_verification_insufficient\n"
+                        f"  HIGH/CRITICAL cache hit이지만 "
+                        f"cached_verification_level={_cv_chk!r}"
+                        " — invocation_verified 미만이므로 재사용 불가.\n"
+                        "  CLI를 재실행하세요: python pipeline.py gates codex-review --force-review"
+                    )
             _cache_verdict_from_cache = "APPROVE_TO_USER"
             _cache_reason = str(_cache_probe.get("reason", "") or "")
             # IMP-20260712-DAE1 rework#2(요구4): verified cache 재사용은 원(原) codex_cli 실행이
