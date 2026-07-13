@@ -2431,6 +2431,13 @@ CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
 # IMP-20260712-DAE1 REJECT#3 rework(요구8): codex_review_result.json 현재 스키마 버전.
 CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
 
+# IMP-20260712-DAE1 REJECT#4: Codex Review semantic evidence 예산 제한(문자수).
+#   실제 unified diff hunk를 Codex prompt(stdin)에 실어 보낼 때의 총 문자 예산이다.
+#   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
+#   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
+#   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 16000
+
 
 class _CodexCacheSkipError(Exception):
     """내부 제어 흐름용 sentinel: Codex Review 캐시 저장을 정상적으로 건너뛴다(요구11).
@@ -8648,25 +8655,69 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
         raise TypeError("bundle must be a dict")
     if pipeline_id is None or not isinstance(pipeline_id, str):
         raise TypeError("pipeline_id must be str")
+    # IMP-20260712-DAE1 REJECT#4: evidence_complete=False이면 CRITICAL diff hunk가 누락된 것이므로
+    #   Codex에게 코드 없이 blind approval을 요구하는 상황이다 → prompt 생성을 차단(fail-closed).
+    if not bundle.get("evidence_complete", False):
+        raise ValueError(
+            "evidence_complete=False: CRITICAL hunk 누락 — Codex 호출 차단(blind approval 방지)"
+        )
     _changed = list(bundle.get("changed_files", []) or [])
-    _funcs = list(bundle.get("included_functions", []) or [])
     lines = [
         f"[Codex Review] pipeline_id={pipeline_id}",
+        f"evidence_complete={bundle.get('evidence_complete', False)}",
         f"changed_files_count={bundle.get('changed_files_count', len(_changed))}",
-        "changed_files:",
+        "",
+        "## 변경 파일 목록",
     ]
-    lines += [f"  - {f}" for f in _changed[:200]]
-    if _funcs:
-        lines.append("included_functions:")
-        lines += [f"  - {fn}" for fn in _funcs[:200]]
+    lines += [f"  - {f}" for f in _changed[:50]]
+
+    # IMP-20260712-DAE1 REJECT#4: 실제 unified diff hunk를 직렬화한다. Codex가 코드를 직접 읽거나
+    #   명령을 실행하지 않고도 변경 내용을 판단할 수 있도록 diff 본문을 그대로 실어 보낸다.
+    _hunks = list(bundle.get("diff_hunks", []) or [])
+    lines += ["", "## 변경 코드 (unified diff)"]
+    for _hunk in _hunks:
+        _fn = str(_hunk.get("function", "unknown"))
+        _is_crit = bool(_hunk.get("is_critical", False))
+        lines.append(f"\n### {'[CRITICAL] ' if _is_crit else ''}함수: {_fn}")
+        lines.append(str(_hunk.get("hunk", "")))
+
+    _fas = bundle.get("function_before_after_shas") or {}
+    if _fas:
+        lines += ["", "## 함수 변경 SHA (before → after)"]
+        for _fn_id, _shas in _fas.items():
+            _b = str(_shas.get("before", "") or "")
+            _a = str(_shas.get("after", "") or "")
+            lines.append(f"  {_fn_id}: {_b[:16]}...→{_a[:16]}...")
+
+    _tassert = bundle.get("test_assertions") or {}
+    if _tassert:
+        lines += ["", "## 테스트 검증 근거 (핵심 assert)"]
+        for _tf, _assertions in _tassert.items():
+            lines.append(f"\n{_tf}:")
+            # test_assertions는 리스트(원문) 또는 int(개수, redacted disk bundle)일 수 있다.
+            if isinstance(_assertions, list):
+                for _a in _assertions[:20]:
+                    lines.append(f"  {_a}")
+            else:
+                lines.append(f"  (assert {_assertions}개)")
+
+    _oracles = bundle.get("oracle_results") or []
+    if _oracles:
+        lines += ["", "## Oracle 검증 결과"]
+        for _oc in _oracles[:10]:
+            lines.append(
+                f"  {_oc.get('case_id', '')}: "
+                f"{_oc.get('case_kind', '')} → {_oc.get('result', '')}"
+            )
+
     # IMP-20260712-DAE1 REJECT#3(요구6): verdict 스키마를 JSON으로 강제한다.
     # IMP-20260712-DAE1 bugfix#3/4: 모델이 파일을 읽거나 명령어를 실행하여 내부 타임아웃이 발생하는
-    # 버그 수정. 위에서 제공한 메타데이터만 보고 판단하도록 명령어 실행과 파일 읽기를 금지한다.
+    # 버그 수정. 위에서 제공한 diff 내용만 보고 판단하도록 명령어 실행과 파일 읽기를 금지한다.
     lines += [
         "",
         "## 출력 규칙 (엄격히 준수 필수)",
         "- 쉘 명령어를 실행하지 마세요 (command_execution 사용 금지).",
-        "- 파일을 직접 읽지 마세요. 위 변경 파일 목록과 함수 목록만 보고 판단하세요.",
+        "- 파일을 직접 읽지 마세요. 위 diff 내용만으로 판단하세요.",
         "- 리뷰 분석/설명/코드 인용 텍스트를 출력하지 마세요.",
         "- 마지막 출력은 아래 JSON 하나만 출력하세요 (다른 텍스트 없이).",
         '승인: {"verdict": "APPROVE_TO_USER"}',
@@ -8691,6 +8742,286 @@ def _check_codex_capability_gate(actual_model: str, risk_level: str) -> Dict[str
     if str(actual_model) == "unknown" and str(risk_level).upper() in {"HIGH", "CRITICAL"}:
         return {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
     return {"result": "OK"}
+
+
+# [Purpose]: IMP-20260712-DAE1 REJECT#4 — Codex가 실제 변경 코드를 볼 수 있도록 semantic evidence
+#   (unified diff hunk + 함수 before/after SHA + 테스트 assert + oracle 결과)를 조립한다. 원문(코드)은
+#   bundle 파일에 persist하지 않고 Codex prompt(stdin)에만 실어, no_nonce_exposure/TC-J(대문자 8자
+#   토큰 금지) 불변식과 충돌하지 않게 한다. bundle 파일에는 이 결과에서 도출한 redacted 메타데이터
+#   (함수명/is_critical/chars/hunk_sha256, 함수 SHA, 개수, semantic_evidence_sha256)만 기록한다.
+# [Assumptions]: origin/main이 로컬에 fetch되어 있어 `git diff/show origin/main`이 동작한다. 실패는
+#   best-effort로 흡수하고 evidence_complete=False로 fail-closed한다.
+# [Vulnerability & Risks]: 함수 본문 추출이 실패하면 before/after SHA가 빈 값이 된다. ast 파싱 실패
+#   시 라인 기반 fallback을 사용한다. 병리적 대형 diff는 CODEX_REVIEW_BUNDLE_BUDGET_CHARS로 절단한다.
+# [Improvement]: 파일::함수 단위 정밀 diff 매칭(현재는 pipeline.py 단일 파일 hunk 파싱)으로 고도화 가능.
+def _extract_python_function_bodies(source: str) -> Dict[str, str]:
+    """파이썬 소스에서 {함수명: 함수본문소스} 매핑을 O(n) 단일 패스로 추출한다.
+
+    성능: 대형 파일(pipeline.py ~34k줄)에서 ast.parse는 파싱만 4초 이상 소요되므로, 함수 본문
+    SHA 계산에는 ast를 쓰지 않고 들여쓰기 기반 라인 스택으로 단일 패스 추출한다(중복 함수명은
+    첫 정의를 우선). def 라인부터, 이후 같거나 더 얕은 들여쓰기의 코드가 나오기 직전까지를 본문으로 본다.
+
+    Args:
+        source: 파이썬 소스 전체 텍스트.
+    Returns:
+        {함수명: 본문 소스 문자열}. 입력이 비었으면 빈 dict.
+    """
+    if source is None or not isinstance(source, str) or not source.strip():
+        return {}
+    bodies: Dict[str, str] = {}
+    lines = source.splitlines()
+    _def_re = re.compile(r"^(\s*)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+    # open_defs: (indent, name, start_idx) 스택. 현재 라인 들여쓰기가 스택 상단 def의
+    #   들여쓰기 이하이면 그 def의 본문이 끝난 것으로 보고 [start_idx, i)를 본문으로 확정한다.
+    open_defs: List[Tuple[int, str, int]] = []
+
+    def _close(_end_idx: int) -> None:
+        _ind, _name, _start = open_defs.pop()
+        if _name not in bodies:
+            bodies[_name] = "\n".join(lines[_start:_end_idx]).rstrip()
+
+    for _i, _ln in enumerate(lines):
+        if not _ln.strip():
+            continue  # 빈 줄은 경계 판정에서 무시(본문에는 slice로 포함됨)
+        _indent = len(_ln) - len(_ln.lstrip())
+        # 데코레이터(@...)는 다음 def의 일부로 취급하여 경계 판정에서 제외한다.
+        if _ln.lstrip().startswith("@"):
+            continue
+        while open_defs and _indent <= open_defs[-1][0]:
+            _close(_i)
+        _m = _def_re.match(_ln)
+        if _m:
+            open_defs.append((len(_m.group(1)), _m.group(2), _i))
+    while open_defs:
+        _close(len(lines))
+    return bodies
+
+
+def _build_codex_semantic_evidence(
+    pipeline_id: str,
+    changed_files: List[str],
+    included_functions: List[str],
+) -> Dict[str, Any]:
+    """실제 변경 코드를 담은 Codex semantic evidence dict를 조립한다(원문 포함).
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID (None 불가).
+        changed_files: 변경 파일 경로 목록 (None → 빈 목록).
+        included_functions: 변경/추가된 pipeline.py 함수명 목록 (None → 빈 목록).
+    Returns:
+        {"diff_hunks": [{function, hunk, is_critical, chars}], "function_before_after_shas": {},
+         "test_assertions": {}, "oracle_results": [], "evidence_complete": bool,
+         "truncated_critical_hunks": int, "bundle_budget_chars": int,
+         "semantic_evidence_sha256": str}.
+    Raises:
+        TypeError: pipeline_id가 None/비str인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    _cf: List[str] = [str(f) for f in (changed_files or [])]
+    _funcs: List[str] = [str(f) for f in (included_functions or [])]
+
+    sem: Dict[str, Any] = {
+        "diff_hunks": [],
+        "function_before_after_shas": {},
+        "test_assertions": {},
+        "oracle_results": [],
+        "evidence_complete": False,
+        "truncated_critical_hunks": 0,
+        "bundle_budget_chars": 0,
+        "semantic_evidence_sha256": "",
+    }
+
+    _crit_funcs = set(CODEX_CRITICAL_FUNCTIONS)
+
+    # 1) diff_hunks: git diff origin/main...HEAD --unified=8 -- pipeline.py
+    _diff_ok = False
+    _all_hunks: List[Dict[str, Any]] = []
+    try:
+        if "pipeline.py" in _cf:
+            _dr = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--unified=8", "--", "pipeline.py"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            if _dr.returncode == 0:
+                _diff_ok = True
+                _cur_fn = "unknown"
+                _cur_lines: List[str] = []
+
+                def _flush(_fn: str, _buf: List[str]) -> None:
+                    if not _buf:
+                        return
+                    _txt = "\n".join(_buf)
+                    _all_hunks.append({
+                        "function": _fn,
+                        "hunk": _txt,
+                        "is_critical": _fn in _crit_funcs,
+                        "chars": len(_txt),
+                    })
+
+                for _ln in _dr.stdout.splitlines():
+                    if _ln.startswith("@@"):
+                        _flush(_cur_fn, _cur_lines)
+                        _cur_lines = [_ln]
+                        _ctx_m = re.search(
+                            r"@@[^@]*@@\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                            _ln,
+                        )
+                        _cur_fn = _ctx_m.group(1) if _ctx_m else "unknown"
+                    elif _ln.startswith(("---", "+++", "diff --git", "index ")):
+                        continue
+                    else:
+                        if _cur_lines:
+                            _cur_lines.append(_ln)
+                _flush(_cur_fn, _cur_lines)
+    except Exception:  # noqa: BLE001 — diff 실패는 fail-closed(evidence_complete=False)
+        _diff_ok = False
+
+    # 예산 적용: CRITICAL hunk를 먼저 채우고, 예산 초과 시 truncated_critical_hunks 계수.
+    _budget = CODEX_REVIEW_BUNDLE_BUDGET_CHARS
+    _used = 0
+    _truncated_crit = 0
+    _selected: List[Dict[str, Any]] = []
+    _crit_hunks = [h for h in _all_hunks if h.get("is_critical")]
+    _noncrit_hunks = [h for h in _all_hunks if not h.get("is_critical")]
+    for _h in _crit_hunks:
+        _c = int(_h.get("chars", 0))
+        if _used + _c <= _budget:
+            _selected.append(_h)
+            _used += _c
+        else:
+            _truncated_crit += 1  # CRITICAL hunk가 예산 초과로 잘림 → evidence 불완전
+    for _h in _noncrit_hunks:
+        _c = int(_h.get("chars", 0))
+        if _used + _c <= _budget:
+            _selected.append(_h)
+            _used += _c
+        # non-critical은 예산 초과 시 조용히 제외(evidence_complete에 영향 없음)
+    sem["diff_hunks"] = _selected
+    sem["truncated_critical_hunks"] = _truncated_crit
+    sem["bundle_budget_chars"] = _used
+
+    # 2) function_before_after_shas: 각 변경 함수의 base/current 본문 SHA (best-effort).
+    _fas: Dict[str, Dict[str, str]] = {}
+    try:
+        _before_bodies: Dict[str, str] = {}
+        _after_bodies: Dict[str, str] = {}
+        if _funcs and "pipeline.py" in _cf:
+            try:
+                _br = subprocess.run(
+                    ["git", "show", "origin/main:pipeline.py"],
+                    capture_output=True, text=True, timeout=30,
+                    cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+                )
+                if _br.returncode == 0:
+                    _before_bodies = _extract_python_function_bodies(_br.stdout)
+            except Exception:  # noqa: BLE001
+                _before_bodies = {}
+            try:
+                _cur_src = (BASE_DIR / "pipeline.py").read_text(
+                    encoding="utf-8", errors="replace"
+                )
+                _after_bodies = _extract_python_function_bodies(_cur_src)
+            except Exception:  # noqa: BLE001
+                _after_bodies = {}
+        for _fn in _funcs:
+            _bs = _before_bodies.get(_fn, "")
+            _as = _after_bodies.get(_fn, "")
+            _fas[f"pipeline.py::{_fn}"] = {
+                "before": (
+                    hashlib.sha256(_bs.encode("utf-8")).hexdigest() if _bs else ""
+                ),
+                "after": (
+                    hashlib.sha256(_as.encode("utf-8")).hexdigest() if _as else ""
+                ),
+            }
+    except Exception:  # noqa: BLE001
+        _fas = {}
+    sem["function_before_after_shas"] = _fas
+
+    # 3) test_assertions: 변경된 테스트 파일의 test_* 함수별 assert 라인(최대 5개).
+    _tassert: Dict[str, List[str]] = {}
+    try:
+        _test_fn_re = re.compile(r"^\s*def\s+(test_[A-Za-z0-9_]*)\s*\(")
+        for _tf in _cf:
+            _tfn = _tf.replace("\\", "/")
+            if not (_tfn.startswith("tests/") and _tfn.endswith(".py")):
+                continue
+            _tfp = BASE_DIR / _tfn
+            if not _tfp.exists():
+                continue
+            try:
+                _tlines = _tfp.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
+            except Exception:  # noqa: BLE001
+                continue
+            _cur_test = ""
+            for _tl in _tlines:
+                _tm = _test_fn_re.match(_tl)
+                if _tm:
+                    _cur_test = _tm.group(1)
+                    _tassert.setdefault(_cur_test, [])
+                    continue
+                if _cur_test and _tl.strip().startswith("assert "):
+                    if len(_tassert[_cur_test]) < 5:
+                        _tassert[_cur_test].append(_tl.strip())
+        # 빈 assert 목록 test는 제거(노이즈 축소).
+        _tassert = {_k: _v for _k, _v in _tassert.items() if _v}
+    except Exception:  # noqa: BLE001
+        _tassert = {}
+    sem["test_assertions"] = _tassert
+
+    # 4) oracle_results: oracle case 요약(case_id/case_kind/result). 원문 미포함(소문자 안전).
+    _ores: List[Dict[str, str]] = []
+    try:
+        _odir = BASE_DIR / "tests" / "oracles" / pipeline_id
+        if _odir.exists() and _odir.is_dir():
+            for _cdir in sorted(p for p in _odir.iterdir() if p.is_dir()):
+                _kind = "unknown"
+                _meta = _cdir / "case.json"
+                if _meta.exists():
+                    try:
+                        _mj = json.loads(_meta.read_text(encoding="utf-8"))
+                        if isinstance(_mj, dict):
+                            _kind = str(_mj.get("case_kind", "unknown") or "unknown")
+                    except Exception:  # noqa: BLE001
+                        _kind = "unknown"
+                _ores.append({
+                    "case_id": _cdir.name,
+                    "case_kind": _kind,
+                    "result": "recorded",
+                })
+    except Exception:  # noqa: BLE001
+        _ores = []
+    sem["oracle_results"] = _ores
+
+    # 5) evidence_complete: CRITICAL hunk가 모두 포함(truncated==0)되고 hunk가 1개 이상이며 diff 성공.
+    #    fail-closed: changed_files가 비었고 CRITICAL 파일도 없으면 False.
+    _has_critical_file = any(_is_codex_critical_file(f) for f in _cf)
+    if not _cf and not _has_critical_file:
+        sem["evidence_complete"] = False
+    else:
+        sem["evidence_complete"] = bool(
+            _diff_ok and _truncated_crit == 0 and len(sem["diff_hunks"]) > 0
+        )
+
+    # 6) semantic_evidence_sha256: 원문 포함 semantic 섹션의 결정적 integrity digest.
+    try:
+        _sec = json.dumps({
+            "diff_hunks": sem["diff_hunks"],
+            "function_before_after_shas": sem["function_before_after_shas"],
+            "test_assertions": sem["test_assertions"],
+        }, sort_keys=True, ensure_ascii=False)
+        sem["semantic_evidence_sha256"] = hashlib.sha256(
+            _sec.encode("utf-8")
+        ).hexdigest()
+    except Exception:  # noqa: BLE001
+        sem["semantic_evidence_sha256"] = ""
+    return sem
 
 
 def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple[str, str]:
@@ -8744,6 +9075,17 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         "changed_critical_files": [],   # 이번 PR에서 변경된 critical 파일 경로 목록.
         "test_summary": {},             # {테스트파일: [테스트함수...]} — 원문 없이 요약만.
         "oracle_summary": [],           # oracle case 요약(case_id/case_kind/SHA/result) — 원문 제외.
+        # IMP-20260712-DAE1 REJECT#4: semantic evidence. 원문 코드는 bundle에 persist하지 않고
+        #   (no_nonce_exposure/TC-J 불변식 보존) prompt(stdin)에만 실으며, bundle에는 redacted
+        #   메타데이터(함수명/is_critical/chars/hunk_sha256, 함수 SHA, 개수, integrity SHA)만 둔다.
+        "diff_hunks": [],                    # redacted: {function, is_critical, chars, hunk_sha256}
+        "function_before_after_shas": {},    # {함수식별자: {"before": sha, "after": sha}}
+        "test_assertions": {},               # redacted: {test_name: assert_count(int)}
+        "oracle_results": [],                # oracle case_kind/result (소문자 안전)
+        "evidence_complete": False,          # CRITICAL hunk 모두 포함됐으면 True
+        "truncated_critical_hunks": 0,       # 예산 초과로 잘린 CRITICAL hunk 수
+        "semantic_evidence_sha256": "",      # semantic 섹션(원문 포함) 결정적 SHA
+        "bundle_budget_chars": 0,            # 실제 사용한 diff 예산 문자수
         # IMP-20260712-DAE1 MT-7: Codex Model Router 정책 섹션 (실제 값은 _cmd_gates_codex_review가
         #   risk 분류 후 result에 기록; bundle에는 결정성 placeholder만 둔다).
         "model_policy": {
@@ -8918,15 +9260,45 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
             "raw ACCEPT 코드/nonce는 어떤 경우에도 bundle에 포함하지 않는다(fail-closed)."
         )
 
-        # IMP-20260710-DB54 rework MT-3: critical_function_shas — 핵심 함수 식별자/SHA(best-effort).
-        #   함수 본문 원문은 담지 않고, 함수명::SHA(변경된 pipeline.py 파일 SHA prefix) 매핑만 둔다.
+        # IMP-20260712-DAE1 REJECT#4: semantic evidence(실제 변경 코드)를 조립하고, bundle에는
+        #   redacted 메타데이터만 persist한다(원문은 prompt/stdin에서만 노출). 이 블록이
+        #   critical_function_shas 버그(모든 함수에 pipeline.py 전체 파일 SHA를 동일 적용)를
+        #   function_before_after_shas.after(함수 본문 개별 SHA)로 교체하여 해결한다.
+        _semantic = _build_codex_semantic_evidence(
+            pipeline_id,
+            list(bundle.get("changed_files", []) or []),
+            list(bundle.get("included_functions", []) or []),
+        )
+        bundle["function_before_after_shas"] = _semantic["function_before_after_shas"]
+        # diff_hunks는 원문(hunk 텍스트) 없이 redacted 메타데이터만 persist한다(nonce-scan 안전).
+        bundle["diff_hunks"] = [
+            {
+                "function": str(_h.get("function", "unknown")),
+                "is_critical": bool(_h.get("is_critical", False)),
+                "chars": int(_h.get("chars", 0)),
+                "hunk_sha256": hashlib.sha256(
+                    str(_h.get("hunk", "")).encode("utf-8")
+                ).hexdigest(),
+            }
+            for _h in _semantic.get("diff_hunks", [])
+        ]
+        # test_assertions는 assert 원문 없이 개수만 persist한다(대문자 토큰 유입 방지).
+        bundle["test_assertions"] = {
+            str(_tn): len(_al) for _tn, _al in _semantic.get("test_assertions", {}).items()
+        }
+        bundle["oracle_results"] = _semantic["oracle_results"]
+        bundle["evidence_complete"] = bool(_semantic["evidence_complete"])
+        bundle["truncated_critical_hunks"] = int(_semantic["truncated_critical_hunks"])
+        bundle["semantic_evidence_sha256"] = str(_semantic["semantic_evidence_sha256"])
+        bundle["bundle_budget_chars"] = int(_semantic["bundle_budget_chars"])
+        # critical_function_shas: function_before_after_shas의 after(함수 본문 개별 SHA)를 사용.
+        #   (기존 버그: 모든 함수에 pipeline.py 전체 파일 SHA를 동일 적용 → 함수별 구분 불가.)
         try:
             _cfn_shas: Dict[str, str] = {}
-            _pyp = BASE_DIR / "pipeline.py"
-            if "pipeline.py" in bundle.get("changed_files", []) and _pyp.exists():
-                _py_sha = _sha256_file(_pyp)
-                for _fn in bundle.get("included_functions", []):
-                    _cfn_shas[f"pipeline.py::{_fn}"] = _py_sha
+            for _fn_id, _sh in bundle["function_before_after_shas"].items():
+                _after = str(_sh.get("after", "") or "")
+                if _after:
+                    _cfn_shas[_fn_id] = _after
             bundle["critical_function_shas"] = _cfn_shas
         except Exception:  # noqa: BLE001
             bundle["critical_function_shas"] = {}
@@ -24143,6 +24515,17 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _explicit_verdict = getattr(args, "verdict", None) is not None
     _explicit_cli = getattr(args, "codex_cli_exit_code", None) is not None
     _explicit_injection = _explicit_verdict or _explicit_cli
+    # IMP-20260712-DAE1 REJECT#4: 실제 Codex를 호출하는 경로(비-explicit-injection)에서는
+    #   bundle의 evidence_complete가 True여야 한다. CRITICAL diff hunk가 누락되면 Codex가 코드를
+    #   전혀 보지 못한 채 blind approval을 내릴 수 있으므로 fail-closed BLOCK한다. explicit 주입
+    #   (--verdict/--codex-cli-*)은 실제 Codex 실행이 아니고 acceptance_eligible=false로 강제되므로
+    #   blind approval 위험이 없어 이 gate 대상이 아니다(하위 호환 보존).
+    if not _explicit_injection and not _preflight_bundle.get("evidence_complete", False):
+        _die(
+            "[BLOCKED] failure_code=codex_review_bundle_incomplete\n"
+            "  CRITICAL diff hunk가 bundle에 누락됐습니다(evidence_complete=False).\n"
+            "  git diff origin/main...HEAD를 확인하고 bundle을 재생성하세요 (fail-closed)."
+        )
     # IMP-20260712-DAE1 rework#2(요구1): --auto-codex-cli는 더 이상 opt-in 플래그가 아니다.
     #   cache miss + 비명시 주입이면 항상 실제 codex exec를 실행한다(아래 참조). 플래그는
     #   하위 호환을 위해 argparse에 남겨두되 동작에는 영향을 주지 않는다(no-op).
@@ -24150,6 +24533,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # IMP-20260712-DAE1 rework(문제2/4): auto-invoke 결과를 담을 override 및 실제 명령/능력 기록 변수.
     _auto_cli_override: Optional[Dict[str, Any]] = None
     _codex_cli_command_real = ""
+    # IMP-20260712-DAE1 REJECT#4: 실제 Codex에 전달한 prompt(stdin) 원문과 SHA(증거 기록용).
+    _prompt_text = ""
     _actual_effort_str = "unknown"
     _model_source_str = "unknown"
     # IMP-20260712-DAE1 REJECT#3(요구4/8): invoked/verification/auth 증거 필드.
@@ -24267,10 +24652,36 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     f"  {_auth.get('message', 'ChatGPT Plus 인증 실패')} (fail-closed)."
                 )
             _auth_source_str = str(_auth.get("auth_source", "chatgpt") or "chatgpt")
+            # IMP-20260712-DAE1 REJECT#4: prompt는 disk bundle(원문 미포함)이 아니라 full-text
+            #   semantic evidence를 주입한 bundle로 생성한다. disk bundle에는 nonce-scan/TC-J
+            #   불변식을 위해 diff 원문을 persist하지 않으므로, prompt 생성 시점에 실제 diff hunk를
+            #   재조립하여 Codex(stdin)가 실제 변경 코드를 볼 수 있게 한다.
+            _sem_for_prompt = _build_codex_semantic_evidence(
+                pipeline_id,
+                list(_preflight_bundle.get("changed_files", []) or []),
+                list(_preflight_bundle.get("included_functions", []) or []),
+            )
+            _prompt_bundle = dict(_preflight_bundle)
+            _prompt_bundle["diff_hunks"] = _sem_for_prompt["diff_hunks"]
+            _prompt_bundle["function_before_after_shas"] = (
+                _sem_for_prompt["function_before_after_shas"]
+            )
+            _prompt_bundle["test_assertions"] = _sem_for_prompt["test_assertions"]
+            _prompt_bundle["oracle_results"] = _sem_for_prompt["oracle_results"]
+            _prompt_bundle["evidence_complete"] = _sem_for_prompt["evidence_complete"]
+            try:
+                _prompt_text = _build_codex_prompt_for_review(_prompt_bundle, pipeline_id)
+            except ValueError as _pv_exc:
+                # evidence_complete=False → prompt builder가 fail-closed로 차단.
+                _die(
+                    "[BLOCKED] failure_code=codex_review_bundle_incomplete\n"
+                    f"  {_pv_exc}\n"
+                    "  git diff origin/main...HEAD를 확인하고 bundle을 재생성하세요 (fail-closed)."
+                )
             _auto_run = _invoke_codex_exec(
                 _selected_model_now,
                 _selected_effort_now,
-                _build_codex_prompt_for_review(_preflight_bundle, pipeline_id),
+                _prompt_text,
                 codex_bin=_codex_bin_now,
                 timeout=_codex_exec_timeout,
             )
@@ -24717,6 +25128,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   운영 승인 자격을 갖지 못한다(acceptance artifact 생성 불가). fail-closed.
     if _environment_str == "test":
         acceptance_eligible = False
+    # IMP-20260712-DAE1 REJECT#4: evidence_complete != True(CRITICAL hunk 누락)이면 Codex가 코드를
+    #   보지 못한 채 판정한 것이므로 어떤 경우에도 승인 자격을 부여하지 않는다(fail-closed 안전망).
+    if not _preflight_bundle.get("evidence_complete", False):
+        acceptance_eligible = False
 
     # BUG-20260702-E69E REJECT-1: 이번 attempt가 검토한 snapshot identity를 중첩 dict로 기록한다.
     #   top-level 개별 필드(packet_sha256/pr_head_sha/pr_body_candidate_sha256)는 하위 호환을 위해
@@ -24732,6 +25147,24 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         # BUG-20260702-E69E: 방금 materialize한 bundle SHA를 우선 반영(입력 bundle과 결정적 일치).
         "review_bundle_sha256": _review_bundle_sha256 or _snap_now["review_bundle_sha256"],
     }
+
+    # IMP-20260712-DAE1 REJECT#4: 실제 codex CLI 버전을 확인한다(하드코딩 "unknown" 대체).
+    #   단, 이번 실행에서 실제로 codex exec를 호출한 경우(_auto_cli_override)만 감지한다. external
+    #   verdict/cache-hit/external-cli-injection 경로는 codex를 실행하지 않았으므로 "unknown"으로
+    #   남긴다(codex가 미사용인데 설치 버전을 기록하면 허위 증거가 됨 — fail-safe).
+    _codex_cli_version_actual = "unknown"
+    if _auto_cli_override is not None:
+        try:
+            _ver_bin = _fake_codex_bin or shutil.which("codex") or "codex"
+            _ver_r = subprocess.run(
+                [_ver_bin, "--version"],
+                capture_output=True, text=True, timeout=10,
+                encoding="utf-8", errors="replace",
+            )
+            if _ver_r.returncode == 0 and _ver_r.stdout.strip():
+                _codex_cli_version_actual = _ver_r.stdout.strip().splitlines()[0]
+        except Exception:  # noqa: BLE001 — 버전 확인 실패는 unknown으로 남긴다(fail-safe)
+            _codex_cli_version_actual = "unknown"
 
     result = {
         # IMP-20260712-DAE1 REJECT#3(요구8): schema v5 — invoked/verification/auth/environment 증거.
@@ -24785,9 +25218,27 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                   else ("external CLI injection (--codex-cli-*)" if cli_run is not None
                         else "N/A (external verdict)"))
         ),
-        "codex_cli_version": "unknown",
+        "codex_cli_version": _codex_cli_version_actual,
         "codex_model": _actual_model_str,
         "model_source": _model_source_str,
+        # IMP-20260712-DAE1 REJECT#4: semantic evidence 증거 필드.
+        "prompt_sha256": (
+            hashlib.sha256(_prompt_text.encode("utf-8")).hexdigest()
+            if _prompt_text else ""
+        ),
+        "semantic_evidence_sha256": str(
+            _preflight_bundle.get("semantic_evidence_sha256", "") or ""
+        ),
+        "included_diff_hunks": len(_preflight_bundle.get("diff_hunks", []) or []),
+        "included_function_before_after_sha256": dict(
+            _preflight_bundle.get("function_before_after_shas", {}) or {}
+        ),
+        "truncated_critical_hunks": int(
+            _preflight_bundle.get("truncated_critical_hunks", 0) or 0
+        ),
+        "evidence_complete": bool(
+            _preflight_bundle.get("evidence_complete", False)
+        ),
     }
 
     # IMP-20260712-DAE1 MT-6/rework: Codex Model Router 결과 필드를 result에 기록한다.

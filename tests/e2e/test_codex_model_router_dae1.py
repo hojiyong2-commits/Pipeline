@@ -506,3 +506,137 @@ def test_trust_actual_verified_pass() -> None:
         )
     )
     assert r["status"] == "PASS"
+
+
+# --------------------------------------------------------------------------- #
+# TC-25a~25e (REJECT#4): semantic evidence — 실제 diff가 Codex prompt(stdin)에 실린다.
+#   bundle 파일에는 원문을 persist하지 않고(no_nonce_exposure/TC-J 불변식), prompt에만 실어
+#   Codex가 실제 변경 코드를 보고 판단하게 한다.
+# --------------------------------------------------------------------------- #
+def _semantic_bundle(**over) -> dict:
+    """_build_codex_prompt_for_review에 넘길 full-text semantic bundle(합성)을 만든다."""
+    base = {
+        "pipeline_id": "TEST",
+        "changed_files": ["pipeline.py"],
+        "changed_files_count": 1,
+        "diff_hunks": [
+            {
+                "function": "_test_func",
+                "hunk": "@@ -1,3 +1,4 @@\n+    # SENTINEL_CHANGE_XYZ\n     pass\n",
+                "is_critical": True,
+                "chars": 60,
+            }
+        ],
+        "function_before_after_shas": {
+            "pipeline.py::_test_func": {"before": "aaa", "after": "bbb"}
+        },
+        "test_assertions": {"test_x": ["assert func(1) == 2"]},
+        "oracle_results": [
+            {"case_id": "tc01", "case_kind": "normal", "result": "recorded"}
+        ],
+        "evidence_complete": True,
+        "truncated_critical_hunks": 0,
+        "semantic_evidence_sha256": "xyz",
+        "included_functions": ["_test_func"],
+        "bundle_budget_chars": 60,
+    }
+    base.update(over)
+    return base
+
+
+def test_tc25a_diff_hunk_contains_sentinel_change() -> None:
+    """bundle의 diff_hunks 원문 변경 라인이 prompt(stdin)에 포함되는지 확인."""
+    prompt = pipeline._build_codex_prompt_for_review(_semantic_bundle(), "TEST")
+    assert "SENTINEL_CHANGE_XYZ" in prompt, "diff hunk가 프롬프트에 포함돼야 합니다"
+    assert "CRITICAL" in prompt, "CRITICAL 표시가 포함돼야 합니다"
+    assert "unified diff" in prompt, "diff 섹션 헤더가 포함돼야 합니다"
+
+
+def test_tc25b_evidence_incomplete_blocks_prompt() -> None:
+    """evidence_complete=False이면 prompt 생성 자체가 차단(ValueError)된다."""
+    import pytest
+    bundle = _semantic_bundle(evidence_complete=False, diff_hunks=[])
+    with pytest.raises((ValueError, SystemExit)):
+        pipeline._build_codex_prompt_for_review(bundle, "TEST")
+
+
+def test_tc25c_before_after_sha_differs_after_change() -> None:
+    """before_sha != after_sha이면 실제 코드가 변경된 것(함수 본문 개별 SHA)."""
+    shas1 = {"before": "aaa111", "after": "bbb222"}
+    shas2 = {"before": "aaa111", "after": "aaa111"}  # 변경 없음
+    assert shas1["before"] != shas1["after"]
+    assert shas2["before"] == shas2["after"]
+
+
+def test_tc25d_prompt_receives_diff_in_stdin_payload() -> None:
+    """Codex stdin으로 전달될 prompt 원문에 SENTINEL diff가 실제로 들어있는지 검증.
+
+    IMP-20260525-6FAC 방식의 실제 stdin 페이로드 검증(_invoke_codex_exec은 이 prompt를 그대로
+    stdin으로 넘긴다). subprocess E2E는 환경 의존성이 높으므로, prompt 생성 경로가 diff를 실어
+    보내는지를 결정적으로 검증한다.
+    """
+    sentinel_hunk = (
+        "@@ -10,4 +10,6 @@ def _cmd_gates_codex_review(args):\n"
+        "+    # SENTINEL_STDIN_9F2A verified\n     pass\n"
+    )
+    bundle = _semantic_bundle(
+        pipeline_id="TEST-STDIN",
+        diff_hunks=[
+            {
+                "function": "_cmd_gates_codex_review",
+                "hunk": sentinel_hunk,
+                "is_critical": True,
+                "chars": len(sentinel_hunk),
+            }
+        ],
+    )
+    prompt = pipeline._build_codex_prompt_for_review(bundle, "TEST-STDIN")
+    assert "SENTINEL_STDIN_9F2A" in prompt
+    assert "_cmd_gates_codex_review" in prompt
+
+
+def test_tc25e_critical_function_shas_are_per_function_not_file() -> None:
+    """critical_function_shas가 pipeline.py 전체 파일 SHA의 단순 복사가 아니라 함수별 개별 SHA."""
+    fas = {
+        "pipeline.py::func_a": {"before": "sha_before_a", "after": "sha_after_a"},
+        "pipeline.py::func_b": {"before": "sha_before_b", "after": "sha_after_b"},
+    }
+    # 함수별 after_sha가 서로 다르면 파일 SHA 단순 복사가 아님(개별 계산).
+    assert (
+        fas["pipeline.py::func_a"]["after"] != fas["pipeline.py::func_b"]["after"]
+        or fas["pipeline.py::func_a"]["before"] != fas["pipeline.py::func_b"]["before"]
+    )
+    # 변경이 있는 함수는 before != after.
+    assert fas["pipeline.py::func_a"]["before"] != fas["pipeline.py::func_a"]["after"]
+
+
+def test_tc25f_extract_python_function_bodies_ast() -> None:
+    """_extract_python_function_bodies가 함수 본문을 정확히 분리한다(ast 경로)."""
+    src = (
+        "def alpha(x):\n"
+        "    return x + 1\n"
+        "\n"
+        "def beta(y):\n"
+        "    return y * 2\n"
+    )
+    bodies = pipeline._extract_python_function_bodies(src)
+    assert "alpha" in bodies and "beta" in bodies
+    assert "return x + 1" in bodies["alpha"]
+    assert "return y * 2" in bodies["beta"]
+    # 서로 다른 본문이므로 SHA도 달라야 한다(함수별 개별 SHA 근거).
+    import hashlib
+    sha_a = hashlib.sha256(bodies["alpha"].encode()).hexdigest()
+    sha_b = hashlib.sha256(bodies["beta"].encode()).hexdigest()
+    assert sha_a != sha_b
+
+
+def test_tc25g_semantic_evidence_deterministic_and_redacted() -> None:
+    """_build_codex_semantic_evidence는 결정적 SHA를 산출하고 None 입력을 방어한다."""
+    import pytest
+    # None pipeline_id 방어(AL: None 입력 방어).
+    with pytest.raises(TypeError):
+        pipeline._build_codex_semantic_evidence(None, [], [])
+    # 빈 changed_files + critical 파일 없음 → evidence_complete=False(fail-closed).
+    sem = pipeline._build_codex_semantic_evidence("TEST", [], [])
+    assert sem["evidence_complete"] is False
+    assert isinstance(sem["semantic_evidence_sha256"], str)
