@@ -1021,11 +1021,11 @@ def test_tc29e_effective_force_review_bypasses_cache_in_source() -> None:
 # --------------------------------------------------------------------------- #
 
 def test_tc30a_bundle_budget_sufficient_for_tc11_oracles() -> None:
-    """REJECT#15: CODEX_REVIEW_BUNDLE_BUDGET_CHARS가 tc11 oracle 파일 포함 총 diff를
-    수용해야 한다. tc11 diff ~640자 포함 총 ~65270자 수용을 위해 최소 66000자 이상이어야 한다."""
-    assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 66000, (
-        f"REJECT#15: 예산이 tc11 oracle을 수용하지 못합니다: "
-        f"{pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 66000"
+    """REJECT#15/16: CODEX_REVIEW_BUNDLE_BUDGET_CHARS가 tc11 oracle 파일 포함 총 diff를
+    수용해야 한다. REJECT#16 snapshot 코드 추가 후 ~69925자 + tc11 ~900자 수용 위해 71000 이상."""
+    assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 71000, (
+        f"REJECT#16: 예산이 tc11 oracle을 수용하지 못합니다: "
+        f"{pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 71000"
     )
 
 

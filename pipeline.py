@@ -2447,7 +2447,7 @@ CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
 #   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
 #   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
-CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 70000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000 (tc11 oracle 파일 포함 총 ~65270자 수용)
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 73000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000 (pre/post snapshot 코드 추가로 diff ~69925자 + tc11 ~900자 수용)
 
 
 class _CodexCacheSkipError(Exception):
