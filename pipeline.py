@@ -24728,6 +24728,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 state, pipeline_id
             )
             if not _live_chk["ok"]:
+                # REJECT#22: cache live SHA 재검증 실패 → 기존 effective 결과 즉시 무효화(AC#2).
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "cache_live_sha_mismatch",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
                 _die(
                     "[BLOCKED] failure_code=cache_live_sha_mismatch\n"
                     f"  cache hit이지만 live SHA 재검증 실패: {', '.join(_live_chk['mismatched'])}\n"
@@ -24740,6 +24746,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             if _risk_level_str.upper() in {"HIGH", "CRITICAL"}:
                 _cv_chk = str(_cache_probe.get("cached_verification_level") or "").strip()
                 if not _cv_chk or _cv_chk == CODEX_VERIFICATION_UNVERIFIED:
+                    # REJECT#22: 캐시 verification level 불충분 → 기존 effective 결과 즉시 무효화(AC#2).
+                    _write_codex_review_blocked_invalidation(
+                        pipeline_id, "cache_hit_verification_insufficient",
+                        prev_reject_count, prev_cli_error_count,
+                        _review_bundle_sha256, _risk_level_str, _model_policy,
+                    )
                     _die(
                         "[BLOCKED] failure_code=cache_hit_verification_insufficient\n"
                         f"  HIGH/CRITICAL cache hit이지만 "
@@ -24775,6 +24787,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             #   여기 도달하면 반드시 chatgpt가 보장된다. 그래도 방어적으로 재검증한다.
             _cached_auth_src = str(_cache_probe.get("cached_auth_source") or "").strip()
             if not _cached_auth_src or _cached_auth_src != "chatgpt":
+                # REJECT#22: 캐시 auth_source 무효 → 기존 effective 결과 즉시 무효화(AC#2).
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_cache_auth_source_invalid",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
                 _die(
                     "[BLOCKED] failure_code=codex_cache_auth_source_invalid\n"
                     f"  캐시 auth_source={_cached_auth_src!r} — chatgpt가 아니거나 누락.\n"
@@ -24793,6 +24811,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _selected_model_now = str(_model_policy.get("selected_model", ""))
             _selected_effort_now = str(_model_policy.get("selected_reasoning_effort", ""))
             _codex_bin_now = _fake_codex_bin or None
+            # REJECT#22: 실제 codex exec 자동 실행 시작 시점에 기존 effective 결과를 즉시 무효화한다.
+            #   이후 인증 실패, snapshot 변경, capability 불일치 등 어떤 경로로 종료되더라도
+            #   기존 APPROVED effective 결과가 request-accept에 남지 않도록 보장한다(fail-closed).
+            #   AC#1: force-review 시 기존 APPROVED 결과가 더 이상 effective하지 않도록 함.
+            #   AC#2: 인증 실패/snapshot_changed 각각에서 BLOCKED + acceptance_eligible=false 저장.
+            _write_codex_review_blocked_invalidation(
+                pipeline_id, "review_in_progress",
+                prev_reject_count, prev_cli_error_count,
+                _review_bundle_sha256, _risk_level_str, _model_policy,
+            )
             # 요구3: 실제 codex exec 실행 전 ChatGPT Plus 인증을 강제한다(API key/미로그인 차단).
             _auth = _check_codex_chatgpt_auth(codex_bin=_codex_bin_now)
             if _auth.get("result") != "OK":
@@ -24976,6 +25004,15 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             if _match.get("result") == "BLOCKED":
                 _cap_fc = str(_match.get("failure_code", "model_mismatch"))
                 if _cap_fc != "unknown_model_critical_blocked":
+                    # REJECT#22: model_mismatch — specific failure_code로 결과를 덮어 기록한다.
+                    #   AC#1: force-review model_mismatch 시 기존 APPROVED 결과가 더 이상 effective하지 않다.
+                    #   AC#2: actual_model_mismatch에서 BLOCKED + acceptance_eligible=false로 저장된다.
+                    #   (review_in_progress 기록은 이미 위에서 완료됨 — 이 쪽이 더 specific한 값으로 갱신)
+                    _write_codex_review_blocked_invalidation(
+                        pipeline_id, _cap_fc,
+                        prev_reject_count, prev_cli_error_count,
+                        _review_bundle_sha256, _risk_level_str, _model_policy,
+                    )
                     # 모델 불일치/허용 목록 외: CLI 실행 전에 차단(verdict 없음, fail-closed).
                     _die(
                         f"[BLOCKED] failure_code={_cap_fc}\n"
@@ -26038,6 +26075,124 @@ def _finish_codex_review_error(
     _log_event(state, f"codex review CLI ERROR: error_type={error_type}")
     _save(state)
     sys.exit(1)
+
+
+# [Purpose]: REJECT#22 — 재검토(force-review/cache miss) 시 blocking exit에서 기존 effective
+#            APPROVED 결과가 그대로 남아 fail-open 경로가 생기는 문제를 방지한다.
+#            모든 blocking exit 경로에서 _die() 이전에 이 함수를 호출하여 기존 결과를 무효화한다.
+# [Assumptions]: pipeline_id, prev_reject_count, prev_cli_error_count, review_bundle_sha256은
+#            _cmd_gates_codex_review에서 이미 계산된 값을 그대로 전달한다.
+# [Vulnerability & Risks]: write가 실패해도 _die()는 그대로 호출된다(주 경로 유지). 단, write 실패 시
+#            무효화가 이루어지지 않아 기존 APPROVED 결과가 남을 수 있다(graceful degradation).
+# [Improvement]: write 실패를 _log_event로 경고로 남기면 관측성이 높아진다.
+def _write_codex_review_blocked_invalidation(
+    pipeline_id: str,
+    failure_code: str,
+    prev_reject_count: int,
+    prev_cli_error_count: int,
+    review_bundle_sha256: str,
+    risk_level: str = "",
+    model_policy: Optional[Dict[str, Any]] = None,
+) -> None:
+    """BLOCKED 결과를 codex_review_result.json에 기록하여 기존 effective 결과를 즉시 무효화한다.
+
+    재검토(force-review / cache miss) 중 blocking exit가 발생하면 이전 APPROVED 결과가
+    남아 request-accept fail-open 경로가 생기는 것을 방지한다(REJECT#22 fix).
+
+    AC#1: force-review model_mismatch 시 기존 APPROVED 결과가 더 이상 effective하지 않다.
+    AC#2: 인증 실패, cache_hit_verification_insufficient, actual_model_mismatch,
+          codex_review_snapshot_changed 각각에서 BLOCKED + acceptance_eligible=false로 저장된다.
+    AC#3: 실패한 재검토 직후 request-accept가 차단된다(verdict=None → REJECT).
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID.
+        failure_code: 이 BLOCKED 결과의 원인 코드(예: "model_mismatch", "review_in_progress").
+        prev_reject_count: 직전 누적 REJECTED 횟수 (BLOCKED는 증가 없음).
+        prev_cli_error_count: 직전 누적 CLI ERROR 횟수 (BLOCKED는 증가 없음).
+        review_bundle_sha256: 이번 attempt에서 생성한 bundle SHA.
+        risk_level: 분류된 위험 수준 ("LOW"|"MEDIUM"|"HIGH"|"CRITICAL").
+        model_policy: _build_codex_model_policy가 반환한 정책 dict (선택).
+    """
+    _snap = _codex_snapshot_identity(pipeline_id)
+    _effective_bundle_sha = review_bundle_sha256 or str(
+        _snap.get("review_bundle_sha256", "") or ""
+    )
+    _snap["review_bundle_sha256"] = _effective_bundle_sha
+    _policy = model_policy if isinstance(model_policy, dict) else {}
+    result: Dict[str, Any] = {
+        "schema_version": 5,
+        "pipeline_id": pipeline_id,
+        "attempt_id": _generate_attempt_id(),
+        "effective": True,
+        "status": "BLOCKED",
+        "error_type": None,
+        "error_retryable": False,
+        "reject_count": prev_reject_count,
+        "cli_error_count": prev_cli_error_count,
+        "codex_cli_exit_code": None,
+        "codex_cli_stdout_excerpt": "",
+        "codex_cli_stderr_excerpt": "",
+        # verdict=None → _codex_review_snapshot이 "APPROVE_TO_USER"가 아님 판정 → REJECT 반환.
+        # 이로써 request-accept가 차단된다(AC#3).
+        "verdict": None,
+        "verdict_source": None,
+        "reject_reason": None,
+        "root_cause": None,
+        "reproduction": None,
+        "required_fix": None,
+        "acceptance_criteria": [],
+        "reason": f"BLOCKED: failure_code={failure_code}",
+        "packet_sha256": str(_snap.get("packet_sha256", "") or ""),
+        "pr_body_candidate_sha256": str(_snap.get("pr_body_candidate_sha256", "") or ""),
+        "github_canonical_pr_body_sha256": "",
+        "pr_body_sha256": str(_snap.get("pr_body_candidate_sha256", "") or ""),
+        "pr_head_sha": str(_snap.get("pr_head_sha", "") or ""),
+        "staging_id": _snap.get("staging_id") or None,
+        "contract_sha256": str(_snap.get("contract_sha256", "") or ""),
+        "review_bundle_sha256": _effective_bundle_sha,
+        "snapshot_identity": dict(_snap),
+        "acceptance_eligible": False,  # AC#2: acceptance_eligible=false 강제
+        "recorded_at": _now(),
+        "snapshot_id": "",
+        "approval_message_sha256": "",
+        "pending_comment_sha256": "",
+        "cache_hit": False,
+        "cache_key": "",
+        "cache_reason": f"BLOCKED: {failure_code}",
+        "verification_json_sha256": "",
+        "included_functions": [],
+        "excluded_files": [],
+        "codex_cli_command": "",
+        "codex_cli_version": "",
+        "codex_model": "unknown",
+        "model_source": "unknown",
+        "prompt_sha256": "",
+        "semantic_evidence_sha256": "",
+        "included_diff_hunks": 0,
+        "included_function_before_after_sha256": {},
+        "truncated_critical_hunks": 0,
+        "evidence_complete": False,
+        "router_version": CODEX_MODEL_ROUTER_VERSION,
+        "risk_level": str(risk_level or ""),
+        "selected_model": str(_policy.get("selected_model", "") or ""),
+        "selected_reasoning_effort": str(_policy.get("selected_reasoning_effort", "") or ""),
+        "actual_model": "unknown",
+        "actual_effort": "unknown",
+        "review_mode": str(_policy.get("mode", "") or ""),
+        "model_policy_signature": "",
+        "invoked_model": str(_policy.get("selected_model", "") or ""),
+        "invoked_effort": str(_policy.get("selected_reasoning_effort", "") or ""),
+        "model_verification_level": CODEX_VERIFICATION_UNVERIFIED,
+        "auth_source": "unknown",
+        "environment": "production",
+        "codex_cli_command_sanitized": "",
+    }
+    result_path = _codex_review_result_path()
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _write_json(result_path, result)
+    except Exception:  # noqa: BLE001 — write 실패 시 무시 (주 경로가 _die()로 종료)
+        pass
 
 
 # [Purpose]: BUG-20260702-E69E MT-5 — codex_review_result.json(SSoT)을 읽어 status가 ERROR이거나

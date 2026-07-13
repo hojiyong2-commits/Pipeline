@@ -1581,3 +1581,150 @@ def test_tc36b_critical_unknown_blocked_result_includes_verification_level(tmp_p
         f"REJECT#21 deadlock fix: BLOCKED 반환의 model_verification_level이 invocation_verified가 아님\n  "
         f"level={r.get('model_verification_level')!r}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-37: REJECT#22 — 재검토 blocking exit 시 기존 APPROVED effective 결과 무효화(AC#1~#4).
+# --------------------------------------------------------------------------- #
+
+def test_tc37a_write_blocked_invalidation_produces_correct_result(tmp_path: Path) -> None:
+    """REJECT#22 AC#2: _write_codex_review_blocked_invalidation이 BLOCKED 결과를 기록한다.
+
+    AC#2: 각 blocking 경로에서 BLOCKED + acceptance_eligible=false로 저장된다.
+    """
+    import json
+    import os
+
+    result_path = tmp_path / "codex_review_result.json"
+    # 먼저 가짜 APPROVED 결과를 파일에 기록한다(이전 effective 결과 시뮬레이션).
+    fake_approved = {
+        "schema_version": 5,
+        "pipeline_id": "IMP-TEST-37A",
+        "verdict": "APPROVE_TO_USER",
+        "acceptance_eligible": True,
+        "effective": True,
+        "status": "APPROVED",
+    }
+    result_path.write_text(json.dumps(fake_approved), encoding="utf-8")
+
+    # 환경 변수로 result path를 격리한다.
+    orig_env = os.environ.copy()
+    try:
+        os.environ["PIPELINE_CODEX_REVIEW_RESULT_OVERRIDE"] = str(result_path)
+        # _codex_review_result_path를 monkeypatching하여 격리된 경로를 반환한다.
+        original_fn = pipeline._codex_review_result_path
+        pipeline._codex_review_result_path = lambda: result_path  # type: ignore[assignment]
+        try:
+            pipeline._write_codex_review_blocked_invalidation(
+                "IMP-TEST-37A", "model_mismatch",
+                prev_reject_count=3,
+                prev_cli_error_count=1,
+                review_bundle_sha256="bundle_sha_test",
+                risk_level="CRITICAL",
+                model_policy={
+                    "selected_model": "gpt-5.6-sol",
+                    "selected_reasoning_effort": "max",
+                    "mode": "enforce",
+                },
+            )
+        finally:
+            pipeline._codex_review_result_path = original_fn  # type: ignore[assignment]
+    finally:
+        os.environ.clear()
+        os.environ.update(orig_env)
+
+    # 기록된 결과가 BLOCKED + acceptance_eligible=False인지 확인한다.
+    written = json.loads(result_path.read_text(encoding="utf-8"))
+
+    # AC#2: status=BLOCKED, acceptance_eligible=False로 저장됨.
+    assert written["status"] == "BLOCKED", (
+        f"REJECT#22 AC#2: status가 BLOCKED가 아님 — got {written.get('status')!r}"
+    )
+    assert written["acceptance_eligible"] is False, (
+        f"REJECT#22 AC#2: acceptance_eligible이 False가 아님 — got {written.get('acceptance_eligible')!r}"
+    )
+    assert written["effective"] is True, (
+        f"REJECT#22: effective가 True가 아님 — got {written.get('effective')!r}"
+    )
+    # verdict=None → _codex_review_snapshot이 REJECT 반환(AC#3 전제).
+    assert written["verdict"] is None, (
+        f"REJECT#22 AC#3 전제: verdict가 None이 아님 — got {written.get('verdict')!r}"
+    )
+    assert written["pipeline_id"] == "IMP-TEST-37A", (
+        f"REJECT#22: pipeline_id 불일치 — got {written.get('pipeline_id')!r}"
+    )
+    assert written.get("reject_count") == 3, (
+        f"REJECT#22: reject_count 유지 실패 — got {written.get('reject_count')!r}"
+    )
+
+
+def test_tc37b_codex_review_snapshot_rejects_blocked_result(tmp_path: Path) -> None:
+    """REJECT#22 AC#3: _write_codex_review_blocked_invalidation 기록 후
+    _codex_review_snapshot이 REJECT를 반환하여 request-accept가 차단됨을 검증한다.
+
+    AC#3: 실패한 재검토 직후 request-accept가 반드시 차단된다.
+    """
+    import json
+
+    # BLOCKED 결과(verdict=None)를 직접 파일로 작성한다.
+    result_path = tmp_path / "codex_review_result.json"
+    blocked_result = {
+        "schema_version": 5,
+        "pipeline_id": "IMP-TEST-37B",
+        "verdict": None,             # BLOCKED → _codex_review_snapshot이 REJECT 반환해야 함.
+        "acceptance_eligible": False,
+        "effective": True,
+        "status": "BLOCKED",
+        "packet_sha256": "pkt_sha_37b",
+        "pr_body_candidate_sha256": "",
+        "pr_head_sha": "",
+    }
+    result_path.write_text(json.dumps(blocked_result), encoding="utf-8")
+
+    # _codex_review_result_path를 monkeypatch하여 격리된 파일을 사용한다.
+    original_fn = pipeline._codex_review_result_path
+    pipeline._codex_review_result_path = lambda: result_path  # type: ignore[assignment]
+    try:
+        # staged_sha_manifest: BLOCKED 결과의 packet_sha256과 일치해야 통과할 수 있다.
+        staged = {"packet_sha256": "pkt_sha_37b"}
+        snap = pipeline._codex_review_snapshot("IMP-TEST-37B", staged, {})
+    finally:
+        pipeline._codex_review_result_path = original_fn  # type: ignore[assignment]
+
+    # BLOCKED 결과(verdict=None)이면 _codex_review_snapshot은 REJECT를 반환해야 한다.
+    assert snap["verdict"] == "REJECT", (
+        f"REJECT#22 AC#3: BLOCKED 결과 후 _codex_review_snapshot이 REJECT를 반환하지 않음\n  snap={snap}"
+    )
+
+
+def test_tc37c_write_blocked_invalidation_called_before_model_mismatch_die() -> None:
+    """REJECT#22 AC#1: model_mismatch blocking exit 전 _write_codex_review_blocked_invalidation
+    호출 코드가 _cmd_gates_codex_review 소스에 존재해야 한다.
+
+    AC#1: force-review model_mismatch 시 기존 APPROVED 결과가 더 이상 effective하지 않다.
+    """
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+
+    # REJECT#22 fix: _write_codex_review_blocked_invalidation 호출이 존재해야 한다.
+    assert "_write_codex_review_blocked_invalidation" in src, (
+        "REJECT#22 AC#1: _cmd_gates_codex_review에 _write_codex_review_blocked_invalidation 호출이 없음 — "
+        "force-review model_mismatch 시 기존 APPROVED 결과가 무효화되지 않음"
+    )
+
+    # AC#2: 각 blocking 경로(cache_live_sha_mismatch, cache_hit_verification_insufficient,
+    #        review_in_progress, model_mismatch)에 대한 호출이 있어야 한다.
+    assert "cache_live_sha_mismatch" in src, (
+        "REJECT#22 AC#2: cache_live_sha_mismatch blocking exit에서 무효화 호출이 없음"
+    )
+    assert "cache_hit_verification_insufficient" in src, (
+        "REJECT#22 AC#2: cache_hit_verification_insufficient blocking exit에서 무효화 호출이 없음"
+    )
+    assert "review_in_progress" in src, (
+        "REJECT#22 AC#2: auto-invoke 시작 시점에 review_in_progress 무효화 호출이 없음"
+    )
+
+    # AC#3: request-accept 차단은 verdict=None(BLOCKED 결과)으로 보장됨.
+    assert "_codex_review_snapshot" in inspect.getsource(pipeline._cmd_gates_request_accept), (
+        "REJECT#22 AC#3: request-accept에 _codex_review_snapshot 호출이 없어 BLOCKED 결과 차단 불가"
+    )
