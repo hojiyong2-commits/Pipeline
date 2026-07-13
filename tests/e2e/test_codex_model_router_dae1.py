@@ -1140,3 +1140,52 @@ def test_tc31c_sem_sha_stable_when_no_change() -> None:
         f"REJECT#16: 동일 입력에서 semantic_evidence_sha256이 달라짐 — false positive 위험\n"
         f"  sha1={sha1}\n  sha2={sha2}"
     )
+
+
+def test_tc31d_pre_cli_snapshot_fail_closed() -> None:
+    """REJECT#17 AC#1: pre-CLI HEAD/semantic evidence SHA 수집 실패 시 즉시 BLOCKED (fail-closed).
+    acceptance_criteria[0]: pre-CLI HEAD 또는 semantic evidence SHA를 얻지 못하면 승인 결과를 기록하지 않고 BLOCKED."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    # 1) 빈 _pre_cli_head_sha → _die 호출 확인
+    assert "if not _pre_cli_head_sha:" in src, (
+        "REJECT#17: pre-CLI HEAD SHA가 비어 있을 때 BLOCKED 처리 없음 — fail-open 위험"
+    )
+    # 2) 빈 _pre_cli_sem_sha → _die 호출 확인
+    assert "if not _pre_cli_sem_sha:" in src, (
+        "REJECT#17: pre-CLI semantic evidence SHA가 비어 있을 때 BLOCKED 처리 없음 — fail-open 위험"
+    )
+
+
+def test_tc31e_post_cli_snapshot_fail_closed() -> None:
+    """REJECT#17 AC#2: post-CLI git 조회 실패 또는 semantic evidence 재계산 실패 시 BLOCKED.
+    acceptance_criteria[1]: post-CLI HEAD/semantic SHA 검증 불가 → codex_review_snapshot_changed."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    # 1) post HEAD 수집 실패 → _post_snap_changed에 head_sha_unverifiable 추가
+    assert "head_sha_unverifiable" in src, (
+        "REJECT#17: post-CLI HEAD 수집 실패 시 _post_snap_changed에 추가되지 않음 — fail-open 위험"
+    )
+    # 2) post semantic SHA 재계산 실패 → _post_snap_changed에 semantic_sha_unverifiable 추가
+    assert "semantic_sha_unverifiable" in src, (
+        "REJECT#17: post-CLI semantic evidence 재계산 실패 시 _post_snap_changed에 추가되지 않음 — fail-open 위험"
+    )
+    # 3) post-CLI 검증이 외부 guard 없이 항상 실행됨 (if _pre_cli_head_sha 제거)
+    assert "_post_snap_changed: List[str] = []" in src, (
+        "REJECT#17: post-CLI snapshot 검증 블록이 외부 guard 없이 직접 실행되지 않음 — fail-open 위험"
+    )
+
+
+def test_tc31f_preflight_vs_prompt_sem_sha_check() -> None:
+    """REJECT#17 AC#3: preflight bundle semantic SHA와 prompt semantic SHA가 다르면 CLI 실행 전 BLOCKED.
+    acceptance_criteria[2]: 두 SHA가 다를 때 즉시 차단."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    # _preflight_sem_sha 변수가 pre-CLI 비교에 사용됨
+    assert "_preflight_sem_sha" in src, (
+        "REJECT#17: preflight bundle semantic SHA 비교 변수 없음 — AC#3 미구현"
+    )
+    # 불일치 시 _die 호출
+    assert "_preflight_sem_sha != _pre_cli_sem_sha" in src, (
+        "REJECT#17: preflight bundle vs prompt semantic SHA 불일치 검증 없음 — AC#3 미구현"
+    )

@@ -24768,8 +24768,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     f"  {_pv_exc}\n"
                     "  git diff origin/main...HEAD를 확인하고 bundle을 재생성하세요 (fail-closed)."
                 )
-            # REJECT#16: Codex CLI 실행 직전 — HEAD/bundle SHA/semantic evidence SHA/함수 SHA를
-            #   immutable identity로 고정한다. CLI 종료 후 재계산하여 동일성을 검증한다.
+            # REJECT#17: pre-CLI snapshot — 수집 실패 시 즉시 BLOCKED (fail-closed).
+            #   HEAD SHA, semantic evidence SHA 어느 쪽이든 비어 있으면 검증 불가 → CLI 실행 중단.
             try:
                 _hd_r = subprocess.run(
                     ["git", "rev-parse", "HEAD"],
@@ -24778,9 +24778,31 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 )
                 if _hd_r.returncode == 0:
                     _pre_cli_head_sha = _hd_r.stdout.strip()
-            except Exception:  # noqa: BLE001 — git 실패는 검증 skip(빈 문자열 유지)
-                pass
+                else:
+                    _pre_cli_head_sha = ""
+            except Exception:  # noqa: BLE001
+                _pre_cli_head_sha = ""
+            if not _pre_cli_head_sha:
+                _die(
+                    "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
+                    "  pre-CLI HEAD SHA 수집 실패 — 저장소 상태를 확인하고 재실행하세요 (fail-closed)."
+                )
             _pre_cli_sem_sha = str(_sem_for_prompt.get("semantic_evidence_sha256", "") or "")
+            if not _pre_cli_sem_sha:
+                _die(
+                    "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
+                    "  pre-CLI semantic evidence SHA가 비어 있습니다 — bundle을 재생성하고 재실행하세요 (fail-closed)."
+                )
+            # REJECT#17 AC#3: preflight bundle semantic SHA와 prompt semantic SHA 일치 검증.
+            #   둘 다 동일 입력으로 계산되므로 다르면 CLI 전에 상태가 변경된 것을 의미한다.
+            _preflight_sem_sha = str(_preflight_bundle.get("semantic_evidence_sha256", "") or "")
+            if _preflight_sem_sha and _preflight_sem_sha != _pre_cli_sem_sha:
+                _die(
+                    "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
+                    "  preflight bundle과 prompt의 semantic SHA가 다릅니다 — bundle이 갱신되었습니다.\n"
+                    f"  preflight={_preflight_sem_sha!r}  prompt={_pre_cli_sem_sha!r}\n"
+                    "  gates codex-review를 재실행하세요 (fail-closed)."
+                )
             _pre_cli_fn_shas = dict(_sem_for_prompt.get("function_before_after_shas", {}) or {})
             _auto_run = _invoke_codex_exec(
                 _selected_model_now,
@@ -24833,54 +24855,59 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             # `(0 or -1) == -1`이 되어 invocation_ok가 항상 False가 되는 버그 수정.
             # `.get("exit_code")` 반환값 자체가 None인 경우에만 미실행으로 간주한다.
             _invocation_ok = _raw_exit == 0
-            # REJECT#16: CLI 종료 직후 — HEAD/semantic evidence SHA/함수 SHA를 재계산하고
-            #   pre-CLI snapshot과 비교한다. 하나라도 달라지면 fail-closed로 차단한다.
-            #   (cli가 성공 종료 + pre-CLI snapshot이 기록된 경우에만 검증한다.)
-            if _pre_cli_head_sha:
-                _post_snap_changed: List[str] = []
-                # (a) HEAD SHA 재확인
-                try:
-                    _post_hd = subprocess.run(
-                        ["git", "rev-parse", "HEAD"],
-                        capture_output=True, text=True, timeout=10,
-                        cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
-                    )
-                    _post_head_sha = (
-                        _post_hd.stdout.strip() if _post_hd.returncode == 0 else ""
-                    )
-                except Exception:  # noqa: BLE001
-                    _post_head_sha = ""
-                if _post_head_sha and _post_head_sha != _pre_cli_head_sha:
-                    _post_snap_changed.append("head_sha")
-                # (b) semantic evidence SHA 재계산
-                _post_sem_sha = ""
-                _post_fn_shas: Dict[str, Any] = {}
-                try:
-                    _post_sem_data = _build_codex_semantic_evidence(
-                        pipeline_id,
-                        list(_preflight_bundle.get("changed_files", []) or []),
-                        list(_preflight_bundle.get("included_functions", []) or []),
-                    )
-                    _post_sem_sha = str(
-                        _post_sem_data.get("semantic_evidence_sha256", "") or ""
-                    )
-                    _post_fn_shas = dict(
-                        _post_sem_data.get("function_before_after_shas", {}) or {}
-                    )
-                except Exception:  # noqa: BLE001 — 재계산 실패 시 검증 skip(비교 불가)
-                    pass
-                if _pre_cli_sem_sha and _post_sem_sha and _post_sem_sha != _pre_cli_sem_sha:
-                    _post_snap_changed.append("semantic_evidence_sha")
-                if _pre_cli_fn_shas and _post_fn_shas and _post_fn_shas != _pre_cli_fn_shas:
+            # REJECT#17: CLI 종료 직후 snapshot 검증 — 실패·불일치 모두 BLOCKED (fail-closed).
+            #   _pre_cli_head_sha는 위에서 항상 비어있지 않음이 보장되므로 외부 guard 불필요.
+            _post_snap_changed: List[str] = []
+            # (a) HEAD SHA 재확인 — 재수집 실패 시 검증 불가 → fail-closed
+            try:
+                _post_hd = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    capture_output=True, text=True, timeout=10,
+                    cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+                )
+                _post_head_sha = (
+                    _post_hd.stdout.strip() if _post_hd.returncode == 0 else ""
+                )
+            except Exception:  # noqa: BLE001
+                _post_head_sha = ""
+            if not _post_head_sha:
+                _post_snap_changed.append("head_sha_unverifiable")
+            elif _post_head_sha != _pre_cli_head_sha:
+                _post_snap_changed.append("head_sha")
+            # (b) semantic evidence SHA 재계산 — 재계산 실패 시 검증 불가 → fail-closed
+            _post_sem_sha = ""
+            _post_fn_shas: Dict[str, Any] = {}
+            try:
+                _post_sem_data = _build_codex_semantic_evidence(
+                    pipeline_id,
+                    list(_preflight_bundle.get("changed_files", []) or []),
+                    list(_preflight_bundle.get("included_functions", []) or []),
+                )
+                _post_sem_sha = str(
+                    _post_sem_data.get("semantic_evidence_sha256", "") or ""
+                )
+                _post_fn_shas = dict(
+                    _post_sem_data.get("function_before_after_shas", {}) or {}
+                )
+            except Exception:  # noqa: BLE001 — 재계산 예외 → fail-closed
+                pass
+            if not _post_sem_sha:
+                _post_snap_changed.append("semantic_sha_unverifiable")
+            elif _post_sem_sha != _pre_cli_sem_sha:
+                _post_snap_changed.append("semantic_evidence_sha")
+            if _pre_cli_fn_shas:
+                if not _post_fn_shas:
+                    _post_snap_changed.append("function_shas_unverifiable")
+                elif _post_fn_shas != _pre_cli_fn_shas:
                     _post_snap_changed.append("function_before_after_shas")
-                if _post_snap_changed:
-                    _die(
-                        "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
-                        "  Codex CLI 실행 중 저장소 상태가 변경되었습니다.\n"
-                        f"  변경된 차원: {', '.join(_post_snap_changed)}\n"
-                        "  승인 결과와 캐시가 무효화됩니다 — gates codex-review를 재실행하세요.\n"
-                        "  (fail-closed: 변경 전 코드를 승인한 결과는 저장되지 않습니다.)"
-                    )
+            if _post_snap_changed:
+                _die(
+                    "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
+                    "  Codex CLI 실행 중 저장소 상태가 변경되었거나 스냅샷 검증 불가입니다.\n"
+                    f"  차단 차원: {', '.join(_post_snap_changed)}\n"
+                    "  승인 결과와 캐시가 무효화됩니다 — gates codex-review를 재실행하세요.\n"
+                    "  (fail-closed: 검증 불가 상태에서 승인 결과를 저장하지 않습니다.)"
+                )
             _match = _check_codex_model_capability_match(
                 _selected_model_now, _selected_effort_now,
                 _invoked_model_str, _invoked_effort_str,
