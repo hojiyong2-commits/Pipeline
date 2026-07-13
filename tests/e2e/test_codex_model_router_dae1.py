@@ -1373,3 +1373,47 @@ def test_tc33c_single_approve_and_single_reject_preserved() -> None:
     )
     assert r_reject["error_type"] is None
     assert r_reject["root_cause"] == "rc"
+
+
+# --------------------------------------------------------------------------- #
+# TC-34: REJECT#20 — JSON-like text가 _parse_json_verdict 실패 시 INVALID 수집.
+# --------------------------------------------------------------------------- #
+_INVALID_JSON_REJECT = '{"verdict":"REJECT"}'  # 4필드 누락 → _parse_json_verdict None
+
+
+def test_tc34a_invalid_reject_json_then_valid_approve_is_parse_failure() -> None:
+    """REJECT#20 AC#1: 잘못된 REJECT JSON 뒤에 유효한 APPROVE가 있으면 parse_failure여야 한다.
+    _parse_json_verdict가 None을 반환하는 JSON-like text는 INVALID로 수집돼야 한다."""
+    stdout = _ndjson_two_agent_messages(_INVALID_JSON_REJECT, '{"verdict":"APPROVE_TO_USER"}')
+    r = pipeline._run_codex_cli_review(0, stdout, "")
+    assert r["status"] == "ERROR", (
+        f"REJECT#20 AC#1: invalid REJECT+APPROVE가 APPROVED를 반환함 — INVALID 수집 누락\n  result={r}"
+    )
+    assert r["error_type"] == "parse_failure", (
+        f"REJECT#20 AC#1: error_type이 parse_failure가 아님\n  error_type={r.get('error_type')}"
+    )
+
+
+def test_tc34b_valid_approve_then_invalid_reject_json_is_parse_failure() -> None:
+    """REJECT#20 AC#2: 유효한 APPROVE 뒤에 잘못된 REJECT JSON이 있어도 parse_failure여야 한다."""
+    stdout = _ndjson_two_agent_messages('{"verdict":"APPROVE_TO_USER"}', _INVALID_JSON_REJECT)
+    r = pipeline._run_codex_cli_review(0, stdout, "")
+    assert r["status"] == "ERROR", (
+        f"REJECT#20 AC#2: APPROVE+invalid REJECT가 APPROVED를 반환함\n  result={r}"
+    )
+    assert r["error_type"] == "parse_failure", (
+        f"REJECT#20 AC#2: error_type이 parse_failure가 아님\n  error_type={r.get('error_type')}"
+    )
+
+
+def test_tc34c_single_invalid_json_is_parse_failure() -> None:
+    """REJECT#20 AC#3: JSON처럼 시작하지만 verdict 스키마 무효인 단일 메시지는 parse_failure여야 한다."""
+    stdout = _ndjson_agent_json(_INVALID_JSON_REJECT)
+    r = pipeline._run_codex_cli_review(0, stdout, "")
+    assert r["status"] == "ERROR", (
+        f"REJECT#20 AC#3: 단일 invalid JSON이 ERROR가 아닌 결과를 반환함\n  result={r}"
+    )
+    assert r["error_type"] == "parse_failure", (
+        f"REJECT#20 AC#3: error_type이 parse_failure가 아님\n  error_type={r.get('error_type')}"
+    )
+    assert r.get("verdict") is None

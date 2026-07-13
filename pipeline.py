@@ -10244,6 +10244,9 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                     _ndjson_verdicts.append({"kind": "APPROVE"})
                 elif _agent_text.startswith("{"):
                     # IMP-20260712-DAE1 bugfix#5: JSON verdict in agent_message.text
+                    # REJECT#20: _parse_json_verdict 실패 시 INVALID 추가 (fail-closed).
+                    # JSON-like text가 스키마 검증을 통과하지 못하면 INVALID로 수집해야
+                    # 이후 복수 판정 차단 규칙이 올바르게 동작한다.
                     _inner_parsed = _parse_json_verdict(_agent_text)
                     if _inner_parsed is not None:
                         if _inner_parsed["verdict"] == "APPROVED":
@@ -10253,6 +10256,9 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                                 "kind": "REJECT",
                                 "parsed": _inner_parsed,
                             })
+                    else:
+                        # JSON처럼 시작하지만 verdict 스키마 검증 실패 → INVALID (fail-closed)
+                        _ndjson_verdicts.append({"kind": "INVALID"})
                 elif re.match(r"^REJECT\s+-\s+\S", _agent_text, re.IGNORECASE):
                     # IMP-20260712-DAE1 REJECT#9: plaintext REJECT는 구조화 검증 미통과 → INVALID
                     _ndjson_verdicts.append({"kind": "INVALID"})
