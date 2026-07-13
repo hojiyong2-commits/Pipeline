@@ -27531,13 +27531,43 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                     _cx_trust_raw = _cx_trust_loaded
         except (OSError, json.JSONDecodeError, ValueError):
             _cx_trust_raw = {}
-        # router-era 결과(router_version 존재)만 신뢰 게이트를 적용한다.
-        if (
-            isinstance(_cx_trust_raw, dict)
-            and str(_cx_trust_raw.get("router_version", "") or "").strip()
-            and str(_cx_trust_raw.get("pipeline_id", "") or "") == pipeline_id
-        ):
-            # 요구9(10): test/manual/external injection 결과는 승인 자격이 없다.
+        # IMP-20260712-DAE1 REJECT#5: fail-closed 신뢰 검증.
+        #   결과 파일이 존재하면 router_version 유무와 pipeline_id 일치 여부와 관계없이
+        #   항상 운영 신뢰 게이트를 실행한다. router_version 삭제 또는 pipeline_id 불일치로
+        #   신뢰 게이트를 우회하는 다운그레이드 경로를 차단한다(fail-closed).
+        #   레거시 결과(router_version 없음)는 명시적 마이그레이션 없이 legacy 경로를 허용하지 않는다.
+        if isinstance(_cx_trust_raw, dict) and _cx_trust_raw:
+            # (A) pipeline_id 불일치 → 즉시 차단(다른 파이프라인 결과 재사용 금지).
+            _result_pipeline_id = str(_cx_trust_raw.get("pipeline_id", "") or "")
+            if _result_pipeline_id and _result_pipeline_id != pipeline_id:
+                _log_event(
+                    state,
+                    f"request-accept blocked: codex_review_result pipeline_id mismatch "
+                    f"({_result_pipeline_id} != {pipeline_id})",
+                )
+                _save(state)
+                _die(
+                    "[BLOCKED] failure_code=codex_review_pipeline_id_mismatch\n"
+                    f"  codex_review_result.pipeline_id={_result_pipeline_id}이 현재 파이프라인 "
+                    f"{pipeline_id}와 다릅니다 — 다른 파이프라인 결과 재사용 금지 (fail-closed).\n"
+                    "  gates codex-review를 재실행하세요."
+                )
+                return  # unreachable
+            # (B) router_version 누락 → 레거시 결과는 명시적 마이그레이션 없이 허용 불가(fail-closed).
+            if not str(_cx_trust_raw.get("router_version", "") or "").strip():
+                _log_event(
+                    state,
+                    "request-accept blocked: codex_review_result missing router_version (fail-closed)",
+                )
+                _save(state)
+                _die(
+                    "[BLOCKED] failure_code=codex_review_router_version_missing\n"
+                    "  codex_review_result에 router_version이 없습니다 — 레거시 결과는 명시적 "
+                    "마이그레이션 없이 허용되지 않습니다 (fail-closed).\n"
+                    "  gates codex-review를 재실행하세요."
+                )
+                return  # unreachable
+            # (C) test/manual/external injection 결과 → 승인 자격 없음.
             if str(_cx_trust_raw.get("environment", "") or "") == "test":
                 _log_event(
                     state,
@@ -27551,6 +27581,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                     "  실제 Codex CLI 실행(gates codex-review, cache miss 시 자동)으로 재검토하세요."
                 )
                 return  # unreachable
+            # (D) 전체 운영 신뢰 검증(router_version/risk/model/effort/verification_level 등).
             _cx_trust = _check_codex_review_operational_trust(_cx_trust_raw)
             if _cx_trust.get("status") != "PASS":
                 _log_event(
