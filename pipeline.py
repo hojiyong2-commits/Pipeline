@@ -8593,6 +8593,12 @@ def _check_codex_model_capability_match(
     # (요구4) HIGH/CRITICAL은 최소 invocation_verified 이상이어야 한다. unverified는 차단.
     if _risk in {"HIGH", "CRITICAL"} and _level == CODEX_VERIFICATION_UNVERIFIED:
         return {"result": "BLOCKED", "failure_code": "model_verification_unverified"}
+    # REJECT#21: CRITICAL은 actual_verified만 허용한다 (invocation_verified 불충분).
+    #   actual_model=unknown이면 CLI가 실제 사용 모델을 보고하지 않은 것이므로
+    #   CRITICAL 검토 품질을 보증할 수 없어 unknown_model_critical_blocked로 차단한다.
+    #   HIGH의 invocation_verified 허용 정책은 별도로 유지된다.
+    if _risk == "CRITICAL" and _level != CODEX_VERIFICATION_ACTUAL:
+        return {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
     return {"result": "OK", "model_verification_level": _level}
 
 
@@ -8746,7 +8752,11 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
 
 
 def _check_codex_capability_gate(actual_model: str, risk_level: str) -> Dict[str, Any]:
-    """actual_model=unknown + HIGH/CRITICAL → fail-closed BLOCKED.
+    """actual_model=unknown + CRITICAL → fail-closed BLOCKED (REJECT#21: CRITICAL 전용).
+
+    REJECT#21: CRITICAL만 actual_verified 필수. HIGH는 invocation_verified 허용(별도 정책).
+    actual_model=unknown이면 CLI가 실제 사용 모델을 보고하지 않은 것이므로 CRITICAL
+    검토 품질을 보증할 수 없어 차단한다.
 
     Args:
         actual_model: 감지된 실제 모델명("unknown"이면 확인 불가).
@@ -8755,7 +8765,7 @@ def _check_codex_capability_gate(actual_model: str, risk_level: str) -> Dict[str
         {"result": "OK"} 또는
         {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}.
     """
-    if str(actual_model) == "unknown" and str(risk_level).upper() in {"HIGH", "CRITICAL"}:
+    if str(actual_model) == "unknown" and str(risk_level).upper() == "CRITICAL":
         return {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
     return {"result": "OK"}
 
@@ -26187,6 +26197,16 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             "codex_review_unverified_high_critical",
             f"risk_level={risk_level}에서 model_verification_level=unverified — "
             "최소 invocation_verified가 필요합니다 (fail-closed).",
+        )
+    # REJECT#21: CRITICAL은 actual_verified만 허용. invocation_verified/unverified는 차단.
+    #   actual_model=unknown이면 CLI가 실제 사용 모델을 보고하지 않은 것이므로 CRITICAL
+    #   검토 품질을 보증할 수 없다. HIGH의 invocation_verified 허용 정책과 명확히 분리.
+    if risk_level == "CRITICAL" and verification_level != CODEX_VERIFICATION_ACTUAL:
+        return _blocked(
+            "unknown_model_critical_blocked",
+            f"risk_level=CRITICAL에서 model_verification_level={verification_level} — "
+            "actual_verified 증거(actual_model=선택값)만 허용합니다. "
+            "actual_model=unknown은 CRITICAL에서 차단됩니다 (fail-closed).",
         )
     # (6) auth_source는 chatgpt여야 한다(요구9: ChatGPT Plus 인증 승계).
     if str(result.get("auth_source", "") or "") != "chatgpt":

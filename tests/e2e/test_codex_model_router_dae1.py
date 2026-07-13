@@ -425,6 +425,7 @@ def test_tc12_invoke_usage_limit_nonzero(tmp_path: Path) -> None:
 # TC-8/TC-9/TC-11: external/injection/environment=test는 승인 자격 없음.
 # --------------------------------------------------------------------------- #
 def _trust_base(**over) -> dict:
+    # REJECT#21: CRITICAL은 actual_verified만 허용. 기본값을 actual_verified로 갱신.
     base = {
         "verdict_source": "codex_cli",
         "acceptance_eligible": True,
@@ -439,9 +440,9 @@ def _trust_base(**over) -> dict:
         "selected_reasoning_effort": "max",
         "invoked_model": "gpt-5.6-sol",
         "invoked_effort": "max",
-        "actual_model": "unknown",
-        "actual_effort": "unknown",
-        "model_verification_level": pipeline.CODEX_VERIFICATION_INVOCATION,
+        "actual_model": "gpt-5.6-sol",    # REJECT#21: CRITICAL은 actual_verified 필수
+        "actual_effort": "max",
+        "model_verification_level": pipeline.CODEX_VERIFICATION_ACTUAL,
         "auth_source": "chatgpt",
     }
     base.update(over)
@@ -1417,3 +1418,77 @@ def test_tc34c_single_invalid_json_is_parse_failure() -> None:
         f"REJECT#20 AC#3: error_type이 parse_failure가 아님\n  error_type={r.get('error_type')}"
     )
     assert r.get("verdict") is None
+
+
+# --------------------------------------------------------------------------- #
+# TC-35: REJECT#21 — CRITICAL은 actual_verified만 허용 (invocation_verified 차단).
+# --------------------------------------------------------------------------- #
+def test_tc35a_critical_invocation_verified_blocked_in_capability_match() -> None:
+    """REJECT#21 AC#1+AC#5: CRITICAL risk + actual_model=unknown + invocation_ok=True 시
+    _check_codex_model_capability_match는 unknown_model_critical_blocked를 반환해야 한다.
+    tc11 Oracle을 실제 명령 경로(_check_codex_model_capability_match)에 연결한 회귀 테스트."""
+    r = pipeline._check_codex_model_capability_match(
+        "gpt-5.6-sol", "max",    # selected
+        "gpt-5.6-sol", "max",    # invoked (일치)
+        "unknown", "unknown",     # actual (미보고)
+        "CRITICAL",               # risk_level
+        invocation_ok=True,
+    )
+    assert r["result"] == "BLOCKED", (
+        f"REJECT#21 AC#1: CRITICAL+unknown이 BLOCKED가 아님 — "
+        f"invocation_verified가 CRITICAL을 통과함\n  result={r}"
+    )
+    assert r["failure_code"] == "unknown_model_critical_blocked", (
+        f"REJECT#21 AC#1: failure_code가 unknown_model_critical_blocked가 아님\n  "
+        f"failure_code={r.get('failure_code')!r}"
+    )
+
+
+def test_tc35b_critical_invocation_verified_blocked_in_operational_trust() -> None:
+    """REJECT#21 AC#3: request-accept 경로의 _check_codex_review_operational_trust에서도
+    CRITICAL+invocation_verified는 unknown_model_critical_blocked로 차단돼야 한다."""
+    _fake_result = {
+        "status": "APPROVED",
+        "verdict_source": "codex_cli",
+        "acceptance_eligible": True,
+        "router_version": "2.0.0",
+        "risk_level": "CRITICAL",
+        "model_policy_signature": "CRITICAL:gpt-5.6-sol:max:enforce",
+        "codex_cli_command": "codex exec --model gpt-5.6-sol ...",
+        "selected_model": "gpt-5.6-sol",
+        "selected_reasoning_effort": "max",
+        "invoked_model": "gpt-5.6-sol",
+        "invoked_effort": "max",
+        "actual_model": "unknown",
+        "actual_effort": "unknown",
+        "model_verification_level": pipeline.CODEX_VERIFICATION_INVOCATION,
+        "auth_source": "chatgpt",
+    }
+    r = pipeline._check_codex_review_operational_trust(_fake_result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#21 AC#3: CRITICAL+invocation_verified 결과가 operational_trust를 통과함\n  result={r}"
+    )
+    assert r["failure_code"] == "unknown_model_critical_blocked", (
+        f"REJECT#21 AC#3: failure_code가 unknown_model_critical_blocked가 아님\n  "
+        f"failure_code={r.get('failure_code')!r}"
+    )
+
+
+def test_tc35c_high_invocation_verified_still_passes() -> None:
+    """REJECT#21 AC#5: HIGH risk + actual_model=unknown + invocation_ok=True는 여전히 통과해야 한다.
+    CRITICAL 전용 제한이 HIGH 정책에 영향을 주면 안 된다."""
+    r = pipeline._check_codex_model_capability_match(
+        "gpt-5.6-sol", "high",
+        "gpt-5.6-sol", "high",
+        "unknown", "unknown",
+        "HIGH",
+        invocation_ok=True,
+    )
+    assert r["result"] == "OK", (
+        f"REJECT#21 AC#5: HIGH+invocation_verified가 BLOCKED됨 — "
+        f"CRITICAL 제한이 HIGH까지 영향을 줌\n  result={r}"
+    )
+    assert r["model_verification_level"] == pipeline.CODEX_VERIFICATION_INVOCATION, (
+        f"REJECT#21 AC#5: model_verification_level이 invocation_verified가 아님\n  "
+        f"level={r.get('model_verification_level')!r}"
+    )
