@@ -937,3 +937,62 @@ def test_tc28e_tc11_oracle_unknown_model_critical_gate() -> None:
         f"REJECT#12 TC-11 oracle: failure_code는 unknown_model_critical_blocked여야 한다. "
         f"got failure_code={result.get('failure_code')!r}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-29 시리즈: REJECT#13 — CRITICAL policy force_review_required → effective_force_review
+# --------------------------------------------------------------------------- #
+
+def test_tc29a_critical_policy_has_force_review_required() -> None:
+    """REJECT#13 AC#2/#3: CRITICAL 정책만 force_review_required=True이며
+    LOW/MEDIUM/HIGH는 False여야 한다."""
+    for level in ("LOW", "MEDIUM", "HIGH"):
+        p = pipeline._build_codex_model_policy(level)
+        assert p.get("force_review_required") is not True, (
+            f"REJECT#13: {level} 정책은 force_review_required=True가 아니어야 한다. "
+            f"got {p.get('force_review_required')!r}"
+        )
+    critical = pipeline._build_codex_model_policy("CRITICAL")
+    assert critical.get("force_review_required") is True, (
+        f"REJECT#13: CRITICAL 정책은 force_review_required=True여야 한다. "
+        f"got {critical.get('force_review_required')!r}"
+    )
+
+
+def test_tc29b_effective_force_review_computed_in_cmd_source() -> None:
+    """REJECT#13 AC#4: _cmd_gates_codex_review 소스에서 effective_force_review가
+    정책 기반으로 계산되어야 한다."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    assert "effective_force_review" in src, (
+        "REJECT#13: _cmd_gates_codex_review에 effective_force_review가 없습니다 "
+        "(정책 force_review 통합 누락)"
+    )
+    assert "force_review_required" in src, (
+        "REJECT#13: _cmd_gates_codex_review에 force_review_required 참조가 없습니다 "
+        "(정책 force_review_required 미반영)"
+    )
+
+
+def test_tc29c_effective_force_review_used_at_rate_limit_check() -> None:
+    """REJECT#13 AC#4: rate-limit 검사에서 force_review 대신 effective_force_review를 사용해야 한다."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    # rate-limit 검사에서 `not effective_force_review` 패턴이 있어야 한다.
+    assert "not effective_force_review" in src, (
+        "REJECT#13: rate-limit 검사에서 `not effective_force_review`가 없습니다 "
+        "(force_review가 여전히 직접 사용됨)"
+    )
+
+
+def test_tc29d_critical_router_policy_constants_include_force_review() -> None:
+    """REJECT#13 AC#3: CODEX_MODEL_POLICIES 상수에서 CRITICAL의 force_review_required가
+    True이며 LOW/MEDIUM/HIGH는 False다 (SSoT 확인)."""
+    policy_const = pipeline.CODEX_MODEL_POLICIES
+    assert policy_const["CRITICAL"]["force_review_required"] is True, (
+        "REJECT#13: CODEX_MODEL_POLICIES CRITICAL.force_review_required가 True가 아닙니다"
+    )
+    for level in ("LOW", "MEDIUM", "HIGH"):
+        assert policy_const[level]["force_review_required"] is False, (
+            f"REJECT#13: CODEX_MODEL_POLICIES {level}.force_review_required가 False가 아닙니다"
+        )

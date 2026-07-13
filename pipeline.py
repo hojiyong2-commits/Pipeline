@@ -24559,6 +24559,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             f"[BLOCKED] failure_code={_model_policy.get('failure_code', 'downgrade_blocked')}\n"
             "  모델 정책 위반으로 Codex Review가 차단됩니다."
         )
+    # REJECT#13 fix: effective_force_review = CLI --force-review OR 정책의 force_review_required.
+    #   CRITICAL 정책은 force_review_required=True이므로 --force-review 없이도 rate-limit·cache를
+    #   우회한다. LOW/MEDIUM/HIGH는 force_review_required=False이므로 자동 활성화 안 됨.
+    _policy_force_review = bool(_model_policy.get("force_review_required", False))
+    effective_force_review: bool = force_review or _policy_force_review
     # IMP-20260712-DAE1 rework(문제1/2/3): explicit verdict/CLI 주입 여부를 capability gate보다
     #   먼저 판정한다. --verdict 또는 --codex-cli-exit-code로 결과를 명시적으로 주입하는 경우는
     #   auto-Codex-CLI를 자동 실행하지 않으므로, auto-CLI의 actual_model 신뢰성을 판정하는
@@ -24912,7 +24917,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         rl = _check_codex_rate_limit(
             prospective_reject, prev_cli_error_count, retry_cli_error=retry_cli_error
         )
-        if rl["status"] == "RATE_LIMITED" and not force_review:
+        if rl["status"] == "RATE_LIMITED" and not effective_force_review:
             _die(
                 "[BLOCKED] failure_code=codex_reject_rate_limited\n"
                 f"  {rl['reason']}"
@@ -24946,7 +24951,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _rl_v = _check_codex_rate_limit(
         _prospective_reject_v, prev_cli_error_count, retry_cli_error=retry_cli_error
     )
-    if _rl_v["status"] == "RATE_LIMITED" and not force_review:
+    if _rl_v["status"] == "RATE_LIMITED" and not effective_force_review:
         _die(
             "[BLOCKED] failure_code=codex_reject_rate_limited\n"
             f"  {_rl_v['reason']}"
