@@ -1492,3 +1492,92 @@ def test_tc35c_high_invocation_verified_still_passes() -> None:
         f"REJECT#21 AC#5: model_verification_level이 invocation_verified가 아님\n  "
         f"level={r.get('model_verification_level')!r}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-36: REJECT#21 deadlock fix — CRITICAL+unknown 시 verdict 기록 후 종료 (AC#1/AC#2/AC#4).
+# --------------------------------------------------------------------------- #
+
+def test_tc36a_oracle_tc11_connected_to_invoke_and_capability_match(tmp_path: Path) -> None:
+    """REJECT#21 AC#4: tc11 Oracle(input/expected)을 실제 명령 경로(_invoke_codex_exec +
+    _check_codex_model_capability_match)에 연결한 회귀 테스트.
+
+    tc11 oracle input (actual_model=unknown, risk_level=CRITICAL, mode=enforce) →
+    fake codex 실행(_invoke_codex_exec) + capability match 검사 →
+    oracle expected (result=BLOCKED, failure_code=unknown_model_critical_blocked).
+    """
+    import json
+
+    oracle_dir = (
+        Path(__file__).resolve().parent.parent
+        / "oracles" / "IMP-20260712-DAE1" / "tc11_unknown_model_critical"
+    )
+    tc11_input = json.loads((oracle_dir / "input.json").read_text(encoding="utf-8"))
+    tc11_expected = json.loads((oracle_dir / "expected.json").read_text(encoding="utf-8"))
+
+    # tc11 oracle input 파라미터
+    expected_actual_model = tc11_input["actual_model"]   # "unknown"
+    risk_level = tc11_input["risk_level"]                # "CRITICAL"
+
+    # fake codex: APPROVE 판정 + model 미보고(actual_model → unknown).
+    #   실제 gpt-5.6-sol CLI와 동일하게 stdout에 "model" 키를 포함하지 않는다.
+    fake = _make_fake_codex(tmp_path, exit_code=0, stdout_text=_approve_json())
+    run_result = pipeline._invoke_codex_exec(
+        "gpt-5.6-sol", "max", "test_prompt", codex_bin=fake, timeout=30,
+    )
+
+    # 실제 명령 경로에서 actual_model이 oracle input과 동일하게 unknown인지 확인.
+    assert run_result["actual_model"] == expected_actual_model, (
+        f"tc11 oracle 불일치: actual_model={run_result['actual_model']!r} "
+        f"!= expected={expected_actual_model!r}"
+    )
+
+    # capability match 검사 (tc11 oracle을 실제 명령 경로에 연결).
+    invoked_model = str(run_result.get("invoked_model", "gpt-5.6-sol") or "gpt-5.6-sol")
+    invoked_effort = str(run_result.get("invoked_effort", "max") or "max")
+    invocation_ok = run_result.get("exit_code") == 0
+    r = pipeline._check_codex_model_capability_match(
+        "gpt-5.6-sol", "max",
+        invoked_model, invoked_effort,
+        run_result["actual_model"], run_result["actual_effort"],
+        risk_level,
+        invocation_ok=invocation_ok,
+    )
+
+    assert r["result"] == tc11_expected["result"], (
+        f"tc11 oracle 불일치: result={r['result']!r} != expected={tc11_expected['result']!r}\n  {r}"
+    )
+    assert r.get("failure_code") == tc11_expected["failure_code"], (
+        f"tc11 oracle 불일치: failure_code={r.get('failure_code')!r} "
+        f"!= expected={tc11_expected['failure_code']!r}"
+    )
+
+
+def test_tc36b_critical_unknown_blocked_result_includes_verification_level(tmp_path: Path) -> None:
+    """REJECT#21 deadlock fix AC#2: _check_codex_model_capability_match가 BLOCKED 반환 시
+    model_verification_level을 포함해야 한다 (verdic 기록 경로에서 invocation_verified 증거 보존).
+    """
+    fake = _make_fake_codex(tmp_path, exit_code=0, stdout_text=_approve_json())
+    run_result = pipeline._invoke_codex_exec(
+        "gpt-5.6-sol", "max", "test_prompt", codex_bin=fake, timeout=30,
+    )
+    r = pipeline._check_codex_model_capability_match(
+        "gpt-5.6-sol", "max",
+        str(run_result.get("invoked_model", "gpt-5.6-sol") or "gpt-5.6-sol"),
+        str(run_result.get("invoked_effort", "max") or "max"),
+        run_result["actual_model"],
+        run_result["actual_effort"],
+        "CRITICAL",
+        invocation_ok=(run_result.get("exit_code") == 0),
+    )
+    assert r["result"] == "BLOCKED"
+    assert r["failure_code"] == "unknown_model_critical_blocked"
+    # deadlock fix: BLOCKED 반환에 model_verification_level이 포함돼야 verdict 기록 경로에서 사용 가능.
+    assert "model_verification_level" in r, (
+        f"REJECT#21 deadlock fix: BLOCKED 반환에 model_verification_level이 없음\n  {r}"
+    )
+    # invocation_ok=True + invoked==selected이면 invocation_verified이어야 한다.
+    assert r["model_verification_level"] == pipeline.CODEX_VERIFICATION_INVOCATION, (
+        f"REJECT#21 deadlock fix: BLOCKED 반환의 model_verification_level이 invocation_verified가 아님\n  "
+        f"level={r.get('model_verification_level')!r}"
+    )

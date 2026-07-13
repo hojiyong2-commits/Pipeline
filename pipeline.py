@@ -8597,8 +8597,17 @@ def _check_codex_model_capability_match(
     #   actual_model=unknown이면 CLI가 실제 사용 모델을 보고하지 않은 것이므로
     #   CRITICAL 검토 품질을 보증할 수 없어 unknown_model_critical_blocked로 차단한다.
     #   HIGH의 invocation_verified 허용 정책은 별도로 유지된다.
+    #   주의: CLI 실행 자체는 허용하되, acceptance 자격(_check_codex_review_operational_trust)에서도
+    #   동일 규칙이 적용되어 invocation_verified CRITICAL 결과가 request-accept를 통과하지 못한다.
     if _risk == "CRITICAL" and _level != CODEX_VERIFICATION_ACTUAL:
-        return {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
+        # REJECT#21 deadlock fix: model_verification_level을 포함하여 기록에 사용 가능하게 한다.
+        #   cmd 경로에서 CLI 실행 자체는 이미 완료됐으므로 verdict를 수집·기록하되,
+        #   acceptance_eligible=false를 강제하고 최종 종료 시 BLOCKED를 보고한다.
+        return {
+            "result": "BLOCKED",
+            "failure_code": "unknown_model_critical_blocked",
+            "model_verification_level": _level,
+        }
     return {"result": "OK", "model_verification_level": _level}
 
 
@@ -24630,6 +24639,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
 
     # IMP-20260712-DAE1 rework(문제2/4): auto-invoke 결과를 담을 override 및 실제 명령/능력 기록 변수.
     _auto_cli_override: Optional[Dict[str, Any]] = None
+    # REJECT#21 deadlock fix: CRITICAL+actual_model=unknown 감지 시 설정되는 failure_code 플래그.
+    #   CLI는 이미 실행됐으므로 verdict를 기록하되 acceptance_eligible=false 강제 + 종료 시 보고.
+    _capability_blocked_failure_code = ""
     _codex_cli_command_real = ""
     # IMP-20260712-DAE1 REJECT#4: 실제 Codex에 전달한 prompt(stdin) 원문과 SHA(증거 기록용).
     _prompt_text = ""
@@ -24962,13 +24974,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 invocation_ok=_invocation_ok,
             )
             if _match.get("result") == "BLOCKED":
-                _die(
-                    f"[BLOCKED] failure_code={_match.get('failure_code', 'model_mismatch')}\n"
-                    f"  selected={_selected_model_now!r}/{_selected_effort_now!r} "
-                    f"invoked={_invoked_model_str!r}/{_invoked_effort_str!r} "
-                    f"actual={_actual_model_str!r}/{_actual_effort_str!r} "
-                    f"(risk_level={_risk_level_str!r}) — Codex Review 차단 (fail-closed)."
-                )
+                _cap_fc = str(_match.get("failure_code", "model_mismatch"))
+                if _cap_fc != "unknown_model_critical_blocked":
+                    # 모델 불일치/허용 목록 외: CLI 실행 전에 차단(verdict 없음, fail-closed).
+                    _die(
+                        f"[BLOCKED] failure_code={_cap_fc}\n"
+                        f"  selected={_selected_model_now!r}/{_selected_effort_now!r} "
+                        f"invoked={_invoked_model_str!r}/{_invoked_effort_str!r} "
+                        f"actual={_actual_model_str!r}/{_actual_effort_str!r} "
+                        f"(risk_level={_risk_level_str!r}) — Codex Review 차단 (fail-closed)."
+                    )
+                # REJECT#21 deadlock fix: unknown_model_critical_blocked — CLI는 이미 실행됐으므로
+                # verdict를 수집·기록하되 acceptance_eligible=false를 강제한다.
+                # (_check_codex_model_capability_match 주석의 "CLI 실행 자체는 허용" 의도 구현)
+                _capability_blocked_failure_code = _cap_fc
             _model_verification_level = str(
                 _match.get("model_verification_level", CODEX_VERIFICATION_UNVERIFIED)
             )
@@ -25329,6 +25348,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     new_reject_count = prev_reject_count + (1 if review_status == "REJECTED" else 0)
     new_cli_error_count = prev_cli_error_count  # ERROR 경로는 별도 함수에서 처리됨
     acceptance_eligible = review_status == "APPROVED"
+    # REJECT#21 deadlock fix: CRITICAL+actual_model=unknown → acceptance_eligible=false 강제(fail-closed 안전망).
+    #   AC#2: "동일 결과를 캐시하거나 acceptance_eligible=true로 기록하지 않습니다."
+    if _capability_blocked_failure_code:
+        acceptance_eligible = False
 
     # IMP-20260712-DAE1 rework#2(요구3): 운영 환경에서 acceptance_eligible=true를 만들 수 없는
     #   경로를 완전 차단한다. --verdict(external_verdict)와 --codex-cli-*(external_cli_injection)는
@@ -25671,6 +25694,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         _log_event(state, f"codex_review_cache_write_failed: {_cw_exc}")
 
     _save(state)
+    # REJECT#21 deadlock fix: CRITICAL+unknown_model_critical_blocked → 기록 완료 후 BLOCKED 보고하며 종료.
+    #   AC#1: "CRITICAL에서 actual_model=unknown이면 gates codex-review가 unknown_model_critical_blocked로 종료됩니다."
+    #   결과 파일은 이미 기록됐으며 acceptance_eligible=false가 강제됐다. verdict는 보존된다.
+    if _capability_blocked_failure_code:
+        _die(
+            f"[BLOCKED] failure_code={_capability_blocked_failure_code}\n"
+            f"  CRITICAL에서 actual_model=unknown — CLI 결과를 기록했으나 acceptance_eligible=false.\n"
+            f"  model_verification_level={_model_verification_level}.\n"
+            "  CRITICAL 검토는 actual_verified(actual_model=선택값) 증거만 허용합니다 (fail-closed)."
+        )
     sys.exit(0 if verdict == "APPROVE_TO_USER" else 1)
 
 
