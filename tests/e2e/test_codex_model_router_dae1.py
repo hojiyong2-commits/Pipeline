@@ -1189,3 +1189,111 @@ def test_tc31f_preflight_vs_prompt_sem_sha_check() -> None:
     assert "_preflight_sem_sha != _pre_cli_sem_sha" in src, (
         "REJECT#17: preflight bundle vs prompt semantic SHA 불일치 검증 없음 — AC#3 미구현"
     )
+
+
+def test_tc32a_cache_stores_auth_source() -> None:
+    """REJECT#18 AC#1: 캐시 entry에 auth_source가 명시적으로 저장돼야 한다.
+    acceptance_criteria[0]: 실제 Codex CLI 승인 캐시에 auth_source=chatgpt가 저장된다."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    # _cache_entry dict에 "auth_source" 키가 포함됨
+    assert '"auth_source": _auth_source_str' in src, (
+        "REJECT#18: cache entry에 auth_source 저장 없음 — AC#1 미구현"
+    )
+
+
+def test_tc32b_cache_hit_no_hardcoded_chatgpt() -> None:
+    """REJECT#18 AC#2: cache hit에서 auth_source는 캐시 값으로만 복원되고 chatgpt 기본값을 사용하지 않는다.
+    acceptance_criteria[1]: cache hit 경로에서 _auth_source_str = 'chatgpt' 하드코딩이 없어야 한다."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    # 하드코딩 chatgpt 제거 확인 — cached_auth_source를 읽어야 한다
+    assert "_cached_auth_src" in src, (
+        "REJECT#18: cache hit 경로에서 cached_auth_source 읽기 없음 — AC#2 미구현"
+    )
+    assert "codex_cache_auth_source_invalid" in src, (
+        "REJECT#18: cache hit 시 auth_source 유효성 검증 없음 — AC#2 미구현"
+    )
+
+
+def test_tc32c_cache_miss_on_missing_auth_source() -> None:
+    """REJECT#18 AC#3: auth_source가 누락되거나 chatgpt가 아닌 캐시는 cache miss가 돼야 한다.
+    acceptance_criteria[2]: 인증 출처 누락·변조 캐시가 acceptance_eligible=true 결과를 못 만든다."""
+    import json
+    import tempfile
+    from pathlib import Path
+    from pipeline import _codex_cache_key, _codex_policy_signature
+
+    # 실제 cache key 계산 (cache_key mismatch 없이 auth_source 검증이 동작하도록)
+    real_key = _codex_cache_key("TESTCONTRACT18", "TESTBUNDLE18", _codex_policy_signature(None))
+
+    def _make_entry(**kwargs: object) -> dict:
+        entry: dict = {
+            "cache_key": real_key,
+            "contract_sha256": "TESTCONTRACT18",
+            "review_bundle_sha256": "TESTBUNDLE18",
+            "verdict": "APPROVE",
+            "status": "APPROVED",
+            "critical_file_shas": {},
+            "excluded_files": [],
+            "changed_critical_files": [],
+        }
+        entry.update(kwargs)
+        return entry
+
+    with tempfile.TemporaryDirectory() as td:
+        cache_path = Path(td) / "codex_review_cache.json"
+        original_cache_fn = pipeline._codex_review_cache_path
+
+        def _mock_cache_path() -> Path:
+            return cache_path
+
+        pipeline._codex_review_cache_path = _mock_cache_path
+        try:
+            # 1) auth_source 없는 캐시 → cache miss (authキー欠落)
+            cache_path.write_text(json.dumps(_make_entry()), encoding="utf-8")
+            result = pipeline._check_codex_cache(
+                "TESTCONTRACT18", "TESTBUNDLE18",
+                {}, "IMP-TEST",
+                model_policy=None,
+            )
+            assert not result.get("hit"), (
+                f"REJECT#18: auth_source 없는 캐시가 cache hit을 반환함 — AC#3 위반\n  result={result}"
+            )
+            assert "chatgpt가 아니거나 누락" in result.get("reason", ""), (
+                f"REJECT#18: auth_source 없는 캐시의 miss 사유가 부정확함\n  reason={result.get('reason')}"
+            )
+
+            # 2) auth_source 잘못된 캐시 → cache miss
+            cache_path.write_text(
+                json.dumps(_make_entry(auth_source="api_key")), encoding="utf-8"
+            )
+            result2 = pipeline._check_codex_cache(
+                "TESTCONTRACT18", "TESTBUNDLE18",
+                {}, "IMP-TEST",
+                model_policy=None,
+            )
+            assert not result2.get("hit"), (
+                f"REJECT#18: auth_source=api_key 캐시가 cache hit을 반환함 — AC#3 위반\n  result={result2}"
+            )
+            assert "chatgpt가 아니거나 누락" in result2.get("reason", ""), (
+                f"REJECT#18: auth_source 잘못된 캐시의 miss 사유가 부정확함\n  reason={result2.get('reason')}"
+            )
+
+            # 3) auth_source=chatgpt 정상 캐시 → cache hit
+            cache_path.write_text(
+                json.dumps(_make_entry(auth_source="chatgpt")), encoding="utf-8"
+            )
+            result3 = pipeline._check_codex_cache(
+                "TESTCONTRACT18", "TESTBUNDLE18",
+                {}, "IMP-TEST",
+                model_policy=None,
+            )
+            assert result3.get("hit"), (
+                f"REJECT#18: auth_source=chatgpt 정상 캐시가 hit을 반환하지 않음\n  result={result3}"
+            )
+            assert result3.get("cached_auth_source") == "chatgpt", (
+                f"REJECT#18: cached_auth_source가 반환되지 않음\n  result={result3}"
+            )
+        finally:
+            pipeline._codex_review_cache_path = original_cache_fn

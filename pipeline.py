@@ -9716,6 +9716,15 @@ def _check_codex_cache(
         miss["reason"] = "review_bundle_sha256 불일치 (cache miss)"
         return miss
 
+    # REJECT#18: 캐시에 auth_source가 없거나 chatgpt가 아니면 cache miss (fail-closed).
+    #   원 실행이 실제 ChatGPT Plus로 인증하지 않은 결과는 신뢰할 수 없다.
+    _cached_auth = str(cached.get("auth_source", "") or "").strip()
+    if not _cached_auth or _cached_auth != "chatgpt":
+        miss["reason"] = (
+            f"캐시 auth_source={_cached_auth!r} — chatgpt가 아니거나 누락 (cache miss, fail-closed)"
+        )
+        return miss
+
     # IMP-20260710-DB54 rework MT-4(문제5): 캐시 생성 당시 excluded_files에 critical 파일이
     #   있었다면 그 캐시 verdict는 critical 파일을 보지 못하고 산출된 것이므로 사용 금지(BLOCKED).
     _cached_excl = cached.get("excluded_files")
@@ -9782,6 +9791,8 @@ def _check_codex_cache(
         "cached_invoked_model": str(cached.get("invoked_model", "") or "") or None,
         "cached_invoked_effort": str(cached.get("invoked_effort", "") or "") or None,
         "cached_verification_level": str(cached.get("model_verification_level", "") or "") or None,
+        # REJECT#18: 원 실행의 auth_source를 캐시에서 복원한다 (하드코딩 chatgpt 제거).
+        "cached_auth_source": _cached_auth,
     }
 
 
@@ -24721,7 +24732,17 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _model_verification_level = (
                 _cached_verification or CODEX_VERIFICATION_INVOCATION
             )
-            _auth_source_str = "chatgpt"
+            # REJECT#18: auth_source를 캐시 entry에서만 복원한다 (chatgpt 하드코딩 제거).
+            #   _check_codex_cache에서 auth_source != chatgpt이면 이미 cache miss로 처리되므로
+            #   여기 도달하면 반드시 chatgpt가 보장된다. 그래도 방어적으로 재검증한다.
+            _cached_auth_src = str(_cache_probe.get("cached_auth_source") or "").strip()
+            if not _cached_auth_src or _cached_auth_src != "chatgpt":
+                _die(
+                    "[BLOCKED] failure_code=codex_cache_auth_source_invalid\n"
+                    f"  캐시 auth_source={_cached_auth_src!r} — chatgpt가 아니거나 누락.\n"
+                    "  캐시를 삭제하고 gates codex-review를 재실행하세요 (fail-closed)."
+                )
+            _auth_source_str = _cached_auth_src
             print("  [CACHE REUSE] Codex CLI 호출 없이 캐시된 APPROVE verdict를 재사용합니다.")
     else:
         print(f"  [CACHE MISS] {_cache_probe.get('reason')}")
@@ -25609,6 +25630,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "risk_level": _risk_level_str,
             "verdict_source": _verdict_source_now,
             "model_policy_signature": _codex_policy_signature(_model_policy),
+            # REJECT#18: 원 실행의 인증 출처를 캐시에 저장 — cache hit 시 복원·검증에 사용한다.
+            "auth_source": _auth_source_str,
             "cached_at": _now(),
         }
         _cache_path = _codex_review_cache_path()
