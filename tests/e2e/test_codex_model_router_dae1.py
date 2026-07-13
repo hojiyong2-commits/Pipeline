@@ -697,6 +697,75 @@ def test_tc25i_request_accept_trust_gate_fail_closed_on_pipeline_id_mismatch() -
 # TC-26 시리즈: REJECT#9 — plaintext REJECT fallback 제거 + structured 필드 보존
 # --------------------------------------------------------------------------- #
 
+# --------------------------------------------------------------------------- #
+# TC-27 시리즈: REJECT#10 — evidence_complete fail-open 수정
+#   - CODEX_CRITICAL_FUNCTIONS에 _cmd_gates_codex_review 추가
+#   - function_before_after_shas: CRITICAL 함수만 포함(비CRITICAL 제거)
+#   - 비Python CRITICAL 파일(pipeline-manager-agent.md 등) diff 추출
+#   - cross-validation: CRITICAL 함수·파일 커버리지 완전성 검증
+#   - CODEX_REVIEW_BUNDLE_BUDGET_CHARS: 30000→65000
+# --------------------------------------------------------------------------- #
+
+def test_tc27a_cmd_gates_codex_review_in_critical_functions() -> None:
+    """REJECT#10: _cmd_gates_codex_review가 CODEX_CRITICAL_FUNCTIONS에 포함돼야 한다.
+    이 함수는 semantic evidence 완전성 검증과 trust gate를 모두 제어하므로 CRITICAL 필수."""
+    assert "_cmd_gates_codex_review" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+        "_cmd_gates_codex_review가 CODEX_CRITICAL_FUNCTIONS에 없습니다 (REJECT#10 요구사항)"
+    )
+
+
+def test_tc27b_bundle_budget_sufficient_for_critical_hunks() -> None:
+    """REJECT#10: CODEX_REVIEW_BUNDLE_BUDGET_CHARS가 CRITICAL 함수 전체 diff를 수용해야 한다.
+    --unified=3 기준 CRITICAL 57397자 수용을 위해 최소 65000자 이상이어야 한다."""
+    assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 65000, (
+        f"예산이 너무 작습니다: {pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 65000 "
+        "(REJECT#10: CRITICAL 함수 전체 diff 수용 불가)"
+    )
+
+
+def test_tc27c_function_before_after_shas_critical_only_filter_in_source() -> None:
+    """REJECT#10: _build_codex_semantic_evidence가 function_before_after_shas에
+    CRITICAL 함수만 포함하는 필터 조건(_fn in _crit_funcs)을 갖는지 소스 검증."""
+    import inspect
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+    assert "_fn in _crit_funcs" in src, (
+        "_build_codex_semantic_evidence에 CRITICAL 함수 필터 조건이 없습니다 "
+        "(REJECT#10: 비CRITICAL 함수 build_parser 등이 SHA 목록에 포함됨)"
+    )
+
+
+def test_tc27d_cross_validation_in_source() -> None:
+    """REJECT#10: _build_codex_semantic_evidence에 cross-validation 코드가 존재해야 한다.
+    covered_ids와 _nonpy_crit_expected를 대조하는 로직이 있어야 한다."""
+    import inspect
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+    assert "_covered_ids" in src, (
+        "_build_codex_semantic_evidence에 _covered_ids(cross-validation) 변수가 없습니다 "
+        "(REJECT#10: CRITICAL 함수·파일 커버리지 검증 필수)"
+    )
+    assert "_nonpy_crit_expected" in src, (
+        "_build_codex_semantic_evidence에 _nonpy_crit_expected(비Python CRITICAL 파일 추적)가 없습니다 "
+        "(REJECT#10: pipeline-manager-agent.md 등 비Python CRITICAL 파일 diff 필수)"
+    )
+
+
+def test_tc27e_unified_3_in_source() -> None:
+    """REJECT#10: _build_codex_semantic_evidence가 --unified=3을 사용하는지 검증.
+    --unified=8은 이웃 hunk를 병합해 함수 귀속 오류를 유발한다(REJECT#10 분석)."""
+    import inspect
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+    assert '"--unified=3"' in src, (
+        "_build_codex_semantic_evidence에 --unified=3이 없습니다 (REJECT#10: --unified=8→3 변경 필수)"
+    )
+    assert '"--unified=8"' not in src, (
+        "_build_codex_semantic_evidence에 --unified=8이 남아 있습니다 (REJECT#10: --unified=3으로 교체됨)"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# TC-26 시리즈: REJECT#9 — plaintext REJECT fallback 제거 + structured 필드 보존
+# --------------------------------------------------------------------------- #
+
 def test_tc26a_plaintext_reject_ndjson_becomes_parse_failure() -> None:
     """REJECT#9: NDJSON agent_message.text의 'REJECT - reason' plaintext는
     4-필드 검증을 우회하므로 parse_failure ERROR로 처리돼야 한다(REJECTED 아님)."""

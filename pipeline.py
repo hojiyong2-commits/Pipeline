@@ -2359,6 +2359,9 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_codex_policy_signature",
     "_codex_cache_key",
     "_check_codex_cache",
+    # IMP-20260712-DAE1 REJECT#10: 진입점 함수 추가 — 이 함수가 semantic evidence 완전성 검증과
+    #   trust gate를 모두 제어하므로 CRITICAL 분류 필수.
+    "_cmd_gates_codex_review",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -2444,7 +2447,7 @@ CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
 #   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
 #   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
-CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 30000  # IMP-20260712-DAE1 REJECT#8: 16000→24000→30000 (신규 CRITICAL 함수 6개 추가로 총 27151자 수용)
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 65000  # IMP-20260712-DAE1 REJECT#10: 30000→65000 (_cmd_gates_codex_review + 비Python CRITICAL 파일 포함 총 57397자 수용)
 
 
 class _CodexCacheSkipError(Exception):
@@ -8849,13 +8852,15 @@ def _build_codex_semantic_evidence(
 
     _crit_funcs = set(CODEX_CRITICAL_FUNCTIONS)
 
-    # 1) diff_hunks: git diff origin/main...HEAD --unified=8 -- pipeline.py
+    # 1) diff_hunks: git diff origin/main...HEAD --unified=3 -- pipeline.py
+    # IMP-20260712-DAE1 REJECT#10: --unified=8→3 (hunk 분리 정밀도 향상, 예산 절약).
     _diff_ok = False
     _all_hunks: List[Dict[str, Any]] = []
+    _nonpy_crit_expected: List[str] = []  # 비Python CRITICAL 파일 목록 (cross-validation용)
     try:
         if "pipeline.py" in _cf:
             _dr = subprocess.run(
-                ["git", "diff", "origin/main...HEAD", "--unified=8", "--", "pipeline.py"],
+                ["git", "diff", "origin/main...HEAD", "--unified=3", "--", "pipeline.py"],
                 capture_output=True, text=True, timeout=30,
                 cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
             )
@@ -8892,6 +8897,35 @@ def _build_codex_semantic_evidence(
                 _flush(_cur_fn, _cur_lines)
     except Exception:  # noqa: BLE001 — diff 실패는 fail-closed(evidence_complete=False)
         _diff_ok = False
+
+    # 1b) 비Python CRITICAL 파일 diff 추출 (pipeline-manager-agent.md 등).
+    # IMP-20260712-DAE1 REJECT#10: pipeline.py 이외의 CRITICAL 파일도 diff hunk로 포함.
+    #   Python 파일(.py)은 function-level SHA/hunk로 이미 처리하므로 중복 추가하지 않는다.
+    try:
+        for _cpf in _cf:
+            _cpf_n = _cpf.replace("\\", "/")
+            if _cpf_n == "pipeline.py":
+                continue  # pipeline.py는 위에서 이미 처리
+            if not _is_codex_critical_file(_cpf_n):
+                continue
+            if _cpf_n.endswith(".py"):
+                continue  # Python 파일은 function-level SHA/hunk로 처리(별도 hunk 불필요)
+            _nonpy_crit_expected.append(_cpf_n)
+            _npdr = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--unified=3", "--", _cpf_n],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            if _npdr.returncode == 0 and _npdr.stdout.strip():
+                _nptxt = _npdr.stdout.strip()
+                _all_hunks.append({
+                    "function": _cpf_n,
+                    "hunk": _nptxt,
+                    "is_critical": True,
+                    "chars": len(_nptxt),
+                })
+    except Exception:  # noqa: BLE001 — 비Python diff 실패는 cross-validation에서 감지
+        pass
 
     # 예산 적용: CRITICAL hunk를 먼저 채우고, 예산 초과 시 truncated_critical_hunks 계수.
     _budget = CODEX_REVIEW_BUNDLE_BUDGET_CHARS
@@ -8946,13 +8980,33 @@ def _build_codex_semantic_evidence(
             _b_sha = hashlib.sha256(_bs.encode("utf-8")).hexdigest() if _bs else ""
             _a_sha = hashlib.sha256(_as.encode("utf-8")).hexdigest() if _as else ""
             # IMP-20260712-DAE1 REJECT#6: 실제로 변경된 함수(before != after)만 포함한다.
-            # 변경 없는 함수를 SHA 목록에 포함하면 Codex가 diff 없는 이유를 오해하여
-            # evidence_complete=True인데도 REJECT한다.
-            if _b_sha and _a_sha and _b_sha != _a_sha:
+            # IMP-20260712-DAE1 REJECT#10: CRITICAL 함수만 포함(비CRITICAL 제거 — build_parser 등).
+            #   비CRITICAL 함수를 SHA 목록에 포함하면 Codex가 diff 없는 이유를 오해한다.
+            if _b_sha and _a_sha and _b_sha != _a_sha and _fn in _crit_funcs:
                 _fas[f"pipeline.py::{_fn}"] = {"before": _b_sha, "after": _a_sha}
     except Exception:  # noqa: BLE001
         _fas = {}
     sem["function_before_after_shas"] = _fas
+
+    # IMP-20260712-DAE1 REJECT#10: cross-validation — CRITICAL 함수·파일 커버리지 완전성 검증.
+    # function_before_after_shas에 포함된 각 CRITICAL 함수와 비Python CRITICAL 파일이
+    # _selected(예산 내 선택된 hunks)에 실제로 포함됐는지 대조한다.
+    # 하나라도 누락 → _truncated_crit 증가 → evidence_complete=False (fail-closed).
+    try:
+        _covered_ids = {h["function"] for h in _selected}
+        for _k in _fas:
+            # key 형식: "pipeline.py::함수명" → 함수명 부분만 추출
+            _fn_name = _k.split("::")[-1] if "::" in _k else _k
+            if _fn_name not in _covered_ids:
+                _truncated_crit += 1
+        for _npf in _nonpy_crit_expected:
+            if _npf not in _covered_ids:
+                _truncated_crit += 1
+        # cross-validation 반영 최종값으로 sem을 갱신
+        sem["truncated_critical_hunks"] = _truncated_crit
+    except Exception:  # noqa: BLE001 — cross-validation 실패 → fail-closed
+        _truncated_crit += 1
+        sem["truncated_critical_hunks"] = _truncated_crit
 
     # 3) test_assertions: 변경된 테스트 파일의 test_* 함수별 assert 라인(최대 5개).
     _tassert: Dict[str, List[str]] = {}
