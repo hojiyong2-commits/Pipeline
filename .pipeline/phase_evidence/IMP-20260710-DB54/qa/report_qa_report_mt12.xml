@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260710-DB54</pipeline_id>
+  <agent_run_id>qa-498814f3708eea0f</agent_run_id>
+  <category_check>
+    <wa>N-A — 이 변경은 네트워크 호출 안전장치를 수정하지 않음 (Codex CLI 흐름 내부 SHA 로직만 변경)</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>N-A — 파일 원자적 쓰기/인코딩 로직 변경 없음</fs>
+    <pd>PASS — 기존 함수 표면 유지, staged SHA 우선 로직/critical file SSoT를 명확한 불변식 주석과 함께 캡슐화. 모듈 경계 준수</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — SHA 산출 try/except + staging 부재 시 빈 값 fallback으로 방어. re.search None 가드 존재</al>
+    <build>N-A — meta-task (pipeline.py 내부 로직), EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+  <numeric_score>112</numeric_score>
+  <numeric_score_breakdown>
+    <wa score="20" max="20">N/A — 네트워크 안전장치 미변경, 결함 없음</wa>
+    <ui score="20" max="20">N/A — UI 미해당</ui>
+    <fs score="20" max="20">N/A — 파일 시스템 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/인터페이스계약 5 — 함수 표면 안정, bundle dict 계약 명확, staged SHA 불변식 주석 우수</pd>
+    <al score="20" max="20">SHA 산출/staging 로드 전 구간 try-except 방어, re.search None 가드 완비</al>
+    <build score="10" max="10">N/A — meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA 미채점</sec>
+    <total score="112" max="120"/>
+    <percentage>93.3</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+  </numeric_score_breakdown>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover self_check 존재 + 실제 테스트 220건 실행 증거</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 신규 상수/로직이 _is_codex_critical_file(7962/7964), _build_codex_review_bundle, _cmd_gates_codex_review에서 실제 호출됨. AST 컴파일 OK</functional_binding_verified>
+  </runtime_functional_check>
+  <dead_code>
+    <symbol>_CODEX_PREFLIGHT_HARD_BLOCK_CODES</symbol>
+    <defined_at>제거됨 (이전 pipeline.py:7918)</defined_at>
+    <call_sites>0</call_sites>
+    <action>REMOVE — stale/미사용 상수 정상 제거, 잔여 참조 0건(grep 확인)</action>
+  </dead_code>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음 (scope_manifest_MT-12.json은 산출물 증거로 scope 파일 아님)</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git show c054e363 변경 파일 = pipeline.py, tests/e2e/test_codex_control_flow_db54.py 2건, 선언과 일치</grep_verified>
+    <c3_result>PASS</c3_result>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>N-A — module qa rework (MT-12 단일 rework)</decomposition_audit_present>
+    <grep_evidence_present>N-A</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <result>PASS</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    - 없음. Codex 2차 REJECT 5개 문제 모두 수정 확인:
+      (1) staged_packet_sha256 우선 (pipeline.py:8052-8067),
+      (2) verification_json_sha256 staged 전용 (8069-8089, 23285-23288),
+      (3) @@ 헤더 파싱 included_functions (8162-8175),
+      (4) critical file SSoT 보강 — AGENTS.md/.claude/commands/.claude/hooks/tests/e2e/test_codex (7927, 7935-7938),
+      (5) _CODEX_PREFLIGHT_HARD_BLOCK_CODES 제거 (잔여 참조 0).
+  </critical_issues>
+  <improvement_suggestions>
+    verification_json_sha256를 live json으로 fallback하지 않는 설계 선택이 주석으로 명확히 문서화되어 있어 유지보수성 우수. 향후 staged/live SHA 불변식에 대한 property 기반 테스트 추가를 권장(현재 TC-J/TC-K로 충분).
+  </improvement_suggestions>
+  <numeric_score_value>112</numeric_score_value>
+  <handover>
+    <from>qa-agent</from>
+    <run_id>qa-498814f3708eea0f</run_id>
+    <to>pipeline-manager</to>
+  </handover>
+  <evidence>
+    <tests_run>220</tests_run>
+    <tests_passed>220</tests_passed>
+    <tests_failed>0</tests_failed>
+    <suites>
+      <suite>tests/test_codex_preflight_db54.py + test_codex_bundle_db54.py + test_codex_cache_db54.py + test_codex_rate_limit_db54.py — 72 passed</suite>
+      <suite>tests/test_canonical_pr_body_sha256_b985.py — 137 passed</suite>
+      <suite>tests/e2e/test_codex_control_flow_db54.py (TC-K 포함) — 11 passed</suite>
+    </suites>
+  </evidence>
+  <verdict>PASS</verdict>
+</qa_report>
