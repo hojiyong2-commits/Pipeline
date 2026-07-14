@@ -8995,9 +8995,12 @@ def _verify_npm_wrapper_content(bin_path: "Path") -> bool:
 
 
 def _find_codex_js_entrypoint(wrapper_path: "Path") -> "Optional[Path]":
-    """npm .cmd 래퍼에서 JS 진입점 파일 경로를 추출한다(REJECT#12 AC#3).
+    """npm 래퍼/심볼릭 링크/셸 스크립트에서 JS 진입점 파일 경로를 추출한다(REJECT#12 AC#3, REJECT#15 문제 A).
 
-    Windows .cmd 래퍼에서 '%~dp0\\...\\*.js' 패턴을 찾아 실제 파일 경로로 변환한다.
+    Windows .cmd 래퍼: '%~dp0\\...\\*.js' 패턴을 찾아 실제 파일 경로로 변환한다.
+    POSIX 공식 npm 설치: /usr/local/bin/codex(symlink) → .../@openai/codex/bin/codex.js 구조를
+        지원한다. 입력이 .js 파일이거나, symlink 대상이 .js이거나, node shebang 스크립트로
+        @openai/codex를 참조하면 해당 JS 진입점 경로를 반환한다.
     파싱 실패 또는 JS 파일 미존재 시 None을 반환한다(best-effort).
 
     Returns:
@@ -9007,23 +9010,59 @@ def _find_codex_js_entrypoint(wrapper_path: "Path") -> "Optional[Path]":
         if not isinstance(wrapper_path, Path):
             return None
         _suf = wrapper_path.suffix.lower()
-        if _suf not in (".cmd", ".bat"):
+        if _suf in (".cmd", ".bat"):
+            # Windows npm 래퍼(.cmd/.bat) — 기존 동작 유지(회귀 방지).
+            _txt = wrapper_path.read_text(encoding="utf-8", errors="replace")
+            # '%~dp0\...\*.js' 패턴 추출 (따옴표 포함)
+            import re as _re
+            for _m in _re.finditer(r'"(?:%~dp0|%dp0%)\\([^"]+\.js)"', _txt, _re.IGNORECASE):
+                _rel = _m.group(1)
+                _candidate = wrapper_path.parent / _rel
+                if _candidate.exists():
+                    return _candidate.resolve()
+            # 절대 경로 인용 패턴 fallback
+            for _m in _re.finditer(r'"([^"]+\.js)"', _txt):
+                _cand_str = _m.group(1)
+                if not _cand_str.startswith("%"):
+                    _cand = Path(_cand_str)
+                    if _cand.exists():
+                        return _cand.resolve()
             return None
-        _txt = wrapper_path.read_text(encoding="utf-8", errors="replace")
-        # '%~dp0\...\*.js' 패턴 추출 (따옴표 포함)
-        import re as _re
-        for _m in _re.finditer(r'"(?:%~dp0|%dp0%)\\([^"]+\.js)"', _txt, _re.IGNORECASE):
-            _rel = _m.group(1)
-            _candidate = wrapper_path.parent / _rel
-            if _candidate.exists():
-                return _candidate.resolve()
-        # 절대 경로 인용 패턴 fallback
-        for _m in _re.finditer(r'"([^"]+\.js)"', _txt):
-            _cand_str = _m.group(1)
-            if not _cand_str.startswith("%"):
-                _cand = Path(_cand_str)
-                if _cand.exists():
-                    return _cand.resolve()
+
+        # ---- REJECT#15 문제 A: POSIX/비-Windows npm 설치 지원 ----
+        # 1) 입력이 .js 파일 자체인 경우.
+        if _suf == ".js" and wrapper_path.exists():
+            return wrapper_path.resolve()
+        # 2) symlink이고 resolve 대상이 .js 파일인 경우(공식 npm global 설치의 표준 구조).
+        _resolved: "Optional[Path]" = None
+        try:
+            _resolved = wrapper_path.resolve()
+        except Exception:  # noqa: BLE001
+            _resolved = None
+        if (
+            _resolved is not None
+            and _resolved != wrapper_path
+            and _resolved.suffix.lower() == ".js"
+            and _resolved.exists()
+        ):
+            return _resolved
+        # 3) node shebang 스크립트(#!/usr/bin/env node)이면서 @openai/codex를 참조하는 경우.
+        #    확장자에 의존하지 않고 파일 내용(첫 줄 shebang)으로 판정한다.
+        if wrapper_path.exists() and wrapper_path.is_file():
+            try:
+                _content = wrapper_path.read_text(encoding="utf-8", errors="replace")
+            except Exception:  # noqa: BLE001
+                _content = ""
+            if _content:
+                _first_line = _content.splitlines()[0] if _content.splitlines() else ""
+                if (
+                    _first_line.startswith("#!")
+                    and "node" in _first_line
+                    and "@openai/codex" in _content
+                ):
+                    if _resolved is not None and _resolved.exists():
+                        return _resolved
+                    return wrapper_path.resolve()
     except Exception:  # noqa: BLE001
         pass
     return None
@@ -9131,6 +9170,10 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         "sha256": "",
         "untrusted_reason": None,
         "install_source": "unknown",
+        # REJECT#15 문제 B: 설치 유형 — npm_wrapper(Windows .cmd) / posix_npm_symlink(POSIX symlink·
+        #   shebang) / direct_native(시스템 경로 직접 native 설치). operational trust step(6b)가
+        #   direct_native일 때 native 체인 필드 부재를 허용하기 위해 사용한다.
+        "install_type": "",
         # REJECT#12 AC#3: JS 진입점 경로/SHA (npm 래퍼용; native .exe는 빈 값)
         "js_entrypoint_path": "",
         "js_entrypoint_sha256": "",
@@ -9139,29 +9182,45 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         "native_binary_sha256": "",
     }
     try:
-        _bin_p = Path(bin_path).resolve()
+        # REJECT#15 문제 A: POSIX 공식 npm 설치는 /usr/local/bin/codex(symlink) → lib/.../codex.js
+        #   구조이므로, resolve()를 먼저 하면 신뢰 위치(bin) 밖(lib)으로 벗어나 오탐된다.
+        #   신뢰-위치 검사(npm bin/system prefix)는 PATH 진입점의 lexical 절대 경로(_bin_p_lexical)로,
+        #   보안 escape 검사(repo/temp)는 symlink을 따라간 실제 대상(_bin_p_resolved)으로 수행한다.
+        _bin_p_orig = Path(bin_path)
+        try:
+            _bin_p_lexical = Path(os.path.abspath(str(_bin_p_orig)))
+        except Exception:  # noqa: BLE001
+            _bin_p_lexical = _bin_p_orig
+        try:
+            _bin_p_resolved = _bin_p_orig.resolve()
+        except Exception:  # noqa: BLE001
+            _bin_p_resolved = _bin_p_lexical
+        _bin_p = _bin_p_lexical  # 위치 판정 기준(PATH 진입점 자체)
 
         # 1) git repo 내 binary 차단 (테스트/개발 환경 fake binary 방지)
+        #    lexical + resolved 모두 검사하여 신뢰 위치의 symlink이 repo 내부를 가리키는 우회도 차단.
         _repo = Path(BASE_DIR).resolve()
-        try:
-            _bin_p.relative_to(_repo)
-            _r["untrusted_reason"] = f"binary_inside_git_repo:{_bin_p}"
-            return _r
-        except ValueError:
-            pass  # repo 밖 → OK
+        for _chk in (_bin_p_resolved, _bin_p_lexical):
+            try:
+                _chk.relative_to(_repo)
+                _r["untrusted_reason"] = f"binary_inside_git_repo:{_chk}"
+                return _r
+            except ValueError:
+                pass  # repo 밖 → OK
 
         # 2) OS 임시 디렉토리 내 binary 차단 (pytest tmp_path 등 PATH injection 방지)
         _tmpdir = Path(_tf.gettempdir()).resolve()
-        try:
-            _bin_p.relative_to(_tmpdir)
-            _r["untrusted_reason"] = f"binary_inside_temp_dir:{_bin_p}"
-            return _r
-        except ValueError:
-            pass  # 임시 디렉토리 밖 → OK
+        for _chk in (_bin_p_resolved, _bin_p_lexical):
+            try:
+                _chk.relative_to(_tmpdir)
+                _r["untrusted_reason"] = f"binary_inside_temp_dir:{_chk}"
+                return _r
+            except ValueError:
+                pass  # 임시 디렉토리 밖 → OK
 
-        # 3) 파일 존재 확인
-        if not _bin_p.exists():
-            _r["untrusted_reason"] = f"binary_not_found:{_bin_p}"
+        # 3) 파일 존재 확인 (symlink이면 대상까지 따라가 확인)
+        if not _bin_p_lexical.exists():
+            _r["untrusted_reason"] = f"binary_not_found:{_bin_p_lexical}"
             return _r
 
         # 4) npm global bin 검증 (REJECT#10 핵심: 임의 경로 차단)
@@ -9169,16 +9228,21 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         _trusted_by_npm = False
         if _npm_bin:
             _npm_bin_p = Path(_npm_bin).resolve()
-            try:
-                _bin_p.relative_to(_npm_bin_p)
-                # npm global bin 내에 있음 → wrapper 내용 검증
-                if not _verify_npm_wrapper_content(_bin_p):
-                    _r["untrusted_reason"] = f"binary_in_npm_dir_but_not_npm_wrapper:{_bin_p}"
+            _in_npm_dir = False
+            for _cand_bin in (_bin_p_lexical, _bin_p_resolved):
+                try:
+                    _cand_bin.relative_to(_npm_bin_p)
+                    _in_npm_dir = True
+                    break
+                except ValueError:
+                    pass
+            if _in_npm_dir:
+                # npm global bin 내에 있음 → wrapper 내용 검증(symlink/shebang/.cmd)
+                if not _verify_npm_wrapper_content(_bin_p_lexical):
+                    _r["untrusted_reason"] = f"binary_in_npm_dir_but_not_npm_wrapper:{_bin_p_lexical}"
                     return _r
                 _trusted_by_npm = True
                 _r["install_source"] = "npm_global"
-            except ValueError:
-                pass  # npm bin 밖 → 아직 판정 안 함
 
         if not _trusted_by_npm:
             # 5) 시스템 경로 검증 (Linux/macOS 시스템 패키지 설치 경로)
@@ -9192,7 +9256,7 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
             if sys.platform != "win32":
                 for _sp_str in _SYSTEM_PREFIXES:
                     try:
-                        _bin_p.relative_to(Path(_sp_str).resolve())
+                        _bin_p_lexical.relative_to(Path(_sp_str).resolve())
                         _trusted_by_system = True
                         _r["install_source"] = "system_path"
                         break
@@ -9201,22 +9265,28 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
 
             if not _trusted_by_system:
                 # 임의 사용자 경로 — fail-closed 차단
-                _r["untrusted_reason"] = f"binary_in_arbitrary_user_path:{_bin_p}"
+                _r["untrusted_reason"] = f"binary_in_arbitrary_user_path:{_bin_p_lexical}"
                 return _r
 
-        # 6) SHA-256 계산 (신뢰 경로 확인 후)
+        # 6) SHA-256 계산 (신뢰 경로 확인 후; symlink이면 대상 내용 해시)
         try:
-            _sha = hashlib.sha256(_bin_p.read_bytes()).hexdigest()
+            _sha = hashlib.sha256(_bin_p_lexical.read_bytes()).hexdigest()
         except (OSError, PermissionError) as _exc:
             _r["untrusted_reason"] = f"sha_read_error:{type(_exc).__name__}"
             return _r
 
-        _r.update({"trusted": True, "path": str(_bin_p), "sha256": _sha})
-        # REJECT#LATEST AC#1/#3/#4: JS 진입점 + native/vendor binary까지 검증 (fail-closed).
-        #   npm 래퍼(.cmd)에서는 JS 진입점과 native binary가 모두 필수이다.
-        #   JS 미발견이나 native binary 미발견은 신뢰 실패로 처리한다 (fail-closed).
-        _js_ep = _find_codex_js_entrypoint(_bin_p)
+        # path는 재검증 시 동일 신뢰-위치로 재판정되도록 lexical(PATH 진입점)로 기록한다.
+        _r.update({"trusted": True, "path": str(_bin_p_lexical), "sha256": _sha})
+        # REJECT#LATEST AC#1/#3/#4 + REJECT#15 문제 A: JS 진입점 + native/vendor binary까지 검증.
+        #   래퍼 체인(Windows .cmd 또는 POSIX symlink/shebang)에서는 JS 진입점과 native binary가
+        #   모두 필수이다. JS 미발견이나 native binary 미발견은 신뢰 실패로 처리한다 (fail-closed).
+        _js_ep = _find_codex_js_entrypoint(_bin_p_lexical)
         if _js_ep is not None:
+            # 래퍼 유형 표시: .cmd/.bat → npm_wrapper, 그 외(POSIX symlink/shebang) → posix_npm_symlink.
+            _r["install_type"] = (
+                "npm_wrapper" if _bin_p_lexical.suffix.lower() in (".cmd", ".bat")
+                else "posix_npm_symlink"
+            )
             # JS 진입점 발견 → SHA 해시 (fail-closed)
             try:
                 _js_sha = hashlib.sha256(_js_ep.read_bytes()).hexdigest()
@@ -9241,11 +9311,16 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
                 return _r
         elif _trusted_by_npm:
-            # npm 래퍼이지만 JS 진입점을 찾을 수 없음 → fail-closed (AC#1/#4)
+            # npm 래퍼 디렉토리에 있으나 JS 진입점을 찾을 수 없음 → fail-closed (AC#1/#4)
             _r["trusted"] = False
-            _r["untrusted_reason"] = f"js_entrypoint_not_found_for_npm_wrapper:{_bin_p}"
+            _r["untrusted_reason"] = f"js_entrypoint_not_found_for_npm_wrapper:{_bin_p_lexical}"
             return _r
-        # else: 시스템 경로 direct native install (Linux 등) → JS 체인 불필요, 신뢰 유지
+        else:
+            # REJECT#15 문제 B: 시스템 경로 direct native install (Linux 등) → JS 체인 불필요.
+            #   codex 실행 파일 자체가 최종 native binary이므로, 위 step 6에서 검증한 codex_binary_path/
+            #   sha256이 native 신뢰를 보장한다. 별도 native 체인 필드 부재를 operational trust가
+            #   허용하도록 install_type=direct_native로 표시한다(신뢰는 시스템 경로에 한정, fail-closed).
+            _r["install_type"] = "direct_native"
         return _r
     except Exception as _exc:  # noqa: BLE001
         _r["untrusted_reason"] = f"path_verification_error:{type(_exc).__name__}:{_exc}"
@@ -10696,6 +10771,8 @@ def _check_codex_cache(
     # REJECT#LATEST AC#2: native/vendor binary SHA도 캐시 hit 전 재검증한다 (cache 우회 차단).
     _cached_native_path = str(cached.get("codex_native_binary_path", "") or "")
     _cached_native_sha = str(cached.get("codex_native_binary_sha256", "") or "")
+    # REJECT#15 문제 B: 설치 유형도 캐시에서 복원하여 operational trust 면제를 승계한다.
+    _cached_install_type = str(cached.get("codex_install_type", "") or "")
     if _cached_bin_path:
         try:
             _cur_bin_sha = _sha256_file(Path(_cached_bin_path)) if Path(_cached_bin_path).exists() else ""
@@ -10763,6 +10840,8 @@ def _check_codex_cache(
         # REJECT#LATEST AC#2/#3: native binary 신뢰 증거를 hit 결과로 전달 (복원 후 재검증·기록용).
         "cached_codex_native_binary_path": _cached_native_path,
         "cached_codex_native_binary_sha256": _cached_native_sha,
+        # REJECT#15 문제 B: 설치 유형을 hit 결과로 전달 (복원 후 operational trust 면제 승계용).
+        "cached_codex_install_type": _cached_install_type,
     }
 
 
@@ -25790,6 +25869,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             # REJECT#LATEST AC#2/#3: native binary 신뢰 증거 복원 (cache reuse 경로에서도 기록).
             _cached_native_path_restore = str(_cache_probe.get("cached_codex_native_binary_path") or "")
             _cached_native_sha_restore = str(_cache_probe.get("cached_codex_native_binary_sha256") or "")
+            # REJECT#15 문제 B: 설치 유형 복원 — direct_native 캐시 재사용 시 operational trust 면제 승계.
+            _cached_install_type_restore = str(_cache_probe.get("cached_codex_install_type") or "")
             _codex_binary_trust = {
                 "trusted": bool(_cached_bin_path_restore and _cached_bin_sha_restore),
                 "path": _cached_bin_path_restore,
@@ -25798,6 +25879,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 "js_entrypoint_sha256": _cached_js_sha_restore,
                 "native_binary_path": _cached_native_path_restore,
                 "native_binary_sha256": _cached_native_sha_restore,
+                "install_type": _cached_install_type_restore,
                 "install_source": "cached",
             }
             print("  [CACHE REUSE] Codex CLI 호출 없이 캐시된 APPROVE verdict를 재사용합니다.")
@@ -26701,6 +26783,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # REJECT#LATEST AC#3: native binary 경로/SHA를 결과에 추가 기록
     result["codex_native_binary_path"] = str(_codex_binary_trust.get("native_binary_path", "") or "")
     result["codex_native_binary_sha256"] = str(_codex_binary_trust.get("native_binary_sha256", "") or "")
+    # REJECT#15 문제 B: 설치 유형을 결과에 기록 — operational trust step(6b)가 direct_native일 때
+    #   native 체인 필드 부재를 허용하는 데 사용한다(시스템 경로 직접 native 설치).
+    result["codex_install_type"] = str(_codex_binary_trust.get("install_type", "") or "")
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
     # github_canonical_pr_body_sha256 필드는 acceptance_request에서 가져온다 (fail-closed).
@@ -26868,6 +26953,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             # REJECT#LATEST AC#2/#3: native binary 신뢰 증거도 캐시에 저장 (cache 우회 차단).
             "codex_native_binary_path": str(_codex_binary_trust.get("native_binary_path", "") or ""),
             "codex_native_binary_sha256": str(_codex_binary_trust.get("native_binary_sha256", "") or ""),
+            # REJECT#15 문제 B: 설치 유형도 캐시에 저장 — cache 재사용 시 operational trust 면제 승계.
+            "codex_install_type": str(_codex_binary_trust.get("install_type", "") or ""),
             "cached_at": _now(),
         }
         _cache_path = _codex_review_cache_path()
@@ -27345,6 +27432,8 @@ def _write_codex_review_blocked_invalidation(
         # REJECT#LATEST AC#3: native binary (BLOCKED 시 빈 값)
         "codex_native_binary_path": "",
         "codex_native_binary_sha256": "",
+        # REJECT#15 문제 B: 설치 유형 (BLOCKED 시 빈 값)
+        "codex_install_type": "",
     }
     result_path = _codex_review_result_path()
     result_path.parent.mkdir(parents=True, exist_ok=True)
@@ -27679,12 +27768,17 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             f"codex_binary_path={_bin_path_rec!r} 가 기록됐으나 "
             "codex_binary_sha256이 비어 있습니다 (fail-closed).",
         )
-    # (6b) REJECT#LATEST AC#2/#3: native binary chain 재검증 (fail-closed).
+    # (6b) REJECT#LATEST AC#2/#3 + REJECT#15 문제 B: native binary chain 재검증 (fail-closed).
     #   verdict_source=codex_cli/verified_cache에서 native_binary_path/sha256이 비어있으면
     #   native binary 신뢰 보장 불가 → 운영 승인 자격 없음 (fail-closed).
+    #   단, install_type=direct_native(시스템 경로 직접 native 설치)는 codex 실행 파일 자체가
+    #   최종 native binary이므로 별도 JS/vendor 체인이 존재하지 않는다. 이 경우 위 step 6에서 이미
+    #   필수 검증된 codex_binary_path/sha256이 native 신뢰를 보장하므로 native 체인 필드를 면제한다.
+    #   install_type 미기록(레거시/위조) 또는 npm_wrapper/posix_npm_symlink에는 native 체인을 강제한다.
     _native_path_rec = str(result.get("codex_native_binary_path", "") or "")
     _native_sha_rec = str(result.get("codex_native_binary_sha256", "") or "")
-    if verdict_source in ("codex_cli", "verified_cache"):
+    _install_type_rec = str(result.get("codex_install_type", "") or "")
+    if verdict_source in ("codex_cli", "verified_cache") and _install_type_rec != "direct_native":
         if not _native_path_rec or not _native_sha_rec:
             return _blocked(
                 "codex_review_native_binary_chain_missing",

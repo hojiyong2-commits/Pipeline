@@ -5487,3 +5487,163 @@ class TestTC16Reject14VersionCheckUsesVerifiedBinaryPath:
         assert _iso_result.exists(), (
             "REJECT#14: PIPELINE_STATE_PATH 격리가 동작하지 않음 — 결과가 격리 경로에 없음"
         )
+
+
+# ---------------------------------------------------------------------------
+# TC-17: REJECT#15 — POSIX 공식 npm 설치(symlink→codex.js) JS 진입점 탐지 +
+#        시스템 경로 direct native 설치의 operational trust 면제.
+# ---------------------------------------------------------------------------
+class TestTC17PosixNpmSymlink:
+    """REJECT#15 문제 A/B: POSIX 공식 npm 설치와 시스템 경로 직접 native 설치를 지원한다.
+
+    문제 A: /usr/local/bin/codex(symlink) → .../@openai/codex/bin/codex.js 구조에서
+        _find_codex_js_entrypoint가 JS 진입점을 탐지해야 한다(기존엔 .cmd/.bat만 처리하여 차단).
+    문제 B: npm wrapper 없이 시스템 PATH에 native codex 바이너리만 설치된 경우,
+        native 체인 필드가 비어 있어도 install_type=direct_native로 operational trust를 통과해야 한다.
+    """
+
+    def test_posix_symlink_to_js_entrypoint_trusted(self, tmp_path: "Path") -> None:
+        """문제 A: symlink(또는 shebang 스크립트)이 codex.js를 가리키면 JS 진입점을 반환한다."""
+        import platform as _platform
+
+        pkg = tmp_path / "lib" / "node_modules" / "@openai" / "codex"
+        bin_dir = pkg / "bin"
+        bin_dir.mkdir(parents=True)
+        js_ep = bin_dir / "codex.js"
+        js_ep.write_text("#!/usr/bin/env node\nrequire('@openai/codex');\n", encoding="utf-8")
+
+        # POSIX에서는 symlink, Windows에서 symlink 권한이 없으면 shebang 내용 복사로 대체한다.
+        fake_codex = tmp_path / ("codex.exe" if _platform.system() == "Windows" else "codex")
+        try:
+            fake_codex.symlink_to(js_ep)
+        except (OSError, NotImplementedError):
+            fake_codex.write_bytes(js_ep.read_bytes())
+
+        ep = pipeline._find_codex_js_entrypoint(fake_codex)
+        assert ep is not None, (
+            "REJECT#15 문제 A: POSIX symlink/shebang → codex.js 진입점을 찾지 못함(None)."
+        )
+        # POSIX symlink 경로에서는 symlink 대상(codex.js)을 반환하고, Windows 권한 부재로
+        # shebang 내용을 복사한 경우에는 스크립트 자신(codex.exe)을 JS 진입점으로 반환한다.
+        # 두 경우 모두 node shebang + @openai/codex 참조가 확인된 유효한 JS 진입점이다.
+        import platform as _platform_chk
+        if _platform_chk.system() != "Windows" and fake_codex.is_symlink():
+            assert ep.name == "codex.js", (
+                f"REJECT#15 문제 A: symlink 경로에서 반환된 JS 진입점이 codex.js가 아님: {ep!r}"
+            )
+
+    def test_js_input_returns_itself(self, tmp_path: "Path") -> None:
+        """문제 A: 입력이 .js 파일 자체이면 그 경로를 그대로 JS 진입점으로 반환한다."""
+        js_ep = tmp_path / "codex.js"
+        js_ep.write_text("#!/usr/bin/env node\nrequire('@openai/codex');\n", encoding="utf-8")
+        ep = pipeline._find_codex_js_entrypoint(js_ep)
+        assert ep is not None and ep.resolve() == js_ep.resolve(), (
+            f"REJECT#15 문제 A: .js 입력이 자기 자신으로 반환되지 않음: {ep!r}"
+        )
+
+    def test_cmd_wrapper_regression_still_none_for_fake(self, tmp_path: "Path") -> None:
+        """회귀 방지: JS 경로 패턴이 없는 가짜 .cmd는 여전히 None을 반환한다(기존 동작 유지)."""
+        fake_cmd = tmp_path / "codex.cmd"
+        fake_cmd.write_text("node @openai/codex\r\n", encoding="utf-8")
+        assert pipeline._find_codex_js_entrypoint(fake_cmd) is None, (
+            "REJECT#15 회귀: 유효한 JS 경로 없는 가짜 .cmd에서 진입점이 반환됨"
+        )
+
+    def test_direct_native_install_passes_operational_trust(self) -> None:
+        """문제 B: install_type=direct_native면 native 체인 필드가 비어도 native 체인으로 차단되지 않는다."""
+        result = {
+            "trusted": True,
+            "codex_install_type": "direct_native",
+            "codex_binary_path": "/usr/local/bin/codex",
+            "codex_binary_sha256": "abc123",
+            "codex_js_entrypoint_path": "",
+            "codex_js_entrypoint_sha256": "",
+            "codex_native_binary_path": "/usr/local/bin/codex",
+            "codex_native_binary_sha256": "abc123",
+        }
+        outcome = pipeline._check_codex_review_operational_trust(result)
+        assert outcome.get("status") != "BLOCKED" or "native_binary" not in outcome.get(
+            "failure_code", ""
+        ), (
+            f"REJECT#15 문제 B: direct_native가 native_binary 체인으로 차단됨: {outcome!r}"
+        )
+
+    def test_direct_native_full_result_reaches_and_passes_step6b(self) -> None:
+        """문제 B: 유효한 전체 result + install_type=direct_native + native 필드 빈값 → PASS."""
+        pol = pipeline._build_codex_model_policy("HIGH")
+        sig = pipeline._codex_policy_signature(pol)
+        _model = pol["selected_model"]
+        _effort = pol["selected_reasoning_effort"]
+        result = {
+            "verdict_source": "codex_cli",
+            "acceptance_eligible": True,
+            "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
+            "risk_level": "HIGH",
+            "model_policy_signature": sig,
+            "selected_model": _model,
+            "selected_reasoning_effort": _effort,
+            "review_mode": pol["mode"],
+            "invoked_model": _model,
+            "invoked_effort": _effort,
+            "actual_model": "unknown",
+            "actual_effort": "unknown",
+            "model_verification_level": "invocation_verified",
+            "codex_cli_command": f"codex exec --model {_model} -c model_reasoning_effort=high",
+            "codex_binary_path": "/usr/bin/codex",
+            "codex_binary_sha256": "abc123",
+            # direct_native: native 체인 필드는 비어 있어도 면제된다.
+            "codex_native_binary_path": "",
+            "codex_native_binary_sha256": "",
+            "codex_install_type": "direct_native",
+            "auth_source": "chatgpt",
+        }
+        r = pipeline._check_codex_review_operational_trust(result)
+        assert r["status"] == "PASS", (
+            f"REJECT#15 문제 B: direct_native 전체 result가 PASS되지 않음: {r!r}"
+        )
+
+    def test_missing_install_type_still_blocks_native_chain(self) -> None:
+        """회귀 방지: install_type 미기록 + native 필드 빈값이면 여전히 native 체인으로 BLOCKED된다."""
+        pol = pipeline._build_codex_model_policy("HIGH")
+        sig = pipeline._codex_policy_signature(pol)
+        _model = pol["selected_model"]
+        _effort = pol["selected_reasoning_effort"]
+        result = {
+            "verdict_source": "codex_cli",
+            "acceptance_eligible": True,
+            "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
+            "risk_level": "HIGH",
+            "model_policy_signature": sig,
+            "selected_model": _model,
+            "selected_reasoning_effort": _effort,
+            "review_mode": pol["mode"],
+            "invoked_model": _model,
+            "invoked_effort": _effort,
+            "actual_model": "unknown",
+            "actual_effort": "unknown",
+            "model_verification_level": "invocation_verified",
+            "codex_cli_command": f"codex exec --model {_model} -c model_reasoning_effort=high",
+            "codex_binary_path": "/usr/bin/codex",
+            "codex_binary_sha256": "abc123",
+            "codex_native_binary_path": "",
+            "codex_native_binary_sha256": "",
+            # codex_install_type 미기록 → 면제 없음, native 체인 강제
+            "auth_source": "chatgpt",
+        }
+        r = pipeline._check_codex_review_operational_trust(result)
+        assert r["status"] == "BLOCKED", (
+            f"REJECT#15 회귀: install_type 미기록인데 native 체인 없이 PASS됨: {r!r}"
+        )
+        assert "native_binary" in r.get("failure_code", ""), (
+            f"REJECT#15 회귀: failure_code에 native_binary 없음: {r.get('failure_code')!r}"
+        )
+
+    def test_verify_trust_returns_install_type_field(self) -> None:
+        """문제 B: _verify_codex_binary_path_trust 반환에 install_type 필드가 항상 존재한다."""
+        # repo 내 경로(차단됨)여도 스키마상 install_type 키는 존재해야 한다.
+        r = pipeline._verify_codex_binary_path_trust(
+            str(pipeline.BASE_DIR / "tests" / "nonexistent_codex_tc17")
+        )
+        assert "install_type" in r, (
+            "REJECT#15 문제 B: _verify_codex_binary_path_trust 반환에 install_type 키 없음"
+        )
