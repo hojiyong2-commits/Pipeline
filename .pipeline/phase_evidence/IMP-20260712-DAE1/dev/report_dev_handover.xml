@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <run_id>dev-1383f53a987e16a7</run_id>
+  <phase>dev (REJECT#3 전면 재구현 — GPT-5.6 Codex Model Router)</phase>
+
+  <summary>
+    gates codex-review의 Codex Model Router를 REJECT#3 명세대로 gpt-5.5 → GPT-5.6 계열로 재구현했습니다.
+    핵심 계약 변경: (1) 모델 정책 SSoT를 gpt-5.6-luna/terra/sol + low/high/high/max로 교체,
+    (2) selected/invoked/actual 분리 + model_verification_level(actual_verified|invocation_verified|unverified),
+    (3) 실제 codex exec 자동 실행 경로에 ChatGPT Plus 인증 강제(codex login status) + OPENAI_API_KEY subprocess 제거 + timeout 600초,
+    (4) verdict 4-필드 REJECT 스키마 강제, (5) manual/external 주입은 어떤 환경에서도 acceptance_eligible=false,
+    fake-executable 테스트 seam(CODEX_REVIEW_FAKE_BIN) + environment=test 기록, PIPELINE_TEST_MODE 우회 제거,
+    (6) 운영 신뢰 게이트를 invocation_verified 의미로 재작성, (7) CRITICAL/test/external cache 저장 금지.
+  </summary>
+
+  <changed_files>
+    <file role="주 구현">pipeline.py — CODEX_MODEL_POLICIES/CODEX_ALLOWED_MODELS/router version(2.0.0)/verification 상수, _invoke_codex_exec, _check_codex_chatgpt_auth, _compute_model_verification_level, _check_codex_model_capability_match, _parse_json_verdict, _cmd_gates_codex_review, _check_codex_review_operational_trust, _cmd_gates_request_accept, _check_codex_cache, _build_codex_prompt_for_review</file>
+    <file role="테스트">tests/e2e/test_codex_model_router_dae1.py — REJECT#3 TC-1~TC-24 재작성 (41 테스트, fake executable seam)</file>
+    <file role="테스트">tests/e2e/test_codex_model_router_e2e.py — gpt-5.6 + invoked/verification 의미로 subprocess E2E 갱신</file>
+    <file role="테스트">tests/e2e/test_codex_review_gate_3bb6.py — SSoT producer-consumer sync (gpt-5.5 → gpt-5.6 단정)</file>
+    <file role="문서">.claude/agents/pipeline-manager-agent.md — Codex Model Router 섹션 gpt-5.6/실행구조/증거필드/verdict 스키마 갱신</file>
+    <file role="문서">codex_model_router_report.md — REJECT#3 재구현 요약 추가</file>
+  </changed_files>
+
+  <scope_amendment_reason>
+    [Multi-location Sync Audit] SSoT 상수 CODEX_MODEL_POLICIES(gpt-5.5 → gpt-5.6) 변경은 이를 하드코딩하는
+    소비자 테스트 tests/e2e/test_codex_review_gate_3bb6.py를 함께 갱신해야 producer-consumer 동기화가 완결됩니다.
+    3bb6은 이 파이프라인의 기존 scope_manifest.json MT-9 files 배열에 이미 포함되어 있어 범위 내 수정입니다.
+  </scope_amendment_reason>
+
+  <impact_analysis>
+    <micro_task_id>MT-1..MT-10</micro_task_id>
+    <target_function>Codex Model Router 전체(상수 + 라우터/실행/verdict/cache/trust 함수 + 문서)</target_function>
+    <state_mutations>
+      <mutation>.pipeline/codex_review_result.json — schema v5, invoked/actual/verification/auth/environment 필드 추가</mutation>
+      <mutation>.pipeline/codex_review_cache.json — invoked/verification 증거 승계; CRITICAL/test/external skip</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>YES — _invoke_codex_exec(codex_bin/repo_root 추가, timeout 600), _check_codex_model_capability_match(invoked_model/effort/invocation_ok 추가)</signature_change>
+      <breaking_change>YES(설계상) — manual/external 주입은 acceptance_eligible=false; PIPELINE_TEST_MODE 우회 제거(req5). REJECT#3 명세가 요구한 의도된 계약 변경</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — dae1 41종 + e2e 갱신 + 3bb6 sync</test_coverage>
+      <rollback_strategy>단일 커밋 revert로 gpt-5.5 라우터 복원 가능</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <self_check>
+    <python_version_syntax>PASS — py_compile OK</python_version_syntax>
+    <type_hinting>PASS — 신규 함수 파라미터/리턴 타입 명시</type_hinting>
+    <error_handling>PASS — subprocess/JSON/파일 I/O 구체적 except; auth/invoke 실패는 fail-closed BLOCKED 또는 ERROR</error_handling>
+    <security>PASS — OPENAI_API_KEY subprocess 제거, dummy secret 없음, ACCEPT nonce 미포함</security>
+    <execution_check>PASS —
+      py_compile OK; import OK;
+      pytest test_codex_model_router_dae1.py = 41 passed;
+      pytest (dae1 + e2e + 3bb6) = 77 passed;
+      ruff(지정 ignore) 신규 위반 0(N818 수정; 나머지는 파일 전역 기존 baseline);
+      mypy --ignore-missing-imports --no-strict-optional = Success: no issues found
+    </execution_check>
+    <impact_analysis_check>PASS</impact_analysis_check>
+    <frozen_codebase_check>PASS — SSoT 변경 소비자 sync 외 무관 리팩토링 없음</frozen_codebase_check>
+  </self_check>
+
+  <sync_verification>
+    <grep_pattern>gpt-5.5 (모델 SSoT 소비 위치)</grep_pattern>
+    <locations_found>pipeline.py, test_codex_model_router_dae1.py, test_codex_model_router_e2e.py, test_codex_review_gate_3bb6.py</locations_found>
+    <locations_updated>동일 4개 파일 모두 gpt-5.6로 갱신</locations_updated>
+    <sync_status>COMPLETE (라우터 SSoT 소비 위치 기준)</sync_status>
+  </sync_verification>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+    <summary>REJECT#3 재구현 완료 — GPT-5.6 Codex Model Router, 실제 Codex CLI 실행, ChatGPT Plus 인증 강제, manual/external 주입 차단, TC-1~TC-24 41개 테스트 PASS</summary>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_model_router_dae1.py</file>
+      <file>tests/e2e/test_codex_model_router_e2e.py</file>
+      <file>tests/e2e/test_codex_review_gate_3bb6.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>codex_model_router_report.md</file>
+      <test_result>pytest tests/e2e/test_codex_model_router_dae1.py -q → 41 passed</test_result>
+      <test_result>mypy pipeline.py --ignore-missing-imports → Success</test_result>
+    </evidence>
+  </handover>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_model_router_dae1.py</file>
+      <file>tests/e2e/test_codex_model_router_e2e.py</file>
+      <file>tests/e2e/test_codex_review_gate_3bb6.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>codex_model_router_report.md</file>
+    </files_to_modify>
+    <rationale>REJECT#3 — GPT-5.6 Codex Model Router 전면 재구현: 15개 요구사항 이행</rationale>
+  </scope_declaration>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, codex_model_router_report.md, tests/e2e/test_codex_model_router_dae1.py, tests/e2e/test_codex_model_router_e2e.py, tests/e2e/test_codex_review_gate_3bb6.py</git_diff_files>
+    <manifest_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, codex_model_router_report.md, tests/e2e/test_codex_model_router_dae1.py, tests/e2e/test_codex_model_router_e2e.py, tests/e2e/test_codex_review_gate_3bb6.py, tests/e2e/test_codex_cost_optimization_9f5e.py</manifest_files>
+    <extra_files>없음 (모든 변경 파일이 scope_manifest.json 범위 내; pipeline-manager-agent.md는 본 IMP의 authorized target)</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <test_status_honest>
+    <in_scope_router_tests>PASS — dae1(41) + e2e(전체) + 3bb6(6) = 77 passed</in_scope_router_tests>
+    <net_new_regressions>
+      test_codex_cost_optimization_9f5e.py + test_codex_control_flow_db54.py에서 +5 회귀(baseline 3 fail → 8 fail).
+      원인: 이 테스트들은 --verdict/PIPELINE_TEST_MODE 주입으로 eligible APPROVE를 시딩하여 cache-hit 재사용/retry 흐름을 검증합니다.
+      REJECT#3 req5(주입 승인 자격 제거) + req11(test/external/CRITICAL cache 저장 금지)이 이 시딩 경로를 의도적으로 제거하므로,
+      fake-executable seam으로도 eligible 승인을 만들 수 없습니다(environment=test → eligible=false → cache skip).
+      권장 마이그레이션: _check_codex_cache / _run_codex_cli_review / rate-limit 함수 단위 직접 호출 검증으로 재작성.
+    </net_new_regressions>
+    <preexisting_failures>
+      test_codex_snapshot_sync_f52c.py 등 24개 실패는 브랜치 HEAD(fcb70486)에서 이미 실패 중이던 pre-existing 상태(git stash 대조 검증 완료)이며 본 작업 회귀가 아닙니다.
+    </preexisting_failures>
+    <design_question_for_manager>
+      req5(테스트 seam은 acceptance_eligible=false 강제) + req11(test 결과 cache 저장 금지)로 인해 테스트가 full 승인/캐시 재사용 흐름을 end-to-end로 구동하는 것이 원천적으로 불가능해졌습니다(설계 의도).
+      f52c/9f5e/db54의 승인·캐시·retry 의존 테스트는 (a) 함수 단위 직접 검증 재작성 또는 (b) sanctioned 테스트 승인 메커니즘 설계 결정이 필요합니다. 본 dev 턴 범위 초과 후속 마이그레이션으로, Pipeline Manager/PM의 scope 확장 또는 설계 결정을 요청합니다.
+    </design_question_for_manager>
+  </test_status_honest>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_model_router_dae1.py</file>
+    <file>tests/e2e/test_codex_model_router_e2e.py</file>
+    <file>tests/e2e/test_codex_review_gate_3bb6.py</file>
+    <command>python -m pytest tests/e2e/test_codex_model_router_dae1.py -q → 41 passed</command>
+    <command>python -m mypy pipeline.py --ignore-missing-imports --no-strict-optional → Success</command>
+  </evidence>
+</dev_handover>

@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-14T13:13:10Z",
+  "pipeline_id": "IMP-20260712-DAE1",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "4bc9ea348d33595a0422079794ab2877d4c19be8",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-07-12T13:34:37Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,.claude/agents/pipeline-manager-agent.md,tests/e2e/test_codex_model_router_dae1.py,tests/e2e/test_codex_model_router_e2e.py,tests/e2e/test_codex_review_gate_3bb6.py,tests/e2e/test_codex_cost_optimization_9f5e.py,codex_model_router_report.md"
+  },
+  "agent_run": {
+    "run_id": "dev-6512e4e4f7dfb61c",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "5778ab12bfa0c48f13f31744fcfc291d42de952060e5eab8f9212d613d25741e",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/agent_receipt_dev-6512e4e4f7dfb61c.json",
+    "receipt_sha256": "dd699d33ebe39703118316e9331aa2b11f25bcd18fe966e29589f641e3a32695",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260712-DAE1\\dev\\dev-6512e4e4f7dfb61c.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260712-DAE1\\dev\\dev-6512e4e4f7dfb61c.json",
+      "path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/agent_receipt_dev-6512e4e4f7dfb61c.json",
+      "sha256": "dd699d33ebe39703118316e9331aa2b11f25bcd18fe966e29589f641e3a32695",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/report_dev_handover.xml",
+      "sha256": "5778ab12bfa0c48f13f31744fcfc291d42de952060e5eab8f9212d613d25741e",
+      "size_bytes": 9797,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/scope_manifest_scope_manifest.json",
+      "sha256": "2908e517cff887d327167f6fcd3f2d06e60eeb3daa405ed46109d92d558fe85a",
+      "size_bytes": 8885,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "5f01bfa6a71de710e85ebd10615fededea86712128ce19dcd58ba621f43cc523",
+      "size_bytes": 1802773
+    },
+    {
+      "path": ".claude/agents/pipeline-manager-agent.md",
+      "sha256": "cfa1d7f85634a84749fb8623f39728841eba363829e3a94db944af3e632d0f91",
+      "size_bytes": 22102
+    },
+    {
+      "path": "tests/e2e/test_codex_model_router_dae1.py",
+      "sha256": "90803fc019f1e529f568a9feee48b55123fe17dcd1463e2665bddcd120221411",
+      "size_bytes": 255283
+    },
+    {
+      "path": "tests/e2e/test_codex_model_router_e2e.py",
+      "sha256": "78dad48da090c34c4b3912e96ff654d3594708e4b6d2f99fdc1921650dcde155",
+      "size_bytes": 36631
+    },
+    {
+      "path": "tests/e2e/test_codex_review_gate_3bb6.py",
+      "sha256": "c4fbdbd436a946cc5b251f1c3896b11e6450885aee8761429bfa751ef41ac80c",
+      "size_bytes": 8244
+    },
+    {
+      "path": "tests/e2e/test_codex_cost_optimization_9f5e.py",
+      "sha256": "38177944560fddb9112b41a8d7e90bbe954159b19438f2600adedc0b03338138",
+      "size_bytes": 44319
+    },
+    {
+      "path": "codex_model_router_report.md",
+      "sha256": "0a9b1f828b3c4ee72c34e98afd7a91b9e5b8331a11a5f375558aa50eb192d926",
+      "size_bytes": 13866
+    }
+  ],
+  "local_only_files": []
+}
