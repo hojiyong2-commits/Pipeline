@@ -9451,13 +9451,27 @@ def _check_package_json_npm_integrity(pkg_root: "Path") -> Dict[str, Any]:
             _out["reason"] = "no_npm_provenance_fields(global_install_ok)"
             return _out
         _out["available"] = True
-        if _resolved and "registry.npmjs.org" in _resolved.lower():
-            _out["ok"] = True
-            _out["reason"] = "registry_provenance_confirmed"
+        # REJECT#20: "registry.npmjs.org" 포함 여부만 검사하면 "registry.npmjs.org.evil" 같은
+        #   유사 호스트를 차단하지 못한다. URL 파싱으로 hostname이 정확히 "registry.npmjs.org"인지
+        #   검증하여 서브도메인·유사 도메인을 모두 차단한다(fail-closed).
+        if _resolved:
+            try:
+                from urllib.parse import urlparse as _urlparse
+                _parsed_url = _urlparse(_resolved)
+                _hostname = (_parsed_url.hostname or "").lower().strip()
+                if _hostname == "registry.npmjs.org":
+                    _out["ok"] = True
+                    _out["reason"] = "registry_provenance_confirmed"
+                else:
+                    _out["ok"] = False
+                    _out["reason"] = f"resolved_hostname_not_registry:{_hostname or _resolved[:80]}"
+            except Exception as _url_exc:  # noqa: BLE001
+                _out["ok"] = False
+                _out["reason"] = f"resolved_url_parse_error:{_resolved[:60]}"
         else:
-            # 필드가 존재하나 레지스트리 출처가 아님 → 조작 가능성(fail-closed 대상).
+            # _resolved 없이 _integrity만 있는 경우: provenance 확인 불충분 → fail-closed.
             _out["ok"] = False
-            _out["reason"] = f"resolved_not_registry:{_resolved[:120]}"
+            _out["reason"] = "integrity_without_resolved"
         return _out
     except Exception as _exc:  # noqa: BLE001
         # 파싱 실패는 non-blocking(정상 설치를 깨지 않음) — available=False, ok=True.
@@ -9508,14 +9522,17 @@ def _get_npm_ls_integrity(pkg_root: "Optional[Path]" = None) -> Dict[str, Any]:
         "integrity": "", "source": "npm_ls_global", "reason": "",
     }
     try:
-        # npm binary 위치 확인 (시스템 경로여야 신뢰)
-        _npm_bin = shutil.which("npm")
+        # npm binary 위치 확인 (시스템 경로여야 신뢰).
+        # REJECT#20 AC-3: _get_npm_global_bin과 동일한 탐색 순서(Windows는 npm.cmd 우선)로
+        #   동일한 npm 절대 경로를 사용한다. PATH 재해석 없이 첫 번째 검증된 경로를 재사용.
+        _npm_bin: Optional[str] = None
+        for _npm_probe in (["npm.cmd", "npm"] if sys.platform == "win32" else ["npm"]):
+            _which_npm = shutil.which(_npm_probe)
+            if _which_npm and _verify_npm_binary_is_system_path(_which_npm):
+                _npm_bin = _which_npm
+                break
         if not _npm_bin:
-            _out["reason"] = "npm_not_found"
-            return _out
-        # _verify_npm_binary_is_system_path로 npm이 시스템 경로에 있는지 확인
-        if not _verify_npm_binary_is_system_path(_npm_bin):
-            _out["reason"] = f"npm_not_system_path:{_npm_bin}"
+            _out["reason"] = "npm_not_found_or_not_system_path"
             return _out
         # npm ls -g --json @openai/codex 실행 (OPENAI_API_KEY 제거, 타임아웃 30초)
         _env = os.environ.copy()
@@ -10015,6 +10032,35 @@ def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]
         _bin = _found or "codex"
     else:
         _bin = str(codex_bin)
+        # REJECT#20: codex_bin이 명시적으로 전달돼도 trust/provenance 체크 필수.
+        #   _cmd_gates_codex_review가 verified_bin_path를 명시적으로 전달하면
+        #   위 `if codex_bin is None:` 블록을 건너뛰어 provenance 체크가 우회된다.
+        #   명시적 codex_bin이어도 반드시 trust 검증과 acceptance_eligible 확인을 수행한다.
+        if _bin and _bin != "codex":
+            _trust_explicit = _verify_codex_binary_path_trust(_bin)
+            if not _trust_explicit["trusted"]:
+                return {
+                    "result": "BLOCKED",
+                    "failure_code": "codex_binary_untrusted_path",
+                    "message": (
+                        f"Codex 실행 파일(명시)이 신뢰되지 않은 위치에 있습니다: "
+                        f"{_trust_explicit['untrusted_reason']}"
+                    ),
+                    "codex_binary_path": _bin,
+                    "codex_binary_sha256": "",
+                }
+            if not _trust_explicit.get("acceptance_eligible", True):
+                return {
+                    "result": "BLOCKED",
+                    "failure_code": "codex_binary_provenance_absent",
+                    "message": (
+                        f"Codex 실행 파일(명시)의 독립 provenance가 없습니다"
+                        f"({_trust_explicit.get('provenance_reason', 'provenance_absent_all_sources')}): "
+                        "수락 자격 없음(fail-closed)."
+                    ),
+                    "codex_binary_path": _bin,
+                    "codex_binary_sha256": _trust_explicit.get("sha256", ""),
+                }
     # 인증 상태 확인 subprocess에도 OPENAI_API_KEY를 제거한다(API key 인증 경로 차단).
     _env = os.environ.copy()
     _env.pop("OPENAI_API_KEY", None)
@@ -29219,6 +29265,19 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             f"  GitHub CI gate가 PASS가 아닙니다 (status={_ci_status or 'PENDING'}).\n"
             "  python pipeline.py gates github-ci 를 먼저 실행하세요."
         )
+
+    # REJECT#20 AC-5: request-accept 직전 Codex binary provenance 재검증.
+    #   binary trust는 이미 gates codex-review에서 검증했지만, 두 단계 사이에 binary가 교체될 수
+    #   있다. request-accept에서도 재검증하여 provenance 부재·변경 시 승인 코드 발급을 차단한다.
+    _codex_for_verify = shutil.which("codex") or ""
+    if _codex_for_verify:
+        _trust_ra = _verify_codex_binary_path_trust(_codex_for_verify)
+        if not _trust_ra.get("acceptance_eligible", True):
+            _die(
+                "[BLOCKED] failure_code=codex_binary_provenance_absent_at_request_accept\n"
+                f"  Codex binary 독립 provenance가 없습니다({_trust_ra.get('provenance_reason', '')}).\n"
+                "  lockfile·package.json·npm ls 모두 absent — 승인 코드 발급 불가(fail-closed)."
+            )
 
     # IMP-20260614-2821 MT-2: workspace hygiene preflight (nonce 발급 전).
     # untracked oracle 증거 등 BLOCKED 항목이 있으면 승인 코드를 발급하지 않는다.

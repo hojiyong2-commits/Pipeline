@@ -336,22 +336,50 @@ def test_tc_tests_inherit_not_raise() -> None:
 
 # --------------------------------------------------------------------------- #
 # TC-22: ChatGPT 로그인 아니면 BLOCKED / 로그인 맞으면 OK (fake executable).
+# REJECT#20 수정으로 명시적 codex_bin도 _verify_codex_binary_path_trust를 거치게 됐다.
+# 이 테스트들은 인증 로직만 검증하므로 trust 체인을 monkeypatch로 bypass한다.
+# trust/provenance 체크 자체는 TestTC22Reject20ExactHostnameAndExplicitBinE2E 클래스에서 검증.
 # --------------------------------------------------------------------------- #
-def test_tc22_chatgpt_auth_ok(tmp_path: Path) -> None:
+def _mock_verify_trust_ok(path: str) -> dict:
+    """테스트용: 모든 경로를 trusted=True, acceptance_eligible=True로 반환한다."""
+    return {
+        "trusted": True,
+        "path": path,
+        "sha256": "deadbeefdeadbeef",
+        "untrusted_reason": None,
+        "install_source": "npm_global",
+        "install_type": "npm_wrapper",
+        "js_entrypoint_path": "",
+        "js_entrypoint_sha256": "",
+        "native_binary_path": "",
+        "native_binary_sha256": "",
+        "acceptance_eligible": True,
+        "provenance_reason": "",
+    }
+
+
+def test_tc22_chatgpt_auth_ok(tmp_path: Path, monkeypatch: "pytest.MonkeyPatch") -> None:  # type: ignore[name-defined]
+    # REJECT#20: 명시적 codex_bin도 trust 체크를 거치므로 monkeypatch로 bypass한다.
+    import pytest  # noqa: F401 (type hint용)
+    monkeypatch.setattr(pipeline, "_verify_codex_binary_path_trust", _mock_verify_trust_ok)
     fake = _make_fake_codex(tmp_path, login_ok=True)
     r = pipeline._check_codex_chatgpt_auth(codex_bin=fake)
     assert r["result"] == "OK"
     assert r["auth_source"] == "chatgpt"
 
 
-def test_tc22_not_chatgpt_blocked(tmp_path: Path) -> None:
+def test_tc22_not_chatgpt_blocked(tmp_path: Path, monkeypatch: "pytest.MonkeyPatch") -> None:  # type: ignore[name-defined]
+    import pytest  # noqa: F401 (type hint용)
+    monkeypatch.setattr(pipeline, "_verify_codex_binary_path_trust", _mock_verify_trust_ok)
     fake = _make_fake_codex(tmp_path, login_ok=False)
     r = pipeline._check_codex_chatgpt_auth(codex_bin=fake)
     assert r["result"] == "BLOCKED"
     assert r["failure_code"] == "codex_not_chatgpt_authenticated"
 
 
-def test_tc22_auth_missing_executable_blocked(tmp_path: Path) -> None:
+def test_tc22_auth_missing_executable_blocked(tmp_path: Path, monkeypatch: "pytest.MonkeyPatch") -> None:  # type: ignore[name-defined]
+    import pytest  # noqa: F401 (type hint용)
+    monkeypatch.setattr(pipeline, "_verify_codex_binary_path_trust", _mock_verify_trust_ok)
     r = pipeline._check_codex_chatgpt_auth(codex_bin=str(tmp_path / "does_not_exist"))
     assert r["result"] == "BLOCKED"
     assert r["failure_code"] == "codex_auth_check_failed"
@@ -6612,3 +6640,153 @@ class TestTC21ProvenanceBlockingE2E:
             f"TC-21e: integrity={_r.get('integrity')!r} (예상: {_VALID_INTEGRITY!r})"
         )
         assert _r.get("source") == "npm_ls_global", f"TC-21e: source={_r.get('source')!r}"
+
+
+# --------------------------------------------------------------------------- #
+# TC-22: REJECT#20 — 정확한 hostname 검증 + 명시적 codex_bin trust/provenance 체크
+# --------------------------------------------------------------------------- #
+class TestTC22Reject20ExactHostnameAndExplicitBinE2E:
+    """REJECT#20 수정 4가지를 E2E로 검증한다.
+
+    AC-1: _check_package_json_npm_integrity — _resolved hostname이 정확히
+          "registry.npmjs.org"이면 ok=True (substring 아닌 exact match).
+    AC-2: _resolved hostname이 "registry.npmjs.org.evil.com" 같은 유사 도메인이면
+          ok=False (exact match로 차단).
+    AC-3: file:// URL — hostname이 "" 또는 빈값이므로 ok=False.
+    AC-4: _check_codex_chatgpt_auth(codex_bin=명시경로) — trust=False → BLOCKED
+          failure_code=codex_binary_untrusted_path.
+    AC-5: _check_codex_chatgpt_auth(codex_bin=명시경로) — trust=True, acceptance_eligible=False
+          → BLOCKED failure_code=codex_binary_provenance_absent.
+    """
+
+    def _write_pkg_json(self, tmp_path: "Path", resolved: str) -> "Path":
+        """임시 pkg_root에 _integrity + _resolved를 포함한 package.json을 작성한다."""
+        import json as _json
+
+        _pkg_root = tmp_path / "node_modules" / "@openai" / "codex"
+        _pkg_root.mkdir(parents=True, exist_ok=True)
+        _valid_integrity = "sha512-" + "A" * 88 + "="
+        (_pkg_root / "package.json").write_text(
+            _json.dumps({"name": "@openai/codex", "_integrity": _valid_integrity, "_resolved": resolved}),
+            encoding="utf-8",
+        )
+        return _pkg_root
+
+    def test_tc22a_exact_registry_hostname_ok(self, tmp_path: "Path") -> None:
+        """AC-1: _resolved가 정확히 registry.npmjs.org → ok=True."""
+        _resolved = "https://registry.npmjs.org/@openai/codex/-/codex-1.0.0.tgz"
+        _pkg_root = self._write_pkg_json(tmp_path, _resolved)
+        _r = pipeline._check_package_json_npm_integrity(_pkg_root)
+        assert _r.get("available") is True, f"TC-22a: available=False: {_r!r}"
+        assert _r.get("ok") is True, (
+            f"TC-22a: ok=False인데 registry.npmjs.org가 정확히 일치 — 오류: {_r!r}"
+        )
+        assert _r.get("reason") == "registry_provenance_confirmed", (
+            f"TC-22a: reason={_r.get('reason')!r} (예상: 'registry_provenance_confirmed')"
+        )
+
+    def test_tc22b_evil_subdomain_hostname_blocked(self, tmp_path: "Path") -> None:
+        """AC-2: _resolved hostname이 'registry.npmjs.org.evil.com' → ok=False.
+
+        substring 검사였다면 통과됐을 것이나, exact hostname match로 차단됨을 확인한다.
+        """
+        _resolved = "https://registry.npmjs.org.evil.com/@openai/codex/-/codex-1.0.0.tgz"
+        _pkg_root = self._write_pkg_json(tmp_path, _resolved)
+        _r = pipeline._check_package_json_npm_integrity(_pkg_root)
+        assert _r.get("available") is True, f"TC-22b: available=False: {_r!r}"
+        assert _r.get("ok") is False, (
+            f"TC-22b: ok=True인데 evil 서브도메인이 통과됨 — substring 검사 버그가 수정되지 않음: {_r!r}"
+        )
+        _reason = _r.get("reason", "")
+        assert "resolved_hostname_not_registry" in _reason, (
+            f"TC-22b: reason={_reason!r}에 'resolved_hostname_not_registry' 없음"
+        )
+
+    def test_tc22c_file_url_hostname_blocked(self, tmp_path: "Path") -> None:
+        """AC-3: _resolved가 file:// URL → hostname이 "" → ok=False."""
+        _resolved = "file:///local/registry.npmjs.org/codex/codex-1.0.0.tgz"
+        _pkg_root = self._write_pkg_json(tmp_path, _resolved)
+        _r = pipeline._check_package_json_npm_integrity(_pkg_root)
+        assert _r.get("available") is True, f"TC-22c: available=False: {_r!r}"
+        assert _r.get("ok") is False, (
+            f"TC-22c: ok=True인데 file:// URL이 통과됨 — 경로에 registry.npmjs.org 포함돼도 차단돼야 함: {_r!r}"
+        )
+
+    def test_tc22d_explicit_codex_bin_untrusted_blocked(
+        self, monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC-4: codex_bin 명시 + trust=False → BLOCKED failure_code=codex_binary_untrusted_path.
+
+        이전(REJECT#20 수정 전)에는 명시적 codex_bin이 trust 검증을 건너뛰었다.
+        수정 후에는 명시적 경로도 _verify_codex_binary_path_trust를 거쳐야 한다.
+        """
+        import pytest
+
+        _FAKE_BIN = "/fake/npm/bin/codex" if pipeline.sys.platform != "win32" else r"C:\fake\npm\bin\codex"
+
+        # _verify_codex_binary_path_trust가 trusted=False를 반환하도록 monkeypatch
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_binary_path_trust",
+            lambda _p: {
+                "trusted": False,
+                "path": _p,
+                "sha256": "",
+                "untrusted_reason": "binary_not_in_allowed_npm_root:fake_path",
+                "install_source": "unknown",
+                "install_type": "unknown",
+                "js_entrypoint_path": "",
+                "js_entrypoint_sha256": "",
+                "native_binary_path": "",
+                "native_binary_sha256": "",
+                "acceptance_eligible": True,
+                "provenance_reason": "",
+            },
+        )
+
+        _result = pipeline._check_codex_chatgpt_auth(codex_bin=_FAKE_BIN)
+        assert _result.get("result") == "BLOCKED", (
+            f"TC-22d: 명시 codex_bin이 untrusted인데 BLOCKED가 아님: {_result!r}"
+        )
+        assert _result.get("failure_code") == "codex_binary_untrusted_path", (
+            f"TC-22d: failure_code={_result.get('failure_code')!r} "
+            f"(예상: 'codex_binary_untrusted_path')"
+        )
+
+    def test_tc22e_explicit_codex_bin_provenance_absent_blocked(
+        self, monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC-5: codex_bin 명시 + trust=True, acceptance_eligible=False → BLOCKED.
+
+        failure_code=codex_binary_provenance_absent.
+        """
+        import pytest
+
+        _FAKE_BIN = "/fake/npm/bin/codex" if pipeline.sys.platform != "win32" else r"C:\fake\npm\bin\codex"
+
+        # _verify_codex_binary_path_trust가 trusted=True, acceptance_eligible=False를 반환
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_binary_path_trust",
+            lambda _p: {
+                "trusted": True,
+                "path": _p,
+                "sha256": "deadbeef",
+                "untrusted_reason": None,
+                "install_source": "npm_global",
+                "install_type": "npm_wrapper",
+                "js_entrypoint_path": "",
+                "js_entrypoint_sha256": "",
+                "native_binary_path": "",
+                "native_binary_sha256": "",
+                "acceptance_eligible": False,
+                "provenance_reason": "provenance_absent_all_sources",
+            },
+        )
+
+        _result = pipeline._check_codex_chatgpt_auth(codex_bin=_FAKE_BIN)
+        assert _result.get("result") == "BLOCKED", (
+            f"TC-22e: acceptance_eligible=False인데 BLOCKED가 아님: {_result!r}"
+        )
+        assert _result.get("failure_code") == "codex_binary_provenance_absent", (
+            f"TC-22e: failure_code={_result.get('failure_code')!r} "
+            f"(예상: 'codex_binary_provenance_absent')"
+        )
