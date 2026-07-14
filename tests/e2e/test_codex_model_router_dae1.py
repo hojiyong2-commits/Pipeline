@@ -4433,9 +4433,11 @@ class TestTC52CriticalPythonDiffChunking:
         # bundle의 diff_hunks는 metadata만 저장(hunk 텍스트 미포함).
         # PART 헤더(CRITICAL_PYTHON_DIFF_PART_N_OF_M)는 Codex 프롬프트에 삽입되며
         # 소스 코드에서 이미 TC-52a로 검증됨. 여기서는 function 이름 패턴만 확인.
+        import re as _re52c
         for _h in _part_hunks:
-            assert "[PART " in _h.get("function", "") and "/5]" in _h.get("function", "") or "/4]" in _h.get("function", "") or "/3]" in _h.get("function", "") or "/2]" in _h.get("function", ""), (  # noqa: E501
-                f"REJECT#8: PART hunk function name에 [PART N/M] 패턴 없음: {_h.get('function')}"
+            _fn52c = _h.get("function", "")
+            assert "[PART " in _fn52c and _re52c.search(r"/\d+\]", _fn52c), (
+                f"REJECT#8: PART hunk function name에 [PART N/M] 패턴 없음: {_fn52c!r}"
             )
 
     def test_tc52d_budget_overflow_causes_evidence_incomplete(self) -> None:
@@ -5081,4 +5083,53 @@ class TestTC58Reject18CriticalConstantsSelfProtect:
         )
         assert policy.get("cache_allowed") is False, (
             f"REJECT#18 AC#4: CRITICAL 정책에 cache_allowed=False가 없음. got={policy!r}"
+        )
+
+
+class TestTC59Reject19ToctouBinaryPathFix:
+    """REJECT#19: TOCTOU 취약점 — 신뢰 검증된 codex 경로가 auth/exec에 명시적으로 전달된다."""
+
+    def test_tc59a_trusted_bin_path_used_in_production_source(self) -> None:
+        """REJECT#19 AC#2: production 소스에서 _codex_binary_trust 경로를 인증·exec에 재사용한다."""
+        import inspect
+        src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        # 신뢰 검증된 경로를 _codex_bin_now에 주입하는 코드가 있어야 한다.
+        assert "_trusted_bin_path" in src, (
+            "REJECT#19 AC#2: _cmd_gates_codex_review 소스에 _trusted_bin_path 없음 — TOCTOU 방어 미적용"
+        )
+        assert "_codex_binary_trust" in src and "_trusted_bin_path" in src, (
+            "REJECT#19 AC#2: 신뢰 경로 재사용 코드 없음"
+        )
+
+    def test_tc59b_post_cli_binary_sha_revalidation_in_source(self) -> None:
+        """REJECT#19 AC#3: production 소스에 exec 후 바이너리 SHA 재계산 코드가 있다."""
+        import inspect
+        src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        assert "codex_binary_sha_changed" in src, (
+            "REJECT#19 AC#3: post-CLI binary SHA 변경 감지 코드 없음 — TOCTOU 차단 미적용"
+        )
+        assert "codex_binary_sha_unverifiable" in src, (
+            "REJECT#19 AC#3: post-CLI binary SHA 재계산 실패 처리 코드 없음"
+        )
+
+    def test_tc59c_post_cli_js_sha_revalidation_in_source(self) -> None:
+        """REJECT#19 AC#3: production 소스에 exec 후 JS 진입점 SHA 재계산 코드가 있다."""
+        import inspect
+        src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        assert "codex_js_entrypoint_sha_changed" in src, (
+            "REJECT#19 AC#3: post-CLI JS entrypoint SHA 변경 감지 코드 없음"
+        )
+
+    def test_tc59d_toctou_path_change_uses_trusted_path(self) -> None:
+        """REJECT#19 AC#1: 신뢰 검증 후 PATH가 바뀌어도 _codex_binary_trust 경로를 사용한다.
+        _check_codex_chatgpt_auth/_invoke_codex_exec에 None이 아닌 신뢰된 경로가 전달되는지 소스로 확인."""
+        import inspect
+        src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        # codex_bin=_codex_bin_now 형태로 신뢰 경로가 전달되어야 한다
+        assert "codex_bin=_codex_bin_now" in src, (
+            "REJECT#19 AC#1: auth/exec 호출 시 codex_bin=_codex_bin_now 전달 없음 — TOCTOU 미방어"
+        )
+        # _codex_bin_now 계산에 _trusted_bin_path가 포함되어야 한다
+        assert "_trusted_bin_path" in src, (
+            "REJECT#19 AC#1: _codex_bin_now 계산에 _trusted_bin_path 없음"
         )

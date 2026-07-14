@@ -25674,7 +25674,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         if not _explicit_verdict and not _explicit_cli:
             _selected_model_now = str(_model_policy.get("selected_model", ""))
             _selected_effort_now = str(_model_policy.get("selected_reasoning_effort", ""))
-            _codex_bin_now = _fake_codex_bin or None
+            # REJECT#19: TOCTOU 방어 — 신뢰 검증을 통과한 절대 경로를 인증·exec에 재사용한다.
+            #   _fake_codex_bin(테스트용)이 있으면 우선 사용하고, 없으면 _verify_codex_binary_path_trust가
+            #   저장한 경로를 사용한다. None 전달 시 _check_codex_chatgpt_auth/_invoke_codex_exec가
+            #   shutil.which("codex")를 다시 조회하여 TOCTOU 취약점이 발생하므로 명시적 전달 필수.
+            _trusted_bin_path = str(_codex_binary_trust.get("path", "") or "")
+            _codex_bin_now = _fake_codex_bin or (_trusted_bin_path if _trusted_bin_path else None)
             # REJECT#22: 실제 codex exec 자동 실행 시작 시점에 기존 effective 결과를 즉시 무효화한다.
             #   이후 인증 실패, snapshot 변경, capability 불일치 등 어떤 경로로 종료되더라도
             #   기존 APPROVED effective 결과가 request-accept에 남지 않도록 보장한다(fail-closed).
@@ -25889,6 +25894,34 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     _post_snap_changed.append("function_shas_unverifiable")
                 elif _post_fn_shas != _pre_cli_fn_shas:
                     _post_snap_changed.append("function_before_after_shas")
+            # REJECT#19 AC#3: exec 후 바이너리 및 JS 진입점 SHA 재계산 — TOCTOU 차단 (fail-closed).
+            #   exec 전에 신뢰 검증한 SHA와 exec 후 실제 파일 SHA가 다르면 malicious 바이너리 교체 의심.
+            _post_bin_path_v = str(_codex_binary_trust.get("path", "") or "")
+            _pre_bin_sha_v = str(_codex_binary_trust.get("sha256", "") or "")
+            if _post_bin_path_v and _pre_bin_sha_v and not _fake_codex_bin:
+                try:
+                    import hashlib as _hashlib_v
+                    _post_bin_bytes_v = Path(_post_bin_path_v).read_bytes()
+                    _post_bin_sha_now_v = _hashlib_v.sha256(_post_bin_bytes_v).hexdigest()
+                except Exception:  # noqa: BLE001
+                    _post_bin_sha_now_v = ""
+                if not _post_bin_sha_now_v:
+                    _post_snap_changed.append("codex_binary_sha_unverifiable")
+                elif _post_bin_sha_now_v != _pre_bin_sha_v:
+                    _post_snap_changed.append("codex_binary_sha_changed")
+            _post_js_path_v = str(_codex_binary_trust.get("js_entrypoint_path", "") or "")
+            _pre_js_sha_v = str(_codex_binary_trust.get("js_entrypoint_sha256", "") or "")
+            if _post_js_path_v and _pre_js_sha_v and not _fake_codex_bin:
+                try:
+                    import hashlib as _hashlib_js_v
+                    _post_js_bytes_v = Path(_post_js_path_v).read_bytes()
+                    _post_js_sha_now_v = _hashlib_js_v.sha256(_post_js_bytes_v).hexdigest()
+                except Exception:  # noqa: BLE001
+                    _post_js_sha_now_v = ""
+                if not _post_js_sha_now_v:
+                    _post_snap_changed.append("codex_js_entrypoint_sha_unverifiable")
+                elif _post_js_sha_now_v != _pre_js_sha_v:
+                    _post_snap_changed.append("codex_js_entrypoint_sha_changed")
             if _post_snap_changed:
                 # REJECT#23: post-CLI snapshot 변경 → codex_review_snapshot_changed로 effective 결과 저장 후 종료.
                 _write_codex_review_blocked_invalidation(
