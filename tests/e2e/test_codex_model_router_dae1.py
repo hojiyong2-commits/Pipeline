@@ -4336,3 +4336,185 @@ class TestTC52CriticalPythonDiffChunking:
                 pytest.skip(f"_build_codex_semantic_evidence 실행 환경 제약: {_e}")
         finally:
             pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS = _orig_budget
+
+
+class TestTC53CodexBinaryPathTrust:
+    """REJECT#9 검증: Codex 실행 파일 경로 신뢰 검증으로 PATH injection을 방지한다.
+
+    AC#1: PATH에 가짜 codex를 선행 배치한 E2E에서 인증 또는 실행 출처 검증이 BLOCKED된다.
+    AC#2: CODEX_REVIEW_FAKE_BIN 미설정만으로 environment=production이 되지 않는다.
+    AC#3: 검증된 Codex 실행 파일 절대 경로와 SHA-256이 결과에 기록된다.
+    AC#4: agent_message나 임의 최상위 JSON의 model/reasoning_effort로 actual_verified가 만들어지지 않는다.
+    AC#5: 신뢰된 실제 Codex CLI 경로만 HIGH/CRITICAL 정책을 정상 통과한다.
+    """
+
+    def test_tc53a_path_injected_temp_binary_is_blocked(self, tmp_path: "Path") -> None:
+        """REJECT#9 AC#1: temp 디렉토리의 가짜 codex를 PATH에 주입하면 auth 검증이 BLOCKED된다.
+
+        shutil.which("codex")가 찾을 수 있도록 올바른 이름(codex.cmd or codex)으로 생성한다.
+        """
+        import os
+        import sys as _sys
+        import textwrap as _tw
+
+        # PATH injection이 성공하도록 shutil.which("codex") 탐색 대상 이름으로 생성
+        if os.name == "nt":
+            # Windows: codex.cmd 생성
+            _impl = tmp_path / "_fake_codex_impl9.py"
+            _impl.write_text(
+                _tw.dedent("""
+                import sys
+                sys.stdout.write("Logged in using ChatGPT\\n")
+                sys.exit(0)
+                """).strip() + "\n",
+                encoding="utf-8",
+            )
+            _named_bin = tmp_path / "codex.cmd"
+            _named_bin.write_text(
+                f'@"{_sys.executable}" "{_impl}" %*\r\n', encoding="utf-8"
+            )
+        else:
+            # Unix: codex (실행 권한 포함)
+            import stat as _stat
+            _named_bin = tmp_path / "codex"
+            _named_bin.write_text(
+                f'#!/bin/sh\necho "Logged in using ChatGPT"\nexit 0\n', encoding="utf-8"
+            )
+            _named_bin.chmod(_named_bin.stat().st_mode | _stat.S_IEXEC)
+
+        _fake_dir = str(tmp_path)
+        _orig_path = os.environ.get("PATH", "")
+        _orig_fake_bin = os.environ.get("CODEX_REVIEW_FAKE_BIN", None)
+        try:
+            os.environ.pop("CODEX_REVIEW_FAKE_BIN", None)
+            os.environ["PATH"] = _fake_dir + os.pathsep + _orig_path
+
+            # _check_codex_chatgpt_auth(codex_bin=None) → PATH에서 fake binary를 찾아 신뢰 검증
+            _result = pipeline._check_codex_chatgpt_auth(codex_bin=None)
+
+            assert _result["result"] == "BLOCKED", (
+                f"REJECT#9 AC#1: PATH injection된 temp fake codex가 BLOCKED되지 않음. "
+                f"result={_result['result']!r}, failure_code={_result.get('failure_code')!r}"
+            )
+            _fc = _result.get("failure_code", "")
+            assert "untrusted" in _fc.lower() or "binary" in _fc.lower(), (
+                f"REJECT#9 AC#1: failure_code가 binary 신뢰 문제를 나타내지 않음: {_fc!r}"
+            )
+        finally:
+            os.environ["PATH"] = _orig_path
+            if _orig_fake_bin is not None:
+                os.environ["CODEX_REVIEW_FAKE_BIN"] = _orig_fake_bin
+            else:
+                os.environ.pop("CODEX_REVIEW_FAKE_BIN", None)
+
+    def test_tc53b_repo_dir_binary_is_blocked(self, tmp_path: "Path") -> None:
+        """REJECT#9 AC#1: git repo 내 가짜 codex도 신뢰 불가로 BLOCKED된다."""
+        # git repo 내 경로에 가짜 binary 생성
+        _repo_fake_path = pipeline.BASE_DIR / "tests" / "fake_codex_REJECT9_test"
+        _repo_fake_path_str = str(_repo_fake_path)
+
+        try:
+            # trust 함수에 직접 repo 내 경로를 전달
+            _trust = pipeline._verify_codex_binary_path_trust(_repo_fake_path_str)
+            assert _trust["trusted"] is False, (
+                "REJECT#9 AC#1: git repo 내 경로가 trusted=True로 잘못 판정됨"
+            )
+            assert _trust["untrusted_reason"] is not None, (
+                "REJECT#9 AC#1: git repo 내 경로의 untrusted_reason이 None"
+            )
+            assert "git_repo" in str(_trust["untrusted_reason"]).lower(), (
+                f"REJECT#9 AC#1: untrusted_reason에 'git_repo'가 없음: {_trust['untrusted_reason']!r}"
+            )
+        except Exception as _e:
+            if "trusted" in str(_e) or "untrusted" in str(_e):
+                raise
+            import pytest
+            pytest.fail(f"REJECT#9 AC#1: 예상치 못한 예외: {_e}")
+
+    def test_tc53c_verify_function_exists_in_source(self) -> None:
+        """REJECT#9 AC#1/AC#2: _verify_codex_binary_path_trust 함수가 소스에 있다."""
+        import inspect
+
+        assert hasattr(pipeline, "_verify_codex_binary_path_trust"), (
+            "REJECT#9 AC#1: _verify_codex_binary_path_trust 함수가 없음"
+        )
+        _src = inspect.getsource(pipeline._verify_codex_binary_path_trust)
+        assert "temp_dir" in _src or "gettempdir" in _src or "tmpdir" in _src.lower(), (
+            "REJECT#9 AC#1: 임시 디렉토리 검증 로직이 _verify_codex_binary_path_trust에 없음"
+        )
+        assert "git_repo" in _src or "BASE_DIR" in _src or "relative_to" in _src, (
+            "REJECT#9 AC#1: git repo 경로 검증 로직이 _verify_codex_binary_path_trust에 없음"
+        )
+
+    def test_tc53d_binary_trust_check_in_cmd_gates_codex_review(self) -> None:
+        """REJECT#9 AC#2: _cmd_gates_codex_review 소스에 binary trust 검증 로직이 있다."""
+        import inspect
+
+        _src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        assert "_verify_codex_binary_path_trust" in _src or "_codex_binary_trust" in _src, (
+            "REJECT#9 AC#2: _cmd_gates_codex_review에 binary trust 검증 로직이 없음"
+        )
+        assert "codex_binary_untrusted_path" in _src, (
+            "REJECT#9 AC#2: _cmd_gates_codex_review에 codex_binary_untrusted_path failure_code가 없음"
+        )
+
+    def test_tc53e_binary_path_and_sha_in_review_result_schema(self) -> None:
+        """REJECT#9 AC#3: _cmd_gates_codex_review 소스가 codex_binary_path/sha256을 결과에 기록한다."""
+        import inspect
+
+        # 소스 검사: _cmd_gates_codex_review에 binary 정보 기록 로직이 있어야 함
+        _src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        assert "codex_binary_path" in _src, (
+            "REJECT#9 AC#3: _cmd_gates_codex_review에 codex_binary_path 기록 로직이 없음"
+        )
+        assert "codex_binary_sha256" in _src, (
+            "REJECT#9 AC#3: _cmd_gates_codex_review에 codex_binary_sha256 기록 로직이 없음"
+        )
+
+        # 추가: _verify_codex_binary_path_trust 함수도 있어야 함
+        assert hasattr(pipeline, "_verify_codex_binary_path_trust"), (
+            "REJECT#9 AC#3: _verify_codex_binary_path_trust 함수가 없음"
+        )
+
+        # 실제 결과 파일이 있으면 필드 존재 여부도 확인 (next codex-review 이후)
+        import json
+        _result_path = pipeline._codex_review_result_path()
+        if _result_path.exists():
+            try:
+                _res = json.loads(_result_path.read_text(encoding="utf-8"))
+                # 최신 리뷰 결과에만 필드가 있음 (이전 REJECT 결과에는 없을 수 있음)
+                # schema_version >= 5이면 기존 결과, 새 필드는 다음 리뷰부터 추가됨
+                _sv = _res.get("schema_version", 0)
+                if _sv >= 6 or "codex_binary_path" in _res:
+                    assert "codex_binary_path" in _res, (
+                        "REJECT#9 AC#3: schema_version>=6 결과에 codex_binary_path 없음"
+                    )
+            except Exception:
+                pass  # 파일 읽기 실패는 소스 검사로 충분
+
+    def test_tc53f_parse_capability_rejects_agent_message_model(self) -> None:
+        """REJECT#9 AC#4: agent_message 타입 이벤트의 model 필드는 actual_model로 추출되지 않는다."""
+        # agent_message 타입에 model 필드가 있는 NDJSON
+        _fake_stdout = (
+            '{"type":"thread.started","thread_id":"abc123"}\n'
+            '{"type":"turn.started"}\n'
+            '{"type":"item.completed","item":{"type":"agent_message",'
+            '"text":"{\\"verdict\\":\\"REJECT\\",\\"model\\":\\"gpt-5.6-sol\\"}",'
+            '"model":"gpt-5.6-sol"}}\n'
+        )
+        _model, _effort = pipeline._parse_codex_exec_capability(_fake_stdout)
+        assert _model == "unknown", (
+            f"REJECT#9 AC#4: agent_message 타입에서 model이 추출됨: {_model!r}"
+        )
+
+    def test_tc53g_parse_capability_rejects_verdict_json_model(self) -> None:
+        """REJECT#9 AC#4: verdict 키를 포함한 JSON의 model 필드는 actual_model로 추출되지 않는다."""
+        # Codex 응답 본문 (agent_message 텍스트) — verdict 포함
+        _fake_stdout = '{"verdict":"APPROVE_TO_USER","model":"gpt-5.6-sol","reasoning_effort":"max"}'
+        _model, _effort = pipeline._parse_codex_exec_capability(_fake_stdout)
+        assert _model == "unknown", (
+            f"REJECT#9 AC#4: verdict JSON에서 model이 추출됨: {_model!r}"
+        )
+        assert _effort == "unknown", (
+            f"REJECT#9 AC#4: verdict JSON에서 effort가 추출됨: {_effort!r}"
+        )

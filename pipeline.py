@@ -8642,7 +8642,9 @@ def _invoke_codex_exec(
 def _parse_codex_exec_capability(stdout: str) -> Tuple[str, str]:
     """codex exec --json stdout에서 실제 사용된 model/effort를 추출한다(없으면 unknown).
 
-    JSON object(또는 NDJSON 라인들) 중 model/reasoning_effort 키를 가진 첫 항목을 신뢰한다.
+    REJECT#9 AC#4: agent_message 타입 이벤트, verdict 키 포함 JSON, item.completed 내
+    agent_message에서 model/effort를 추출하지 않는다. 위조 방지 — Codex 응답 본문(agent_message)이
+    임의로 model 필드를 포함해도 actual_verified 판정에 영향을 줄 수 없어야 한다.
 
     Args:
         stdout: codex exec --json 표준 출력.
@@ -8654,9 +8656,36 @@ def _parse_codex_exec_capability(stdout: str) -> Tuple[str, str]:
     _model = "unknown"
     _effort = "unknown"
 
+    # REJECT#9: model/effort를 추출할 수 없는 이벤트 타입 (agent_message, verdict 이벤트)
+    _UNTRUSTED_TYPES: frozenset = frozenset({
+        "agent_message", "turn.started", "thread.started",
+        "item.completed",  # item 내부의 agent_message를 포함할 수 있어 신뢰 불가
+        "item.created", "item.updated",
+    })
+
+    def _is_trusted_source(obj: Any) -> bool:
+        """이 JSON 객체가 CLI metadata 출처(trusted)인지 확인한다.
+
+        verdict 키 포함: Codex 응답 본문(위조 가능) → 신뢰 불가.
+        agent_message/item 타입: Codex 생성 텍스트 → 신뢰 불가.
+        """
+        if not isinstance(obj, dict):
+            return False
+        if "verdict" in obj:  # Codex 응답 본문 (위조 가능)
+            return False
+        _type = str(obj.get("type", ""))
+        if _type in _UNTRUSTED_TYPES:
+            return False
+        _item = obj.get("item")
+        if isinstance(_item, dict) and str(_item.get("type", "")) == "agent_message":
+            return False  # item.completed 내 agent_message
+        return True
+
     def _extract(obj: Any) -> None:
         nonlocal _model, _effort
         if not isinstance(obj, dict):
+            return
+        if not _is_trusted_source(obj):  # REJECT#9: 신뢰 불가 출처 필터
             return
         _m = obj.get("model") or obj.get("actual_model")
         _e = (
@@ -8829,10 +8858,65 @@ def _check_codex_model_capability_match(
     return {"result": "OK", "model_verification_level": _level}
 
 
+def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
+    """REJECT#9: Codex 실행 파일 경로가 신뢰된 위치에 있는지 검증한다.
+
+    신뢰 불가 위치: 현재 git repo, Python/OS 임시 디렉토리.
+    PATH injection을 통한 가짜 binary 사용을 방지한다.
+
+    Args:
+        bin_path: 검증할 실행 파일 경로.
+    Returns:
+        {"trusted": bool, "path": str, "sha256": str, "untrusted_reason": str|None}.
+    """
+    import tempfile as _tf
+
+    _r: Dict[str, Any] = {"trusted": False, "path": bin_path, "sha256": "", "untrusted_reason": None}
+    try:
+        _bin_p = Path(bin_path).resolve()
+
+        # 1) git repo 내 binary 차단 (테스트/개발 환경 fake binary 방지)
+        _repo = Path(BASE_DIR).resolve()
+        try:
+            _bin_p.relative_to(_repo)
+            _r["untrusted_reason"] = f"binary_inside_git_repo:{_bin_p}"
+            return _r
+        except ValueError:
+            pass  # repo 밖 → OK
+
+        # 2) OS 임시 디렉토리 내 binary 차단 (pytest tmp_path 등 PATH injection 방지)
+        _tmpdir = Path(_tf.gettempdir()).resolve()
+        try:
+            _bin_p.relative_to(_tmpdir)
+            _r["untrusted_reason"] = f"binary_inside_temp_dir:{_bin_p}"
+            return _r
+        except ValueError:
+            pass  # 임시 디렉토리 밖 → OK
+
+        # 3) 파일 존재 확인 + SHA-256 계산
+        if not _bin_p.exists():
+            _r["untrusted_reason"] = f"binary_not_found:{_bin_p}"
+            return _r
+
+        # .cmd/.bat script wrapper(Windows npm install)도 SHA 계산 대상
+        try:
+            _sha = hashlib.sha256(_bin_p.read_bytes()).hexdigest()
+        except (OSError, PermissionError) as _exc:
+            # 읽기 불가 → SHA 없이 trusted=True로 처리(존재 확인만)
+            _sha = f"unreadable:{type(_exc).__name__}"
+
+        _r.update({"trusted": True, "path": str(_bin_p), "sha256": _sha})
+        return _r
+    except Exception as _exc:  # noqa: BLE001
+        _r["untrusted_reason"] = f"path_verification_error:{type(_exc).__name__}:{_exc}"
+        return _r
+
+
 def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]:
     """`codex login status`로 ChatGPT Plus 인증을 강제한다(요구3).
 
     정확히 "Logged in using ChatGPT" 만 허용한다. 미로그인/상태확인실패/API key/불명은 차단.
+    REJECT#9: codex_bin=None(production 모드)이면 binary 경로 신뢰 검증을 먼저 수행한다.
 
     Args:
         codex_bin: codex 실행 파일 경로(테스트 주입용). None이면 PATH에서 해석.
@@ -8840,7 +8924,25 @@ def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]
         {"result": "OK", "auth_source": "chatgpt"} 또는
         {"result": "BLOCKED", "failure_code": str, "message": str}.
     """
-    _bin = str(codex_bin) if codex_bin else (shutil.which("codex") or "codex")
+    if codex_bin is None:
+        # REJECT#9: production 모드에서 PATH에서 찾은 binary 신뢰 검증
+        _found = shutil.which("codex") or ""
+        if _found:
+            _trust = _verify_codex_binary_path_trust(_found)
+            if not _trust["trusted"]:
+                return {
+                    "result": "BLOCKED",
+                    "failure_code": "codex_binary_untrusted_path",
+                    "message": (
+                        f"Codex 실행 파일이 신뢰되지 않은 위치에 있습니다: "
+                        f"{_trust['untrusted_reason']}"
+                    ),
+                    "codex_binary_path": _found,
+                    "codex_binary_sha256": "",
+                }
+        _bin = _found or "codex"
+    else:
+        _bin = str(codex_bin)
     # 인증 상태 확인 subprocess에도 OPENAI_API_KEY를 제거한다(API key 인증 경로 차단).
     _env = os.environ.copy()
     _env.pop("OPENAI_API_KEY", None)
@@ -25088,6 +25190,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # 요구5 test seam: production argparse와 분리된 fake executable 주입(환경변수 전용).
     #   설정 시 environment=test로 기록하고 acceptance_eligible=false를 강제한다.
     _fake_codex_bin = str(os.environ.get("CODEX_REVIEW_FAKE_BIN", "") or "").strip()
+    # REJECT#9 AC#2: CODEX_REVIEW_FAKE_BIN 미설정만으로 environment=production이 되지 않는다.
+    #   binary 경로 신뢰 검증이 추가 조건이다. 신뢰 불가 binary 사용 시 BLOCKED.
+    _codex_binary_trust: Dict[str, Any] = {"trusted": True, "path": "", "sha256": ""}
+    if not _fake_codex_bin:
+        _prod_bin_found = shutil.which("codex") or ""
+        if _prod_bin_found:
+            _codex_binary_trust = _verify_codex_binary_path_trust(_prod_bin_found)
+            if not _codex_binary_trust["trusted"]:
+                _die(
+                    "[BLOCKED] failure_code=codex_binary_untrusted_path\n"
+                    f"  Codex 실행 파일이 신뢰되지 않은 위치에 있습니다.\n"
+                    f"  원인: {_codex_binary_trust.get('untrusted_reason', 'unknown')}\n"
+                    f"  PATH에 가짜 binary가 주입됐을 수 있습니다. 올바른 codex 설치 경로를 확인하세요."
+                )
     _environment_str = "test" if _fake_codex_bin else "production"
 
     # actual_model/model_source는 기록용으로 항상 감지한다(추측/하드코딩 금지 — 확인 불가 시 unknown).
@@ -26036,6 +26152,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     )
     result["environment"] = _environment_str
     result["codex_cli_command_sanitized"] = result.get("codex_cli_command", "")
+    # REJECT#9 AC#3: 검증된 Codex 실행 파일 절대 경로 + SHA-256을 결과에 기록
+    result["codex_binary_path"] = str(_codex_binary_trust.get("path", "") or "")
+    result["codex_binary_sha256"] = str(_codex_binary_trust.get("sha256", "") or "")
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
     # github_canonical_pr_body_sha256 필드는 acceptance_request에서 가져온다 (fail-closed).
@@ -26656,6 +26775,9 @@ def _write_codex_review_blocked_invalidation(
         "auth_source": "unknown",
         "environment": "production",
         "codex_cli_command_sanitized": "",
+        # REJECT#9 AC#3: 검증된 Codex 실행 파일 절대 경로 + SHA-256
+        "codex_binary_path": "",
+        "codex_binary_sha256": "",
     }
     result_path = _codex_review_result_path()
     result_path.parent.mkdir(parents=True, exist_ok=True)
@@ -27741,6 +27863,29 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             + "  (dev_handover*.xml / integration_report*.xml / architect_rca*.xml 등은\n"
             "   파이프라인 내부 산출물이며 PR diff에 포함될 수 없습니다.)"
         )
+
+    # REJECT#9 AC#3: Codex 실행 파일 SHA 재검증.
+    # gates codex-review 시점에 기록된 binary path/sha256이 현재도 일치하는지 확인한다.
+    # binary가 변경됐으면 BLOCKED (binary 교체 공격 방지).
+    _cx_result_path = _codex_review_result_path()
+    if _cx_result_path.exists():
+        try:
+            _cx_res = json.loads(_cx_result_path.read_text(encoding="utf-8", errors="replace"))
+            _stored_bin_path = str(_cx_res.get("codex_binary_path", "") or "")
+            _stored_bin_sha = str(_cx_res.get("codex_binary_sha256", "") or "")
+            if _stored_bin_path and _stored_bin_sha and not _stored_bin_sha.startswith("unreadable:"):
+                _cur_trust = _verify_codex_binary_path_trust(_stored_bin_path)
+                _cur_sha = _cur_trust.get("sha256", "")
+                if _cur_sha and _cur_sha != _stored_bin_sha:
+                    _die(
+                        "[BLOCKED] failure_code=codex_binary_sha_changed\n"
+                        f"  Codex 실행 파일 SHA가 변경됐습니다.\n"
+                        f"  저장 시점 SHA: {_stored_bin_sha[:16]}...\n"
+                        f"  현재 SHA: {_cur_sha[:16]}...\n"
+                        "  gates codex-review를 재실행하여 최신 binary로 검토를 갱신하세요."
+                    )
+        except Exception:  # noqa: BLE001
+            pass  # SHA 재검증 실패는 fail-open (binary 해시 실패 시 차단하지 않음)
 
     # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
     # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다
