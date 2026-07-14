@@ -51,8 +51,10 @@ def make_fake_codex(shim_dir: Path, verdict: str = "APPROVE_TO_USER",
         "for i, a in enumerate(argv):\n"
         "    if a == '--model' and i + 1 < len(argv): model = argv[i + 1]\n"
         "    if a.startswith('model_reasoning_effort='): effort = a.split('=', 1)[1]\n"
-        "obj = {'verdict': cfg['verdict'], 'model': model or 'unknown', 'reasoning_effort': effort or 'unknown'}\n"
-        "sys.stdout.write(json.dumps(obj))\n"
+        "sys.stdout.write(json.dumps({'type': 'model_info', 'model': model or 'unknown', 'reasoning_effort': effort or 'unknown'}) + '\\n')\n"
+        "v = cfg['verdict']\n"
+        "txt = 'APPROVE_TO_USER' if v == 'APPROVE_TO_USER' else json.dumps({'verdict': 'REJECT', 'root_cause': 'test', 'reproduction': 'test', 'required_fix': 'test', 'acceptance_criteria': ['test']})\n"
+        "sys.stdout.write(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': txt}}) + '\\n')\n"
         "sys.exit(0)\n",
         encoding="utf-8",
     )

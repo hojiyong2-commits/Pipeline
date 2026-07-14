@@ -56,8 +56,8 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
   - `actual_verified`: CLI actual == selected.
   - `invocation_verified`: CLI actual 미보고이나 명시 인자로 실행 + exit 0 성공.
   - `unverified`: 증거 불충분.
-- **CRITICAL은 반드시 `actual_verified`이어야 통과.** actual_model이 selected_model과 정확히 일치해야 하며, actual_model=unknown이면 `unknown_model_critical_blocked`로 차단됩니다(fail-closed).
-- **HIGH는 최소 `invocation_verified` 이상이면 통과.** 실제 CLI가 gpt-5.6-*를 아직 지원하지 않아 actual을 보고하지 못해도, invocation_verified이면 HIGH 통과를 허용합니다(정책 불일치는 경고). CRITICAL에는 이 예외가 적용되지 않습니다.
+- **HIGH/CRITICAL은 최소 `invocation_verified` 이상이면 통과.** 실제 CLI가 gpt-5.6-*를 아직 지원하지 않아 actual을 보고하지 못해도, invocation_verified이면 HIGH/CRITICAL 통과를 허용합니다(정책 불일치는 경고).
+- **`unverified`(invocation 실패 + actual 미보고)이면 HIGH/CRITICAL에서 `model_verification_unverified`로 BLOCKED.** exit 0 + 명시 인자 실행이 모두 확인되면 invocation_verified로 통과합니다.
 
 ### 계층형 observe/enforce 동작
 

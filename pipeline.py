@@ -8642,7 +8642,9 @@ def _invoke_codex_exec(
     stderr = result.stderr or ""
     # actual_model/effort는 CLI가 --json으로 명시 보고한 경우만 신뢰한다(허위 기록 금지).
     #   보고하지 않으면 unknown으로 남기고, 상위에서 invocation_verified로 판정한다(요구4).
-    _actual_model, _actual_effort = _parse_codex_exec_capability(stdout)
+    _actual_model, _raw_actual_effort = _parse_codex_exec_capability(stdout)
+    # CLI 출력 effort alias를 canonical 값으로 환원한다 (예: xhigh → max).
+    _actual_effort = _CODEX_EFFORT_CANONICAL.get(_raw_actual_effort, _raw_actual_effort)
     base.update({
         "available": True,
         "invoked": True,
@@ -8967,7 +8969,7 @@ def _find_codex_js_entrypoint(wrapper_path: "Path") -> "Optional[Path]":
         _txt = wrapper_path.read_text(encoding="utf-8", errors="replace")
         # '%~dp0\...\*.js' 패턴 추출 (따옴표 포함)
         import re as _re
-        for _m in _re.finditer(r'"%~dp0\\([^"]+\.js)"', _txt, _re.IGNORECASE):
+        for _m in _re.finditer(r'"(?:%~dp0|%dp0%)\\([^"]+\.js)"', _txt, _re.IGNORECASE):
             _rel = _m.group(1)
             _candidate = wrapper_path.parent / _rel
             if _candidate.exists():
@@ -28150,7 +28152,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 _stored_js_sha = str(_cx_res.get("codex_js_entrypoint_sha256", "") or "")
                 if _stored_js_sha:
                     _cur_js_sha = _cur_trust.get("js_entrypoint_sha256", "")
-                    if _cur_js_sha and _cur_js_sha != _stored_js_sha:
+                    if not _cur_js_sha or _cur_js_sha != _stored_js_sha:
                         _die(
                             "[BLOCKED] failure_code=codex_js_entrypoint_sha_changed\n"
                             f"  Codex JS 진입점 SHA가 변경됐습니다.\n"

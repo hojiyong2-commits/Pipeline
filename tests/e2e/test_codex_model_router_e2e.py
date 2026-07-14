@@ -101,15 +101,19 @@ def make_fake_codex(
         "    model = cfg['override_model']\n"
         "if cfg['override_effort'] is not None:\n"
         "    effort = cfg['override_effort']\n"
-        "obj = {'verdict': cfg['verdict']}\n"
-        "if cfg['reason']:\n"
-        "    obj['reason'] = cfg['reason']\n"
         "if not cfg['omit_model']:\n"
-        "    obj['model'] = model if model is not None else 'unknown'\n"
-        "    obj['reasoning_effort'] = effort if effort is not None else 'unknown'\n"
+        "    m = model if model is not None else 'unknown'\n"
+        "    e = effort if effort is not None else 'unknown'\n"
+        "    sys.stdout.write(json.dumps({'type': 'model_info', 'model': m, 'reasoning_effort': e}) + '\\n')\n"
+        "v = cfg['verdict']\n"
+        "if v == 'APPROVE_TO_USER':\n"
+        "    txt = 'APPROVE_TO_USER'\n"
+        "else:\n"
+        "    r = cfg.get('reason', 'test rejection') or 'test rejection'\n"
+        "    txt = json.dumps({'verdict': 'REJECT', 'root_cause': r, 'reproduction': r, 'required_fix': r, 'acceptance_criteria': [r]})\n"
+        "sys.stdout.write(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': txt}}) + '\\n')\n"
         "if cfg['stderr_text']:\n"
         "    sys.stderr.write(cfg['stderr_text'])\n"
-        "sys.stdout.write(json.dumps(obj))\n"
         "sys.exit(int(cfg['exit_code']))\n",
         encoding="utf-8",
     )
@@ -198,13 +202,16 @@ def test_real_codex_exec_passes_model_and_effort(
     assert fs["selected_model"] == exp_model
     assert fs["selected_effort"] == exp_effort
     # 실제 argv에 --model/effort가 전달됐는지 (증거 파일)
+    # CLI alias: "max" -> "xhigh" (_CLI_EFFORT_ALIAS 적용 후 argv에 전달됨)
+    _CLI_EFFORT_ALIAS = {"max": "xhigh"}
+    cli_effort = _CLI_EFFORT_ALIAS.get(exp_effort, exp_effort)
     argv = json.loads(argv_cap.read_text(encoding="utf-8"))
     assert "--model" in argv and exp_model in argv, f"argv missing model: {argv}"
-    assert any(a == f"model_reasoning_effort={exp_effort}" for a in argv), f"argv missing effort: {argv}"
-    # sanitized 명령 기록
+    assert any(a == f"model_reasoning_effort={cli_effort}" for a in argv), f"argv missing effort: {argv}"
+    # sanitized 명령 기록 — CLI alias 값으로 기록된다
     assert exp_model in fs["codex_cli_command"]
-    assert f"model_reasoning_effort={exp_effort}" in fs["codex_cli_command"]
-    # CLI가 실제로 그 모델/effort를 사용했다고 관측
+    assert f"model_reasoning_effort={cli_effort}" in fs["codex_cli_command"]
+    # CLI가 실제로 그 모델/effort를 사용했다고 관측 — canonicalization 후 selected_effort와 일치
     assert fs["actual_model"] == exp_model
     assert fs["actual_effort"] == exp_effort
     assert fs["invoked"] is True and fs["exit_code"] == 0
@@ -682,10 +689,12 @@ def test_acceptance_eligible_ops_gating(
         "codex exec --model gpt-5.6-sol -c model_reasoning_effort=high "
         "--sandbox read-only --ephemeral --json -C <repo-root> -"
     ) if trusted else "N/A (external verdict)"
+    # 정책 시그니처: "<risk>:<model>:<effort>:<mode>" 형식 (HIGH → enforce 모드)
+    _policy_sig = "HIGH:gpt-5.6-sol:high:enforce"
     code = (
         "res = {'verdict_source': %r, 'acceptance_eligible': True,\n" % source +
         "  'router_version': '2.0.0', 'risk_level': 'HIGH',\n"
-        "  'model_policy_signature': 'sig', 'codex_cli_command': %r,\n" % _cmd +
+        "  'model_policy_signature': %r, 'codex_cli_command': %r,\n" % (_policy_sig, _cmd) +
         "  'selected_model': 'gpt-5.6-sol', 'selected_reasoning_effort': 'high',\n"
         "  'invoked_model': 'gpt-5.6-sol', 'invoked_effort': 'high',\n"
         "  'actual_model': 'unknown', 'actual_effort': 'unknown',\n"

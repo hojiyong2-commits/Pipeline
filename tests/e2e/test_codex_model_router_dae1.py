@@ -1869,10 +1869,11 @@ def test_tc38b_snapshot_changed_specific_failure_code_in_source() -> None:
 
 
 def test_tc38c_pipeline_manager_doc_critical_actual_verified_only() -> None:
-    """REJECT#23 AC#3: Pipeline Manager 문서가 CRITICAL의 actual_verified 필수 조건과
-    HIGH의 invocation_verified 허용 조건을 정확히 구분한다.
+    """REJECT#14 AC#4 + REJECT#12 fix: Pipeline Manager 문서가 HIGH/CRITICAL에서
+    invocation_verified 허용 정책을 코드와 일치하도록 명시한다.
 
-    AC#3: 문서가 런타임과 일치하도록 CRITICAL actual_verified 필수 / HIGH invocation_verified 허용.
+    REJECT#12 이후 CRITICAL도 invocation_verified를 허용한다(unknown_model_critical_blocked 삭제).
+    문서는 이를 정확히 반영해야 한다: HIGH/CRITICAL 모두 invocation_verified 이상이면 통과.
     """
     from pathlib import Path
 
@@ -1882,36 +1883,38 @@ def test_tc38c_pipeline_manager_doc_critical_actual_verified_only() -> None:
         / ".claude" / "agents" / "pipeline-manager-agent.md"
     )
     assert agent_md.exists(), (
-        f"REJECT#23 AC#3: pipeline-manager-agent.md가 없음 — {agent_md}"
+        f"REJECT#14 AC#4: pipeline-manager-agent.md가 없음 — {agent_md}"
     )
     doc = agent_md.read_text(encoding="utf-8")
 
-    # CRITICAL은 actual_verified 필수임을 문서가 명시해야 한다.
-    assert "actual_verified" in doc and "CRITICAL" in doc, (
-        "REJECT#23 AC#3: 문서에 CRITICAL과 actual_verified가 모두 없음"
-    )
-
-    # 이전 잘못된 문구("HIGH/CRITICAL은 최소 invocation_verified")가 없어야 한다.
-    assert "HIGH/CRITICAL은 최소 `invocation_verified`" not in doc, (
-        "REJECT#23 AC#3: 문서에 CRITICAL도 invocation_verified로 통과 가능하다는 잘못된 문구가 남아 있음 — "
-        "런타임은 CRITICAL+unknown을 unknown_model_critical_blocked로 차단하므로 불일치"
-    )
-
-    # CRITICAL은 actual_verified 필수, HIGH는 invocation_verified 허용이 구분되어야 한다.
-    # 두 조건을 각각 명시한 라인이 있어야 한다.
-    critical_actual_line = any(
-        "CRITICAL" in line and "actual_verified" in line
+    # HIGH/CRITICAL이 invocation_verified로 통과 가능함을 문서가 명시해야 한다.
+    high_critical_invocation_line = any(
+        "HIGH" in line and "CRITICAL" in line and "invocation_verified" in line
         for line in doc.splitlines()
     )
-    assert critical_actual_line, (
-        "REJECT#23 AC#3: CRITICAL과 actual_verified가 동일 라인에서 구분돼 있지 않음"
+    assert high_critical_invocation_line, (
+        "REJECT#14 AC#4: 문서에 HIGH/CRITICAL이 invocation_verified로 통과 가능하다는 라인이 없음 — "
+        "REJECT#12 fix에 따라 CRITICAL도 invocation_verified 허용으로 변경됨"
     )
-    high_invocation_line = any(
-        "HIGH" in line and "invocation_verified" in line
+
+    # unverified는 HIGH/CRITICAL 모두 차단함을 명시해야 한다.
+    unverified_blocked_line = any(
+        "unverified" in line and ("HIGH" in line or "CRITICAL" in line) and "BLOCKED" in line
         for line in doc.splitlines()
     )
-    assert high_invocation_line, (
-        "REJECT#23 AC#3: HIGH와 invocation_verified가 동일 라인에서 구분돼 있지 않음"
+    assert unverified_blocked_line, (
+        "REJECT#14 AC#4: 문서에 unverified가 HIGH/CRITICAL에서 BLOCKED된다는 라인이 없음"
+    )
+
+    # 이전 잘못된 문구("CRITICAL은 반드시 actual_verified이어야 통과")가 없어야 한다.
+    assert "CRITICAL은 반드시 `actual_verified`이어야 통과" not in doc, (
+        "REJECT#14 AC#4: 문서에 CRITICAL이 actual_verified만 통과한다는 구버전 문구가 남아 있음 — "
+        "REJECT#12 fix: CRITICAL도 invocation_verified 허용"
+    )
+
+    # 삭제된 unknown_model_critical_blocked 블록 코드가 없어야 한다.
+    assert "unknown_model_critical_blocked" not in doc, (
+        "REJECT#14 AC#4: 문서에 삭제된 unknown_model_critical_blocked 코드가 남아 있음"
     )
 
 
