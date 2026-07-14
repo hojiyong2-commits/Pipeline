@@ -6308,3 +6308,307 @@ class TestTC20Reject18NpmOutputBoundAndLockfileProvenance:
             f"REJECT#18 회귀: 실제 codex 설치가 수정 후 신뢰되지 않음: "
             f"reason={_r.get('untrusted_reason')!r}"
         )
+
+
+# ===========================================================================
+# TC-21: REJECT#19 — provenance absent/tampered → acceptance_eligible=False E2E 공격 차단
+# ===========================================================================
+class TestTC21ProvenanceBlockingE2E:
+    """TC-21: REJECT#19 — provenance 독립 소스 검증으로 사용자 쓰기 가능 경로 E2E 공격 차단.
+
+    수락 criteria:
+    AC-1: %APPDATA%\\npm / ~/.nvm 가짜 체인 + provenance absent → acceptance_eligible=False.
+    AC-2: package.json + lockfile + npm ls 모두 absent → provenance_absent_all_sources.
+    AC-3: npm ls _integrity ok → acceptance_eligible=True (공식 설치 회귀 방지).
+    AC-4: npm ls _integrity 형식 오류(조작 양성) → trusted=False fail-closed.
+    AC-5: acceptance_eligible=False 시 _check_codex_chatgpt_auth → BLOCKED 반환.
+    """
+
+    def _make_fake_npm_wrapper(self, tmp_path: "Path", wrapper_name: str = "codex.cmd") -> "Path":
+        """가짜 npm wrapper 파일 생성 (npm global bin 디렉토리 구조 시뮬레이션용)."""
+        bin_dir = tmp_path / "npm_bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        wrapper = bin_dir / wrapper_name
+        # Windows .cmd wrapper 형식
+        wrapper.write_text(
+            '@echo off\nnode "%~dp0\\node_modules\\@openai\\codex\\bin\\codex.js" %*\n',
+            encoding="utf-8",
+        )
+        return wrapper
+
+    def test_tc21a_provenance_absent_all_sources_sets_acceptance_not_eligible(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC-2: lockfile·package.json·npm ls 세 소스 모두 absent → acceptance_eligible=False.
+
+        trust_result["trusted"]=True이지만 acceptance_eligible=False이어야 한다.
+        """
+        import pytest
+        import tempfile as _tf_mod
+
+        # 가짜 JS 진입점과 native binary 구조 생성
+        pkg_dir = tmp_path / "node_modules" / "@openai" / "codex"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        bin_dir = pkg_dir / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        js_ep = bin_dir / "codex.js"
+        js_ep.write_text("#!/usr/bin/env node\nconsole.log('codex');\n", encoding="utf-8")
+        pkg_json = pkg_dir / "package.json"
+        pkg_json.write_text('{"name":"@openai/codex","version":"1.0.0"}', encoding="utf-8")
+
+        # 가짜 native binary
+        vendor_dir = pkg_dir / "vendor"
+        vendor_dir.mkdir(exist_ok=True)
+        if pipeline.sys.platform == "win32":
+            native = vendor_dir / "codex-x86_64-pc-windows-msvc.exe"
+        else:
+            import platform as _platform
+            _mach = _platform.machine().lower()
+            _suffix = "x86_64-unknown-linux-gnu" if "x86" in _mach else "aarch64-unknown-linux-gnu"
+            native = vendor_dir / f"codex-{_suffix}"
+        native.write_bytes(b"\x00FAKE_NATIVE")
+
+        # step 2 (OS 임시 디렉토리 차단)를 우회: gettempdir()가 tmp_path와 무관한 경로 반환
+        monkeypatch.setattr(_tf_mod, "gettempdir", lambda: "/nonexistent_temp_dir_for_tc21")
+
+        # _check_npm_lockfile_integrity → available=False (lockfile 없음)
+        monkeypatch.setattr(
+            pipeline, "_check_npm_lockfile_integrity",
+            lambda _root: {"available": False, "ok": True, "integrity": "", "source": "", "reason": "lockfile_absent"},
+        )
+        # _check_package_json_npm_integrity → available=False (integrity 없음)
+        monkeypatch.setattr(
+            pipeline, "_check_package_json_npm_integrity",
+            lambda _root: {"available": False, "ok": True, "integrity": "", "source": "", "reason": "integrity_absent"},
+        )
+        # _get_npm_ls_integrity → available=False (npm ls 에서도 없음)
+        monkeypatch.setattr(
+            pipeline, "_get_npm_ls_integrity",
+            lambda _root=None: {"available": False, "ok": True, "integrity": "", "source": "npm_ls_global", "reason": "npm_ls_codex_not_found"},
+        )
+        # JS 진입점 탐색이 위 js_ep를 반환하도록
+        monkeypatch.setattr(
+            pipeline, "_find_codex_js_entrypoint",
+            lambda _bin: js_ep,
+        )
+        # native binary 탐색이 위 native를 반환하도록
+        monkeypatch.setattr(
+            pipeline, "_find_codex_native_binary",
+            lambda _js: native,
+        )
+
+        # npm global bin이 tmp_path를 반환하도록 (경로 신뢰 우회 → trusted=True 확보)
+        npm_bin_dir = str(tmp_path / "npm_bin")
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
+        monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
+        monkeypatch.setattr(pipeline, "_verify_npm_wrapper_content", lambda _p: True)
+
+        # 가짜 wrapper 파일
+        wrapper = self._make_fake_npm_wrapper(tmp_path)
+        _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
+
+        # 체인 구조는 OK이지만 provenance absent → acceptance_eligible=False
+        assert _r.get("acceptance_eligible") is False, (
+            f"AC-2 실패: 세 provenance 소스 모두 absent인데 acceptance_eligible={_r.get('acceptance_eligible')!r}. "
+            f"결과: {_r!r}"
+        )
+        assert _r.get("provenance_reason") == "provenance_absent_all_sources", (
+            f"AC-2 실패: provenance_reason={_r.get('provenance_reason')!r} (예상: 'provenance_absent_all_sources')"
+        )
+
+    def test_tc21b_npm_ls_integrity_ok_acceptance_eligible_true(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC-3: npm ls _integrity ok → acceptance_eligible=True (공식 설치 회귀 방지).
+
+        lockfile·package.json 모두 absent이지만 npm ls _integrity가 유효하면 공식 설치로 인정.
+        """
+        import pytest
+
+        pkg_dir = tmp_path / "node_modules" / "@openai" / "codex"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        bin_dir = pkg_dir / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        js_ep = bin_dir / "codex.js"
+        js_ep.write_text("#!/usr/bin/env node\nconsole.log('codex');\n", encoding="utf-8")
+        vendor_dir = pkg_dir / "vendor"
+        vendor_dir.mkdir(exist_ok=True)
+        if pipeline.sys.platform == "win32":
+            native = vendor_dir / "codex-x86_64-pc-windows-msvc.exe"
+        else:
+            import platform as _platform
+            _mach = _platform.machine().lower()
+            _suffix = "x86_64-unknown-linux-gnu" if "x86" in _mach else "aarch64-unknown-linux-gnu"
+            native = vendor_dir / f"codex-{_suffix}"
+        native.write_bytes(b"\x00FAKE_NATIVE_VALID")
+
+        # lockfile, package.json 모두 absent
+        monkeypatch.setattr(
+            pipeline, "_check_npm_lockfile_integrity",
+            lambda _root: {"available": False, "ok": True, "integrity": "", "source": "", "reason": "lockfile_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_check_package_json_npm_integrity",
+            lambda _root: {"available": False, "ok": True, "integrity": "", "source": "", "reason": "integrity_absent"},
+        )
+        # npm ls → 유효한 sha512- integrity 반환
+        _VALID_INTEGRITY = "sha512-" + "A" * 88 + "="
+        monkeypatch.setattr(
+            pipeline, "_get_npm_ls_integrity",
+            lambda _root=None: {"available": True, "ok": True, "integrity": _VALID_INTEGRITY, "source": "npm_ls_global", "reason": ""},
+        )
+        monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
+        monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
+        npm_bin_dir = str(tmp_path / "npm_bin")
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
+        monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
+        monkeypatch.setattr(pipeline, "_verify_npm_wrapper_content", lambda _p: True)
+
+        wrapper = self._make_fake_npm_wrapper(tmp_path)
+        _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
+
+        assert _r.get("acceptance_eligible") is True, (
+            f"AC-3 실패: npm ls ok인데 acceptance_eligible={_r.get('acceptance_eligible')!r}. "
+            f"결과: {_r!r}"
+        )
+
+    def test_tc21c_npm_ls_integrity_invalid_format_trusted_false(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC-4: npm ls _integrity 형식 오류(조작 양성) → trusted=False fail-closed."""
+        import pytest
+        import tempfile as _tf_mod
+
+        pkg_dir = tmp_path / "node_modules" / "@openai" / "codex"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        bin_dir = pkg_dir / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        js_ep = bin_dir / "codex.js"
+        js_ep.write_text("#!/usr/bin/env node\nconsole.log('codex');\n", encoding="utf-8")
+        vendor_dir = pkg_dir / "vendor"
+        vendor_dir.mkdir(exist_ok=True)
+        if pipeline.sys.platform == "win32":
+            native = vendor_dir / "codex-x86_64-pc-windows-msvc.exe"
+        else:
+            import platform as _platform
+            _mach = _platform.machine().lower()
+            _suffix = "x86_64-unknown-linux-gnu" if "x86" in _mach else "aarch64-unknown-linux-gnu"
+            native = vendor_dir / f"codex-{_suffix}"
+        native.write_bytes(b"\x00FAKE_NATIVE_TAMPERED")
+
+        # step 2 우회: gettempdir()가 tmp_path와 무관한 경로 반환
+        monkeypatch.setattr(_tf_mod, "gettempdir", lambda: "/nonexistent_temp_dir_for_tc21c")
+
+        # lockfile, package.json 모두 absent
+        monkeypatch.setattr(
+            pipeline, "_check_npm_lockfile_integrity",
+            lambda _root: {"available": False, "ok": True, "integrity": "", "source": "", "reason": "lockfile_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_check_package_json_npm_integrity",
+            lambda _root: {"available": False, "ok": True, "integrity": "", "source": "", "reason": "integrity_absent"},
+        )
+        # npm ls → 형식 오류 integrity (조작 양성)
+        monkeypatch.setattr(
+            pipeline, "_get_npm_ls_integrity",
+            lambda _root=None: {
+                "available": True, "ok": False,
+                "integrity": "md5-TAMPERED_HASH",
+                "source": "npm_ls_global",
+                "reason": "npm_ls_integrity_invalid_format:md5-TAMPERED_HASH",
+            },
+        )
+        monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
+        monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
+        npm_bin_dir = str(tmp_path / "npm_bin")
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
+        monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
+        monkeypatch.setattr(pipeline, "_verify_npm_wrapper_content", lambda _p: True)
+
+        wrapper = self._make_fake_npm_wrapper(tmp_path)
+        _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
+
+        assert _r.get("trusted") is False, (
+            f"AC-4 실패: npm ls integrity 형식 오류인데 trusted={_r.get('trusted')!r}. 결과: {_r!r}"
+        )
+        assert "npm_ls_integrity_invalid" in (_r.get("untrusted_reason") or ""), (
+            f"AC-4 실패: untrusted_reason에 'npm_ls_integrity_invalid' 없음: {_r.get('untrusted_reason')!r}"
+        )
+
+    def test_tc21d_acceptance_eligible_false_chatgpt_auth_blocked(
+        self, monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC-5: acceptance_eligible=False 시 _check_codex_chatgpt_auth → BLOCKED 반환.
+
+        가짜 체인이 trusted=True이더라도 provenance absent → auth 단계에서 차단.
+        """
+        import pytest
+
+        # shutil.which가 가짜 codex 경로 반환
+        _FAKE_PATH = "/fake/npm/bin/codex" if pipeline.sys.platform != "win32" else r"C:\fake\npm\bin\codex.cmd"
+
+        monkeypatch.setattr(pipeline.shutil, "which", lambda _n: _FAKE_PATH if _n == "codex" else None)
+        # _verify_codex_binary_path_trust → trusted=True, acceptance_eligible=False
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_binary_path_trust",
+            lambda _p: {
+                "trusted": True,
+                "path": _FAKE_PATH,
+                "sha256": "aabbcc",
+                "untrusted_reason": None,
+                "install_source": "npm_global",
+                "install_type": "npm_wrapper",
+                "js_entrypoint_path": "",
+                "js_entrypoint_sha256": "",
+                "native_binary_path": "",
+                "native_binary_sha256": "",
+                "acceptance_eligible": False,
+                "provenance_reason": "provenance_absent_all_sources",
+            },
+        )
+
+        _result = pipeline._check_codex_chatgpt_auth(codex_bin=None)
+        assert _result.get("result") == "BLOCKED", (
+            f"AC-5 실패: acceptance_eligible=False인데 BLOCKED가 아님: {_result!r}"
+        )
+        assert _result.get("failure_code") == "codex_binary_provenance_absent", (
+            f"AC-5 실패: failure_code={_result.get('failure_code')!r} (예상: 'codex_binary_provenance_absent')"
+        )
+
+    def test_tc21e_get_npm_ls_integrity_parses_valid_integrity(
+        self, monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """_get_npm_ls_integrity가 npm ls --json 출력에서 _integrity를 올바르게 파싱한다."""
+        import json as _json
+        import pytest
+
+        _VALID_INTEGRITY = "sha512-" + "B" * 88 + "="
+        _mock_output = _json.dumps({
+            "dependencies": {
+                "@openai/codex": {
+                    "version": "1.0.0",
+                    "_integrity": _VALID_INTEGRITY,
+                }
+            }
+        })
+
+        class _MockRunResult:
+            stdout = _mock_output
+            returncode = 0
+
+        # npm binary가 시스템 경로에 있는 것으로 모킹
+        _MOCK_NPM = "/usr/local/bin/npm"
+        monkeypatch.setattr(pipeline.shutil, "which", lambda _n: _MOCK_NPM if _n == "npm" else None)
+        monkeypatch.setattr(pipeline, "_verify_npm_binary_is_system_path", lambda _p: True)
+        monkeypatch.setattr(
+            pipeline.subprocess, "run",
+            lambda *_a, **_kw: _MockRunResult(),
+        )
+
+        _r = pipeline._get_npm_ls_integrity()
+        assert _r.get("available") is True, f"TC-21e: available=False: {_r!r}"
+        assert _r.get("ok") is True, f"TC-21e: ok=False: {_r!r}"
+        assert _r.get("integrity") == _VALID_INTEGRITY, (
+            f"TC-21e: integrity={_r.get('integrity')!r} (예상: {_VALID_INTEGRITY!r})"
+        )
+        assert _r.get("source") == "npm_ls_global", f"TC-21e: source={_r.get('source')!r}"

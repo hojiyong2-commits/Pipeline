@@ -2425,6 +2425,11 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   단독 변경 시 npm 출력 신뢰 경계와 lockfile provenance 교차검증을 우회할 수 있어 CRITICAL.
     "_verify_npm_global_bin_allowed",
     "_check_npm_lockfile_integrity",
+    # IMP-20260712-DAE1 REJECT#19: npm ls -g --json provenance 소스 3 helper 등록.
+    #   lockfile·package.json 모두 absent 시 npm ls _integrity를 독립 provenance 소스 3으로 사용.
+    #   이 함수를 변경하면 provenance_absent_all_sources 판정을 우회해 acceptance_eligible=True가
+    #   부당하게 유지될 수 있으므로 CRITICAL 분류 필수이다.
+    "_get_npm_ls_integrity",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -9479,6 +9484,89 @@ def _check_package_json_npm_integrity(pkg_root: "Path") -> Dict[str, Any]:
 #            SHA 3-layer 재검증이 담당한다(depth-in-defense).
 # [Improvement]: 온라인이면 registry.npmjs.org의 @openai/codex tarball SHA를 실제 질의하여 오프라인
 #            조작까지 탐지할 수 있으나, 네트워크 의존이 CI/오프라인에서 fail-closed 오탐을 유발한다.
+def _get_npm_ls_integrity(pkg_root: "Optional[Path]" = None) -> Dict[str, Any]:
+    """REJECT#19: npm ls -g --json @openai/codex로 독립 provenance _integrity를 조회한다.
+
+    npm이 설치 시 npm registry에서 받아 내부에 보존하는 _integrity(sha512- SRI)를 신뢰된 npm
+    binary로 조회한다. 이 값은 설치 후 로컬 파일에서 자체 계산한 SHA와 달리 registry provenance에서
+    유래한다(lockfile·package.json 모두 absent인 npm 7+ global 설치에서의 provenance 소스 3).
+
+    [신뢰 전제] npm binary가 _verify_npm_binary_is_system_path()를 통과한 경우에만 결과를 신뢰한다.
+    시스템 경로 npm이 아니면 "npm_not_system_path" 이유로 available=False 반환.
+
+    Args:
+        pkg_root: 참조용(미사용). npm ls -g 전역 조회를 사용한다.
+    Returns:
+        {"available": bool, "ok": bool, "integrity": str, "source": str, "reason": str}.
+        - available=False, ok=True: npm 없음 / 패키지 미발견 / _integrity 필드 없음.
+          REJECT#19 컨텍스트에서 상위가 provenance_absent_all_sources로 acceptance_eligible=False.
+        - available=True, ok=True: 유효 sha512-/sha384-/sha256- _integrity → 독립 provenance OK.
+        - available=True, ok=False: _integrity 형식 오류(조작 양성) → 상위에서 fail-closed.
+    """
+    _out: Dict[str, Any] = {
+        "available": False, "ok": True,
+        "integrity": "", "source": "npm_ls_global", "reason": "",
+    }
+    try:
+        # npm binary 위치 확인 (시스템 경로여야 신뢰)
+        _npm_bin = shutil.which("npm")
+        if not _npm_bin:
+            _out["reason"] = "npm_not_found"
+            return _out
+        # _verify_npm_binary_is_system_path로 npm이 시스템 경로에 있는지 확인
+        if not _verify_npm_binary_is_system_path(_npm_bin):
+            _out["reason"] = f"npm_not_system_path:{_npm_bin}"
+            return _out
+        # npm ls -g --json @openai/codex 실행 (OPENAI_API_KEY 제거, 타임아웃 30초)
+        _env = os.environ.copy()
+        _env.pop("OPENAI_API_KEY", None)
+        _res = subprocess.run(
+            [_npm_bin, "ls", "-g", "--json", "@openai/codex"],
+            capture_output=True, text=True, timeout=30, env=_env,
+        )
+        # npm ls는 패키지 미발견 시에도 exit 1을 반환할 수 있으므로 exit code 무관하게 stdout 파싱.
+        _stdout = (_res.stdout or "").strip()
+        if not _stdout:
+            _out["reason"] = "npm_ls_empty_output"
+            return _out
+        try:
+            _data = json.loads(_stdout)
+        except json.JSONDecodeError:
+            _out["reason"] = "npm_ls_json_parse_error"
+            return _out
+        if not isinstance(_data, dict):
+            _out["reason"] = "npm_ls_not_object"
+            return _out
+        # @openai/codex 엔트리 추출: dependencies["@openai/codex"]["_integrity"]
+        _deps = _data.get("dependencies")
+        if not isinstance(_deps, dict):
+            _out["reason"] = "npm_ls_no_dependencies"
+            return _out
+        _codex_entry = _deps.get("@openai/codex")
+        if not isinstance(_codex_entry, dict):
+            _out["reason"] = "npm_ls_codex_not_found"
+            return _out
+        _integrity = str(_codex_entry.get("_integrity", "") or "")
+        if not _integrity:
+            _out["reason"] = "npm_ls_codex_no_integrity_field"
+            return _out
+        _out["available"] = True
+        _out["integrity"] = _integrity
+        # SRI 형식 검증: sha512-<base64> (sha384/sha256도 허용). 형식 위반은 조작 양성.
+        if "-" in _integrity and _integrity.split("-", 1)[0].lower() in ("sha512", "sha384", "sha256"):
+            _out["ok"] = True
+        else:
+            _out["ok"] = False
+            _out["reason"] = f"npm_ls_integrity_invalid_format:{_integrity[:40]}"
+        return _out
+    except subprocess.TimeoutExpired:
+        _out["reason"] = "npm_ls_timeout"
+        return _out
+    except Exception as _exc:  # noqa: BLE001
+        _out["reason"] = f"npm_ls_error:{type(_exc).__name__}"
+        return _out
+
+
 def _check_npm_lockfile_integrity(pkg_root: "Path") -> Dict[str, Any]:
     """REJECT#18 문제 3: node_modules 루트의 .package-lock.json에서 @openai/codex의 npm
     레지스트리 integrity(sha512- SRI)를 독립적으로 교차검증한다.
@@ -9673,6 +9761,10 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         # REJECT#LATEST AC#3: 최종 실행 native/vendor binary 경로/SHA (npm 래퍼용).
         "native_binary_path": "",
         "native_binary_sha256": "",
+        # REJECT#19: lockfile·package.json·npm ls 세 provenance 소스가 모두 absent이면 False.
+        #   trusted=True(체인 구조 OK)이지만 독립 provenance 없음 → acceptance_eligible 자격 없음.
+        "acceptance_eligible": True,
+        "provenance_reason": "",
     }
     try:
         # REJECT#15 문제 A: POSIX 공식 npm 설치는 /usr/local/bin/codex(symlink) → lib/.../codex.js
@@ -9809,15 +9901,13 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["trusted"] = False
                 _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
                 return _r
-            # REJECT#17 수정 B: package.json npm 레지스트리 provenance 교차 검증.
+            # REJECT#17 수정 B + REJECT#19: package.json npm 레지스트리 provenance 교차 검증.
             #   pkg_root = <js_entrypoint>/../.. = @openai/codex 패키지 루트.
-            #   필드 부재(정상 global 설치)는 non-blocking; _resolved가 비레지스트리면 fail-closed.
+            #   REJECT#19 변경: 조작 양성은 즉시 fail-closed. 세 소스 모두 absent이면
+            #   trusted=True 유지하되 acceptance_eligible=False(독립 provenance 없음).
             try:
                 _pkg_root_for_integrity = _js_ep.parent.parent
-                # REJECT#18 문제 3: .package-lock.json 독립 provenance 교차검증.
-                #   lockfile이 존재하고 @openai/codex integrity가 sha512- 형식이 아니면(조작 양성 증거)
-                #   fail-closed. lockfile/엔트리 부재(npm 7+ 정상 global 설치)는 non-blocking으로
-                #   현재 Windows 설치 호환을 보존한다(실측: 현재 설치에 lockfile·_integrity 모두 부재).
+                # 소스 1: .package-lock.json (조작 양성이면 즉시 차단)
                 _lock = _check_npm_lockfile_integrity(_pkg_root_for_integrity)
                 if _lock.get("available") and not _lock.get("ok"):
                     _r["trusted"] = False
@@ -9825,6 +9915,7 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                         f"npm_lockfile_integrity_invalid:{_lock.get('reason', '')}"
                     )
                     return _r
+                # 소스 2: package.json _integrity / _resolved (조작 양성이면 즉시 차단)
                 _integ = _check_package_json_npm_integrity(_pkg_root_for_integrity)
                 if _integ.get("available") and not _integ.get("ok"):
                     _r["trusted"] = False
@@ -9832,6 +9923,25 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                         f"npm_integrity_non_registry_resolved:{_integ.get('reason', '')}"
                     )
                     return _r
+                # REJECT#19: 소스 1·2 모두 absent이면 소스 3(npm ls -g --json) fallback 시도.
+                #   npm ls ok → 독립 provenance 확보, acceptance_eligible 유지.
+                #   npm ls 조작 양성 → fail-closed.
+                #   npm ls 도 absent → acceptance_eligible=False(체인 구조는 OK이나 독립
+                #   provenance가 없어 acceptance_eligible 자격 없음, trusted=True 유지).
+                if not _lock.get("available") and not _integ.get("available"):
+                    _npm_ls = _get_npm_ls_integrity(_pkg_root_for_integrity)
+                    if _npm_ls.get("available"):
+                        if not _npm_ls.get("ok"):
+                            _r["trusted"] = False
+                            _r["untrusted_reason"] = (
+                                f"npm_ls_integrity_invalid:{_npm_ls.get('reason', '')}"
+                            )
+                            return _r
+                        # npm ls ok → acceptance_eligible 유지 (True)
+                    else:
+                        # 세 소스 모두 absent → acceptance_eligible=False
+                        _r["acceptance_eligible"] = False
+                        _r["provenance_reason"] = "provenance_absent_all_sources"
             except Exception as _exc:  # noqa: BLE001
                 # provenance 확인 자체 실패는 정상 설치를 깨지 않도록 non-blocking(수정 A/C가 보완).
                 pass
@@ -9886,6 +9996,21 @@ def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]
                     ),
                     "codex_binary_path": _found,
                     "codex_binary_sha256": "",
+                }
+            # REJECT#19: acceptance_eligible=False이면 독립 provenance 없음 → 실행 차단(fail-closed).
+            #   trusted=True(체인 구조 OK)이더라도 provenance가 없는 binary는 승인 자격 없음.
+            if not _trust.get("acceptance_eligible", True):
+                return {
+                    "result": "BLOCKED",
+                    "failure_code": "codex_binary_provenance_absent",
+                    "message": (
+                        f"Codex 실행 파일의 독립 provenance가 없습니다"
+                        f"({_trust.get('provenance_reason', 'provenance_absent_all_sources')}): "
+                        "lockfile·package.json·npm ls 세 소스 모두 absent — "
+                        "수락 자격 없음(fail-closed)."
+                    ),
+                    "codex_binary_path": _found,
+                    "codex_binary_sha256": _trust.get("sha256", ""),
                 }
         _bin = _found or "codex"
     else:
