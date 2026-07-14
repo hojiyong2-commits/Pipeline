@@ -5876,3 +5876,229 @@ class TestTC18CapabilityTOCTOUAndCoverage:
             f"REJECT#16 결함B 회귀: CRITICAL hunk 절단인데 evidence_complete=True — "
             f"결함B 완화가 CRITICAL 완전성 검사를 약화시켰음"
         )
+
+
+# =========================================================================== #
+# TC-19: REJECT#17 — trust-root 독립성 (self-referential 신뢰 체인 제거)
+#
+# 수정 A: npm 바이너리 자체의 시스템 경로 검증 — PATH 주입 npm 차단.
+# 수정 B: package.json npm 레지스트리 provenance 교차 검증 — 조작 패키지 차단.
+# 수정 C: direct_native 소유권/위치 검증 — 시스템 경로 내 사용자 배치 바이너리 차단.
+#
+# 현재 시스템 호환성: Windows npm global 설치(%APPDATA%\npm, Program Files npm,
+#   package.json에 _integrity 부재)는 수정 후에도 계속 PASS되어야 한다.
+# =========================================================================== #
+class TestTC19TrustRootIndependence:
+    """REJECT#17: 신뢰 체인이 자기참조적으로 우회되지 않도록 3개 독립 레이어를 검증한다."""
+
+    # ---- 수정 A: npm 바이너리 시스템 경로 검증 ---- #
+    def test_tc19a_system_path_npm_is_trusted(self) -> None:
+        """수정 A: 시스템 설치 경로의 npm은 신뢰된다(플랫폼별)."""
+        if sys.platform == "win32":
+            _pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+            _npm = str(Path(_pf) / "nodejs" / "npm.cmd")
+            assert pipeline._verify_npm_binary_is_system_path(_npm) is True, (
+                f"수정 A: Program Files nodejs npm이 신뢰되지 않음: {_npm!r}"
+            )
+            _appdata = os.environ.get("APPDATA")
+            if _appdata:
+                _npm2 = str(Path(_appdata) / "npm" / "npm.cmd")
+                assert pipeline._verify_npm_binary_is_system_path(_npm2) is True, (
+                    f"수정 A: %APPDATA%\\npm npm이 신뢰되지 않음: {_npm2!r}"
+                )
+        else:
+            for _sys_npm in ("/usr/bin/npm", "/usr/local/bin/npm"):
+                assert pipeline._verify_npm_binary_is_system_path(_sys_npm) is True, (
+                    f"수정 A: 시스템 경로 npm이 신뢰되지 않음: {_sys_npm!r}"
+                )
+
+    def test_tc19b_path_injected_fake_npm_is_rejected(self, tmp_path: "Path") -> None:
+        """수정 A: 임의 디렉토리(PATH 주입)의 가짜 npm은 시스템 경로로 신뢰되지 않는다."""
+        _fake_npm_dir = tmp_path / "evil_bin"
+        _fake_npm_dir.mkdir()
+        _fake_npm = _fake_npm_dir / ("npm.cmd" if sys.platform == "win32" else "npm")
+        _fake_npm.write_text("echo fake npm\n", encoding="utf-8")
+        assert pipeline._verify_npm_binary_is_system_path(str(_fake_npm)) is False, (
+            f"수정 A: PATH 주입 가짜 npm이 시스템 경로로 신뢰됨(공격 벡터): {_fake_npm!r}"
+        )
+
+    def test_tc19c_get_npm_global_bin_rejects_injected_npm(
+        self, tmp_path: "Path", monkeypatch
+    ) -> None:
+        """수정 A: shutil.which가 임의 경로 npm을 반환하면 _get_npm_global_bin이 None으로 fail-closed."""
+        _fake_npm_dir = tmp_path / "inject"
+        _fake_npm_dir.mkdir()
+        _fake_npm = _fake_npm_dir / ("npm.cmd" if sys.platform == "win32" else "npm")
+        _fake_npm.write_text("echo pwned\n", encoding="utf-8")
+        monkeypatch.setattr(pipeline.shutil, "which", lambda _name: str(_fake_npm))
+        assert pipeline._get_npm_global_bin() is None, (
+            "수정 A: 주입된 npm(비시스템 경로)인데 _get_npm_global_bin이 None을 반환하지 않음"
+        )
+
+    def test_tc19d_verify_npm_system_path_none_raises(self) -> None:
+        """수정 A: None 입력은 TypeError로 방어(암묵적 통과 금지)."""
+        _raised = False
+        try:
+            pipeline._verify_npm_binary_is_system_path(None)  # type: ignore[arg-type]
+        except TypeError:
+            _raised = True
+        assert _raised, "수정 A: None 입력이 TypeError로 방어되지 않음"
+        assert pipeline._verify_npm_binary_is_system_path("") is False, (
+            "수정 A: 빈 문자열 npm 경로가 신뢰됨(경계값 방어 실패)"
+        )
+
+    def test_tc19_a_wired_in_get_npm_global_bin_source(self) -> None:
+        """수정 A: _get_npm_global_bin이 _verify_npm_binary_is_system_path를 호출한다."""
+        import inspect
+        _src = inspect.getsource(pipeline._get_npm_global_bin)
+        assert "_verify_npm_binary_is_system_path" in _src, (
+            "수정 A: _get_npm_global_bin이 npm 바이너리 시스템 경로 검증을 배선하지 않음"
+        )
+
+    # ---- 수정 B: package.json npm 레지스트리 provenance ---- #
+    def test_tc19e_package_without_npm_integrity_is_non_blocking(
+        self, tmp_path: "Path"
+    ) -> None:
+        """수정 B: _integrity/_resolved 부재(정상 `npm install -g`)는 차단하지 않는다(현재 시스템 호환)."""
+        _pkg = tmp_path / "pkg_none"
+        _pkg.mkdir()
+        (_pkg / "package.json").write_text(
+            '{"name": "@openai/codex", "version": "1.0.0"}', encoding="utf-8"
+        )
+        _res = pipeline._check_package_json_npm_integrity(_pkg)
+        assert _res["available"] is False and _res["ok"] is True, (
+            f"수정 B: provenance 필드 부재가 non-blocking이 아님(정상 global 설치를 깸): {_res!r}"
+        )
+
+    def test_tc19f_package_with_nonregistry_resolved_is_rejected(
+        self, tmp_path: "Path"
+    ) -> None:
+        """수정 B: _resolved가 비레지스트리(file:/로컬)면 조작 가능성 → available=True, ok=False."""
+        _pkg = tmp_path / "pkg_nonreg"
+        _pkg.mkdir()
+        (_pkg / "package.json").write_text(
+            '{"name": "@openai/codex", "_integrity": "sha512-XXXX", '
+            '"_resolved": "file:///malicious/codex.tgz"}',
+            encoding="utf-8",
+        )
+        _res = pipeline._check_package_json_npm_integrity(_pkg)
+        assert _res["available"] is True and _res["ok"] is False, (
+            f"수정 B: 비레지스트리 _resolved가 차단 대상(ok=False)으로 판정되지 않음: {_res!r}"
+        )
+
+    def test_tc19g_package_with_registry_resolved_passes(self, tmp_path: "Path") -> None:
+        """수정 B: _integrity + _resolved(registry.npmjs.org)면 provenance 확인(ok=True)."""
+        _pkg = tmp_path / "pkg_reg"
+        _pkg.mkdir()
+        (_pkg / "package.json").write_text(
+            '{"name": "@openai/codex", "_integrity": "sha512-AAAA", '
+            '"_resolved": "https://registry.npmjs.org/@openai/codex/-/codex-1.0.0.tgz"}',
+            encoding="utf-8",
+        )
+        _res = pipeline._check_package_json_npm_integrity(_pkg)
+        assert _res["available"] is True and _res["ok"] is True, (
+            f"수정 B: 레지스트리 provenance가 확인(ok=True)되지 않음: {_res!r}"
+        )
+
+    def test_tc19h_integrity_none_raises_and_wired_in_trust(self) -> None:
+        """수정 B: None 입력 TypeError + 신뢰 함수가 비레지스트리 provenance를 fail-closed로 배선."""
+        _raised = False
+        try:
+            pipeline._check_package_json_npm_integrity(None)  # type: ignore[arg-type]
+        except TypeError:
+            _raised = True
+        assert _raised, "수정 B: None pkg_root가 TypeError로 방어되지 않음"
+        import inspect
+        _src = inspect.getsource(pipeline._verify_codex_binary_path_trust)
+        assert "_check_package_json_npm_integrity" in _src, (
+            "수정 B: _verify_codex_binary_path_trust가 provenance 교차검증을 배선하지 않음"
+        )
+        assert "npm_integrity_non_registry_resolved" in _src, (
+            "수정 B: 비레지스트리 provenance fail-closed(차단 사유)가 신뢰 함수에 없음"
+        )
+
+    # ---- 수정 C: direct_native 소유권/위치 검증 ---- #
+    def test_tc19i_direct_native_home_path_rejected(self) -> None:
+        """수정 C: 시스템 경로가 아닌 사용자 홈 내부 바이너리는 direct_native로 신뢰되지 않는다."""
+        _home_bin = Path(os.path.expanduser("~")) / "codex_planted_dae1"
+        _res = pipeline._verify_direct_native_ownership(_home_bin)
+        assert _res["trusted"] is False, (
+            f"수정 C: 홈 디렉토리 내부 바이너리가 신뢰됨: {_res!r}"
+        )
+        assert _res["failure_code"] == "direct_native_user_path", (
+            f"수정 C: 홈 경로 차단 사유가 direct_native_user_path가 아님: {_res!r}"
+        )
+
+    def test_tc19j_direct_native_user_owned_rejected(self, tmp_path: "Path") -> None:
+        """수정 C(Unix): 홈/cwd 밖이어도 현재 사용자가 소유한 파일이면 차단한다.
+
+        Windows(getuid 부재) 및 root 실행(getuid==0, 시스템 소유와 구분 불가)에서는 소급 불가하므로
+        위치 검사만 유효하다 → 소프트 스킵.
+        """
+        if sys.platform == "win32":
+            return
+        if os.getuid() == 0:  # type: ignore[attr-defined]
+            return
+        _f = tmp_path / "user_owned_codex"
+        _f.write_bytes(b"\x00fake native\x00")
+        _res = pipeline._verify_direct_native_ownership(_f)
+        assert _res["trusted"] is False, (
+            f"수정 C: 현재 사용자 소유 바이너리가 신뢰됨: {_res!r}"
+        )
+        assert _res["failure_code"] in (
+            "direct_native_user_owned", "direct_native_user_path",
+        ), f"수정 C: 소유권/위치 차단 사유가 예상과 다름: {_res!r}"
+
+    def test_tc19k_direct_native_system_path_not_location_blocked(self) -> None:
+        """수정 C: 시스템 경로(홈/cwd 밖)는 위치 사유(direct_native_user_path)로 차단되지 않는다."""
+        if sys.platform == "win32":
+            _sys_bin = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "where.exe"
+            _res = pipeline._verify_direct_native_ownership(_sys_bin)
+            assert _res["failure_code"] != "direct_native_user_path", (
+                f"수정 C: 시스템 경로가 위치 사유로 오차단됨: {_res!r}"
+            )
+        else:
+            _res = pipeline._verify_direct_native_ownership(Path("/bin/sh"))
+            assert _res["failure_code"] != "direct_native_user_path", (
+                f"수정 C: /bin/sh가 위치 사유로 오차단됨: {_res!r}"
+            )
+
+    def test_tc19l_direct_native_none_raises_and_wired_in_trust(self) -> None:
+        """수정 C: None 입력 TypeError + 신뢰 함수 direct_native 분기가 소유권 검증을 배선."""
+        _raised = False
+        try:
+            pipeline._verify_direct_native_ownership(None)  # type: ignore[arg-type]
+        except TypeError:
+            _raised = True
+        assert _raised, "수정 C: None native_path가 TypeError로 방어되지 않음"
+        import inspect
+        _src = inspect.getsource(pipeline._verify_codex_binary_path_trust)
+        assert "_verify_direct_native_ownership" in _src, (
+            "수정 C: _verify_codex_binary_path_trust의 direct_native 분기가 소유권 검증을 배선하지 않음"
+        )
+
+    # ---- 독립성/등록 검증 ---- #
+    def test_tc19m_trust_root_helpers_registered_in_all(self) -> None:
+        """3개 trust-root helper가 CRITICAL 보호 목록(CODEX_CRITICAL_FUNCTIONS __all__)에 등록됨."""
+        for _fn in (
+            "_verify_npm_binary_is_system_path",
+            "_check_package_json_npm_integrity",
+            "_verify_direct_native_ownership",
+        ):
+            assert _fn in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+                f"REJECT#17: {_fn}이 CRITICAL 보호 목록에 등록되지 않음(단독 변경 감지 우회 가능)"
+            )
+
+    def test_tc19n_real_install_still_trusted_regression(self) -> None:
+        """회귀 방지: 실제 설치된 codex(있으면)는 수정 A/B/C 후에도 계속 신뢰된다.
+
+        codex 미설치 환경(대부분의 CI)에서는 검증 대상이 없으므로 소프트 스킵한다.
+        """
+        _codex = pipeline.shutil.which("codex")
+        if not _codex:
+            return
+        _r = pipeline._verify_codex_binary_path_trust(_codex)
+        assert _r["trusted"] is True, (
+            f"REJECT#17 회귀: 실제 codex 설치가 수정 후 신뢰되지 않음: "
+            f"reason={_r.get('untrusted_reason')!r} install_type={_r.get('install_type')!r}"
+        )

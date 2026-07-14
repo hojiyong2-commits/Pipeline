@@ -2413,6 +2413,13 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_verify_npm_wrapper_content",
     "_find_codex_js_entrypoint",
     "_codex_review_blocked_flag_path",
+    # IMP-20260712-DAE1 REJECT#17: trust-root 독립성 강화 helper 3종 등록.
+    #   npm 바이너리 시스템 경로 검증(수정 A), package.json 레지스트리 provenance(수정 B),
+    #   direct_native 소유권 검증(수정 C). 이 함수들을 단독 변경하면 자기참조 신뢰 우회가 가능하므로
+    #   CRITICAL 분류가 필요하다.
+    "_verify_npm_binary_is_system_path",
+    "_check_package_json_npm_integrity",
+    "_verify_direct_native_ownership",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -8926,23 +8933,123 @@ def _check_codex_model_capability_match(
     return {"result": "OK", "model_verification_level": _level}
 
 
+# [Purpose]: REJECT#17 수정 A — npm 실행 파일이 공격자가 임의 배치할 수 없는 시스템 설치 경로에
+#            있는지 확인한다. _get_npm_global_bin이 npm 출력을 신뢰하기 전 npm 바이너리 자체의
+#            출처를 검증하여 PATH 선두 주입(가짜 npm) 자기참조 신뢰를 차단한다.
+# [Assumptions]: npm은 공식 Node.js 설치 경로(Windows: Program Files\nodejs 또는 %APPDATA%\npm;
+#            Unix: /usr/bin, /usr/local/bin, /opt, ~/.nvm)에 위치한다. nvm-for-windows는
+#            NVM_HOME/NVM_SYMLINK 환경변수로 위치를 노출한다.
+# [Vulnerability & Risks]: 비표준(그러나 합법) npm 설치 경로가 있으면 오탐(False)으로 fail-closed되어
+#            trust가 거부될 수 있다. 이는 안전측 오류이며, 필요 시 허용 경로 목록을 확장한다.
+# [Improvement]: OS 패키지 매니저 메타데이터(예: dpkg -S, MSI product code)로 소유권을 교차 검증하면
+#            경로 접두사 heuristic보다 강한 provenance를 얻을 수 있다.
+def _verify_npm_binary_is_system_path(npm_path: str) -> bool:
+    """REJECT#17 수정 A: npm 실행 파일이 시스템 설치 경로에 있는지 확인한다(PATH 주입 npm 차단).
+
+    _get_npm_global_bin이 npm 출력을 신뢰하려면 npm 바이너리 자체가 공격자가 임의로 배치할 수
+    없는 시스템 설치 경로에 있어야 한다. 임의 디렉토리(cwd·임시 폴더 등)의 npm은 PATH 선두 주입
+    공격 벡터이므로 신뢰하지 않는다(fail-closed).
+
+    허용:
+      - Windows: %ProgramFiles%\\nodejs, %ProgramFiles(x86)%\\nodejs, %ProgramW6432%\\nodejs,
+                 %APPDATA%\\npm(npm global prefix), nvm-for-windows(NVM_HOME/NVM_SYMLINK)
+      - Unix: /usr/bin, /usr/local/bin, /bin, /opt/homebrew/bin, /opt/homebrew, /opt,
+              /usr/local, ~/.nvm(nvm)
+
+    Args:
+        npm_path: 검증할 npm 실행 파일 절대/상대 경로.
+    Returns:
+        시스템 설치 경로 내에 있으면 True, 아니면 False.
+    Raises:
+        TypeError: npm_path가 None이거나 str이 아닌 경우.
+    """
+    if npm_path is None:
+        raise TypeError("npm_path must not be None")
+    if not isinstance(npm_path, str):
+        raise TypeError(f"npm_path must be str, got {type(npm_path).__name__}")
+    if not npm_path.strip():
+        # 빈 경로는 신뢰 불가 (경계값: 빈 문자열 → 미신뢰; 예외 대신 False 반환이 호출부 계약)
+        return False
+    try:
+        _p = Path(os.path.abspath(npm_path))
+    except Exception:  # noqa: BLE001
+        return False
+
+    _allowed_roots: List[Path] = []
+    if sys.platform == "win32":
+        for _envk in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+            _pf = os.environ.get(_envk)
+            if _pf:
+                _allowed_roots.append(Path(_pf) / "nodejs")
+        _appdata = os.environ.get("APPDATA")
+        if _appdata:
+            _allowed_roots.append(Path(_appdata) / "npm")
+        for _nvmk in ("NVM_HOME", "NVM_SYMLINK"):
+            _nv = os.environ.get(_nvmk)
+            if _nv:
+                _allowed_roots.append(Path(_nv))
+        # 환경변수 부재 대비 표준 기본 경로.
+        _allowed_roots.append(Path(r"C:\Program Files\nodejs"))
+    else:
+        _allowed_roots.extend([
+            Path("/usr/bin"), Path("/usr/local/bin"), Path("/bin"),
+            Path("/opt/homebrew/bin"), Path("/opt/homebrew"),
+            Path("/opt"), Path("/usr/local"),
+        ])
+        _home = os.environ.get("HOME") or ""
+        if not _home:
+            try:
+                _home = str(Path.home())
+            except Exception:  # noqa: BLE001
+                _home = ""
+        if _home:
+            _allowed_roots.append(Path(_home) / ".nvm")
+
+    for _root in _allowed_roots:
+        try:
+            _root_abs = Path(os.path.abspath(str(_root)))
+        except Exception:  # noqa: BLE001
+            continue
+        try:
+            _p.relative_to(_root_abs)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 def _get_npm_global_bin() -> Optional[str]:
     """REJECT#10: npm global bin 디렉토리를 쿼리한다.
 
     npm global bin은 공식 npm install로 설치된 CLI 도구가 위치하는 신뢰된 경로다.
     Windows에서는 npm이 npm.cmd 형태로 설치되어 subprocess 직접 호출 시 'npm'만으로
     실패할 수 있으므로 npm.cmd를 우선 시도한다.
+
+    REJECT#17 수정 A: npm 출력을 신뢰하기 전에 npm 실행 파일 자체가 시스템 설치 경로에 있는지
+    확인한다(_verify_npm_binary_is_system_path). PATH 선두에 주입된 가짜 npm이 조작된 prefix/bin을
+    출력하는 자기참조 신뢰를 차단한다. npm이 신뢰 불가 위치면 None을 반환하여 상위에서 fail-closed.
+    또한 신뢰 검증을 통과한 npm의 "절대 경로"로 subprocess를 실행하여 두 번째 PATH 조회를 제거한다.
+
     Returns:
-        npm global bin 디렉토리 경로 문자열, 조회 실패 시 None.
+        npm global bin 디렉토리 경로 문자열, 조회 실패 또는 npm 미신뢰 시 None.
     """
     import subprocess as _subp
 
-    # Windows: npm.cmd, npm; Linux/macOS: npm 순으로 시도
-    _npm_cmds: List[str] = (
-        ["npm.cmd", "npm"] if sys.platform == "win32" else ["npm"]
-    )
+    # REJECT#17 수정 A: npm 바이너리를 PATH에서 1회 해석한 뒤 시스템 경로인지 확인한다.
+    _resolved_npm: Optional[str] = None
+    for _probe in (["npm.cmd", "npm"] if sys.platform == "win32" else ["npm"]):
+        _which = shutil.which(_probe)
+        if _which:
+            _resolved_npm = _which
+            break
+    if not _resolved_npm:
+        return None
+    if not _verify_npm_binary_is_system_path(_resolved_npm):
+        # npm 바이너리가 신뢰 불가 위치(PATH 주입 의심) → 그 출력도 신뢰 불가 (fail-closed).
+        return None
 
-    for _npm_exe in _npm_cmds:
+    # 신뢰된 npm 절대 경로로만 조회한다(두 번째 PATH 조회 제거 = TOCTOU/재주입 차단).
+    for _npm_exe in (_resolved_npm,):
         # 1) npm bin -g: npm < 9 에서 직접 bin 경로 반환
         try:
             _res = _subp.run(
@@ -9164,6 +9271,148 @@ def _find_codex_native_binary(js_entrypoint_path: "Path") -> "Optional[Path]":
         return None
 
 
+# [Purpose]: REJECT#17 수정 B — @openai/codex package.json의 npm 레지스트리 provenance 필드
+#            (_integrity/_resolved)를 확인하여, 수동 복사·조작된 패키지를 자기참조 SHA와 독립적으로
+#            교차 검증한다.
+# [Assumptions]: npm 레지스트리 설치 시 _resolved가 registry.npmjs.org를 가리킨다. 단, npm 7+
+#            `npm install -g`는 설치 package.json에 이 필드를 남기지 않을 수 있다(정상 global 설치).
+# [Vulnerability & Risks]: 필드 부재를 차단하면 정상 global 설치가 깨지므로 부재는 non-blocking으로
+#            처리한다. 반대로 _resolved가 비레지스트리(file:/로컬)를 가리키면 조작 가능성 → 차단.
+#            부재 시 이 레이어는 신뢰를 올리지 못하며 수정 A/C가 보완한다(depth-in-defense).
+# [Improvement]: npm registry에 실제 질의하여 tarball SHA를 대조하면 오프라인 조작까지 탐지 가능하나,
+#            네트워크 의존이 생겨 CI/오프라인 환경에서 fail-closed 오탐을 유발할 수 있다.
+def _check_package_json_npm_integrity(pkg_root: "Path") -> Dict[str, Any]:
+    """REJECT#17 수정 B: @openai/codex package.json의 npm 레지스트리 provenance를 확인한다.
+
+    npm 레지스트리에서 설치된 패키지는 설치 메타데이터(_integrity/_resolved)를 기록할 수 있다.
+    _resolved가 registry.npmjs.org를 가리키면 레지스트리 provenance가 확인된 것으로 본다.
+
+    중요(현재 시스템 호환성): `npm install -g`(npm 7+)로 설치된 global 패키지의 package.json에는
+    _integrity/_resolved가 남지 않고 .package-lock.json도 global root에 생성되지 않을 수 있다.
+    따라서 필드 부재(available=False)는 정상 global 설치로 간주하여 차단하지 않는다(non-blocking).
+    반대로 필드가 존재하나 _resolved가 레지스트리가 아닌 로컬/비신뢰 출처(file:·비레지스트리 http)를
+    가리키면 조작 가능성이 있으므로 available=True, ok=False로 반환하여 상위에서 fail-closed 차단한다.
+
+    Args:
+        pkg_root: @openai/codex 패키지 루트(package.json이 위치한 디렉토리).
+    Returns:
+        {"available": bool, "ok": bool, "integrity": str, "resolved": str, "reason": str}.
+        - available=False: provenance 필드 부재(정상 global 설치) → 차단하지 않음(ok=True).
+        - available=True, ok=True: registry.npmjs.org provenance 확인.
+        - available=True, ok=False: _resolved가 비레지스트리 → 상위에서 차단.
+    Raises:
+        TypeError: pkg_root가 None인 경우.
+    """
+    if pkg_root is None:
+        raise TypeError("pkg_root must not be None")
+    _out: Dict[str, Any] = {
+        "available": False, "ok": True,
+        "integrity": "", "resolved": "", "reason": "",
+    }
+    try:
+        if not isinstance(pkg_root, Path):
+            # 잘못된 타입은 non-blocking으로 처리(정상 설치를 깨지 않음) — 상위 수정 A/C가 보완.
+            _out["reason"] = f"invalid_pkg_root_type:{type(pkg_root).__name__}"
+            return _out
+        _pkg_json = pkg_root / "package.json"
+        if not _pkg_json.exists():
+            _out["reason"] = "package_json_not_found"
+            return _out
+        _raw = _read_text_fallback(_pkg_json)  # 4-encoding fallback (utf-8/utf-8-sig/cp949/latin-1)
+        _data = json.loads(_raw)
+        if not isinstance(_data, dict):
+            _out["reason"] = "package_json_not_object"
+            return _out
+        _integrity = str(_data.get("_integrity", "") or "")
+        _resolved = str(_data.get("_resolved", "") or "")
+        _out["integrity"] = _integrity
+        _out["resolved"] = _resolved
+        if not _integrity and not _resolved:
+            # 필드 부재 — 정상 global 설치(npm 7+)로 간주, non-blocking.
+            _out["available"] = False
+            _out["ok"] = True
+            _out["reason"] = "no_npm_provenance_fields(global_install_ok)"
+            return _out
+        _out["available"] = True
+        if _resolved and "registry.npmjs.org" in _resolved.lower():
+            _out["ok"] = True
+            _out["reason"] = "registry_provenance_confirmed"
+        else:
+            # 필드가 존재하나 레지스트리 출처가 아님 → 조작 가능성(fail-closed 대상).
+            _out["ok"] = False
+            _out["reason"] = f"resolved_not_registry:{_resolved[:120]}"
+        return _out
+    except Exception as _exc:  # noqa: BLE001
+        # 파싱 실패는 non-blocking(정상 설치를 깨지 않음) — available=False, ok=True.
+        _out["available"] = False
+        _out["ok"] = True
+        _out["reason"] = f"integrity_check_error:{type(_exc).__name__}"
+        return _out
+
+
+# [Purpose]: REJECT#17 수정 C — install_type=direct_native(시스템 경로 직접 native 설치)를 경로
+#            접두사만으로 신뢰하지 않고, 파일 위치·소유권으로 추가 검증한다. 시스템 경로에 사용자가
+#            직접 쓴 바이너리(공격자 제어 가능)를 차단한다.
+# [Assumptions]: 시스템 패키지 매니저 설치 바이너리는 root(또는 관리자) 소유이며, 사용자 홈/cwd에
+#            있지 않다. 현재 프로세스 사용자가 소유한 시스템 경로 파일은 사용자가 직접 배치한 것으로 본다.
+# [Vulnerability & Risks]: root로 실행되는 환경에서는 getuid==0이 정상 설치 파일과 일치하여 소유권
+#            검사가 무력화될 수 있다(홈/cwd 위치 검사로 부분 보완). Windows는 getuid 부재로 위치
+#            검사만 수행한다.
+# [Improvement]: Windows는 Get-AuthenticodeSignature(코드 서명), Unix는 파일 capability/SELinux
+#            label을 확인하면 소유권 heuristic보다 강한 무결성 보장을 얻을 수 있다.
+def _verify_direct_native_ownership(native_path: "Path") -> Dict[str, Any]:
+    """REJECT#17 수정 C: direct_native 실행 파일의 위치·소유권을 검증한다(fail-closed).
+
+    차단 대상:
+      - 사용자 홈 디렉토리 또는 현재 작업 디렉토리 내부의 바이너리(사용자 배치 의심).
+      - (Unix) 현재 프로세스 사용자가 소유한 바이너리 — 시스템 설치는 통상 root 소유.
+
+    Args:
+        native_path: direct_native 실행 파일 경로.
+    Returns:
+        {"trusted": bool, "failure_code": str|None}.
+    Raises:
+        TypeError: native_path가 None인 경우.
+    """
+    if native_path is None:
+        raise TypeError("native_path must not be None")
+    try:
+        if not isinstance(native_path, Path):
+            return {"trusted": False, "failure_code": "direct_native_invalid_path"}
+        _p = Path(os.path.abspath(str(native_path)))
+        # 1) 홈 디렉토리 / cwd 내부 차단 (cross-platform).
+        _blocked_roots: List[Path] = []
+        try:
+            _blocked_roots.append(Path(os.path.abspath(str(Path.home()))))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            _blocked_roots.append(Path(os.path.abspath(os.getcwd())))
+        except Exception:  # noqa: BLE001
+            pass
+        for _br in _blocked_roots:
+            try:
+                _p.relative_to(_br)
+                return {"trusted": False, "failure_code": "direct_native_user_path"}
+            except ValueError:
+                continue
+        # 2) Unix 소유권 검사 — 현재 사용자가 소유하면 차단(root 소유 시스템 설치만 허용).
+        if hasattr(os, "getuid"):
+            try:
+                _st = os.stat(str(_p))
+            except OSError:
+                return {"trusted": False, "failure_code": "direct_native_stat_error"}
+            # getuid()는 Unix에서만 존재 — hasattr 가드로 Windows는 위치 검사만 수행.
+            if _st.st_uid == os.getuid():  # type: ignore[attr-defined]
+                return {"trusted": False, "failure_code": "direct_native_user_owned"}
+        return {"trusted": True, "failure_code": None}
+    except Exception as _exc:  # noqa: BLE001
+        return {
+            "trusted": False,
+            "failure_code": f"direct_native_ownership_error:{type(_exc).__name__}",
+        }
+
+
 def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
     """REJECT#10: 공식 npm 설치 또는 시스템 경로만 신뢰; 임의 사용자 경로는 fail-closed.
 
@@ -9330,6 +9579,21 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["trusted"] = False
                 _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
                 return _r
+            # REJECT#17 수정 B: package.json npm 레지스트리 provenance 교차 검증.
+            #   pkg_root = <js_entrypoint>/../.. = @openai/codex 패키지 루트.
+            #   필드 부재(정상 global 설치)는 non-blocking; _resolved가 비레지스트리면 fail-closed.
+            try:
+                _pkg_root_for_integrity = _js_ep.parent.parent
+                _integ = _check_package_json_npm_integrity(_pkg_root_for_integrity)
+                if _integ.get("available") and not _integ.get("ok"):
+                    _r["trusted"] = False
+                    _r["untrusted_reason"] = (
+                        f"npm_integrity_non_registry_resolved:{_integ.get('reason', '')}"
+                    )
+                    return _r
+            except Exception as _exc:  # noqa: BLE001
+                # provenance 확인 자체 실패는 정상 설치를 깨지 않도록 non-blocking(수정 A/C가 보완).
+                pass
         elif _trusted_by_npm:
             # npm 래퍼 디렉토리에 있으나 JS 진입점을 찾을 수 없음 → fail-closed (AC#1/#4)
             _r["trusted"] = False
@@ -9341,6 +9605,13 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
             #   sha256이 native 신뢰를 보장한다. 별도 native 체인 필드 부재를 operational trust가
             #   허용하도록 install_type=direct_native로 표시한다(신뢰는 시스템 경로에 한정, fail-closed).
             _r["install_type"] = "direct_native"
+            # REJECT#17 수정 C: 시스템 경로 접두사만으로 신뢰하지 않고 위치·소유권을 추가 검증한다.
+            #   시스템 경로에 사용자가 직접 쓴(홈/cwd 내부 또는 현재 사용자 소유) 바이너리를 차단한다.
+            _own = _verify_direct_native_ownership(_bin_p_lexical)
+            if not _own.get("trusted"):
+                _r["trusted"] = False
+                _r["untrusted_reason"] = f"{_own.get('failure_code')}:{_bin_p_lexical}"
+                return _r
         return _r
     except Exception as _exc:  # noqa: BLE001
         _r["untrusted_reason"] = f"path_verification_error:{type(_exc).__name__}:{_exc}"
