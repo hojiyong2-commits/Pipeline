@@ -2397,6 +2397,13 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_is_codex_critical_file",
     "_check_codex_capability_gate",
     "_codex_review_error_blocker",
+    # IMP-20260712-DAE1 REJECT#33: 상수 본문 SHA 비교 함수 추가.
+    #   - _extract_python_constant_bodies: 모듈 상수 전체 정의(multi-line 포함) 추출
+    #   - _detect_changed_critical_constants: origin/main↔HEAD SHA 비교로 상수 변경 감지
+    #   이 함수들을 변조하면 CODEX_CRITICAL_CONSTANTS 소속 상수의 내부 값 변경을
+    #   감지하지 못해 위험 분류를 HIGH로 낮출 수 있다 (fail-closed 우회 가능).
+    "_extract_python_constant_bodies",
+    "_detect_changed_critical_constants",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -8195,6 +8202,107 @@ def _is_codex_critical_file(path: str) -> bool:
 #            호출자가 fail-closed로 BLOCK하여 Codex CLI 호출을 막는다.
 # [Improvement]: critical_file_summary에 diff 통계(추가/삭제 라인)를 포함하면 Codex 컨텍스트가 풍부해진다.
 # IMP-20260712-DAE1 MT-2: Codex Review risk 분류 (SSoT 상수 기반, 우선순위 CRITICAL>HIGH>MEDIUM>LOW)
+# [Purpose]: 파이썬 소스에서 모듈 상수 전체 정의(multi-line 포함)를 추출한다.
+# [Assumptions]: 대문자 상수 이름으로 시작하는 할당문이 가장 바깥쪽 범위에 있다고 가정한다.
+# [Vulnerability & Risks]: 주석 안에 동일 패턴이 있으면 오탐 가능(실제로는 없음). 깊이 0이 되는
+#   시점을 본문 끝으로 보므로 한 줄 정의(`A = 1`)는 depth=0으로 즉시 종료된다.
+# [Improvement]: ast 파싱 기반으로 전환하면 정확도가 높아지지만 performance 비용이 있다.
+def _extract_python_constant_bodies(
+    source: str,
+    constants: List[str],
+) -> Dict[str, str]:
+    """파이썬 소스에서 모듈 상수 정의 전체 텍스트를 추출한다.
+
+    상수 이름으로 시작하는 대입 줄부터 괄호·브래킷·중괄호 깊이가 0이 될 때까지를 정의 범위로 본다.
+    한 줄 정의는 그 줄 하나가 범위다. 두 상수 중 첫 번째 정의를 채택한다(중복 이름 방지).
+
+    Args:
+        source: 파이썬 소스 전체 텍스트.
+        constants: 추출 대상 상수 이름 목록.
+    Returns:
+        {상수명: 정의 전체 텍스트}. 찾지 못한 상수는 결과에 포함하지 않는다.
+    """
+    if not source or not constants:
+        return {}
+    _const_set = set(constants)
+    _lines = source.splitlines()
+    _result: Dict[str, str] = {}
+    # 모듈 상단 대문자 상수 할당: `NAME: Type = value` 또는 `NAME = value`
+    _const_re = re.compile(r'^([A-Z][A-Z0-9_]*)\s*(?::[^=\n]+)?\s*=')
+    i = 0
+    while i < len(_lines) and len(_result) < len(_const_set):
+        _ln = _lines[i]
+        _m = _const_re.match(_ln)
+        if _m and _m.group(1) in _const_set and _m.group(1) not in _result:
+            _name = _m.group(1)
+            _start = i
+            # 괄호 깊이: 열리는 것과 닫히는 것 차이로 범위 추적.
+            _depth = (_ln.count("(") + _ln.count("[") + _ln.count("{")
+                      - _ln.count(")") - _ln.count("]") - _ln.count("}"))
+            i += 1
+            while i < len(_lines) and _depth > 0:
+                _cl = _lines[i]
+                _depth += (_cl.count("(") + _cl.count("[") + _cl.count("{")
+                           - _cl.count(")") - _cl.count("]") - _cl.count("}"))
+                i += 1
+            _result[_name] = "\n".join(_lines[_start:i])
+        else:
+            i += 1
+    return _result
+
+
+# [Purpose]: REJECT#33 Fix — origin/main과 HEAD의 CODEX_CRITICAL_CONSTANTS 소속 상수 SHA 비교.
+# [Assumptions]: origin/main이 로컬에 fetch돼 있어야 한다. 상수 본문 텍스트가 동일하면 변경 없음.
+# [Vulnerability & Risks]: 상수 추출 실패(빈 문자열 반환) 시 before와 after가 모두 빈 값이 되어
+#   변경이 없다고 오판할 수 있다. fail-closed 원칙: 추출 자체가 실패하거나 git show가 실패하면
+#   전체 CODEX_CRITICAL_CONSTANTS를 변경된 것으로 간주하여 CRITICAL을 강제한다.
+# [Improvement]: ast.parse 기반 AST 비교로 공백·주석 차이를 무시하고 의미적 변경만 감지 가능.
+def _detect_changed_critical_constants(changed_files: List[str]) -> List[str]:
+    """origin/main과 HEAD의 CODEX_CRITICAL_CONSTANTS 소속 상수 SHA를 비교하여 변경된 상수 목록을 반환한다.
+
+    - pipeline.py가 changed_files에 없으면 빈 목록 반환 (변경 없음).
+    - git show 실패 / 추출 실패 시 fail-closed: 전체 CODEX_CRITICAL_CONSTANTS를 변경 목록으로 반환.
+    - 상수가 main에 없고 HEAD에도 없으면 변경 없음으로 취급(새 파이프라인에서 상수 미존재 정상).
+    - 상수가 main에 없고 HEAD에만 있거나(신규 추가), main에 있고 HEAD에 없으면(삭제) 변경으로 취급.
+    - 두 텍스트가 일치하면 변경 없음.
+
+    Args:
+        changed_files: 변경된 파일 경로 목록.
+    Returns:
+        변경된 CODEX_CRITICAL_CONSTANTS 소속 상수 이름 목록. 실패 시 전체 목록.
+    """
+    if "pipeline.py" not in (str(f) for f in (changed_files or [])):
+        return []
+    _critical_consts = list(CODEX_CRITICAL_CONSTANTS)
+    # fail-closed fallback: 추출/git 실패 시 전체 상수를 변경된 것으로 간주
+    try:
+        _before_r = subprocess.run(
+            ["git", "show", "origin/main:pipeline.py"],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+        )
+        if _before_r.returncode != 0:
+            return _critical_consts  # fail-closed: git show 실패 → 전체 변경으로 간주
+        _before_src = _before_r.stdout
+        try:
+            _after_src = (BASE_DIR / "pipeline.py").read_text(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            return _critical_consts  # fail-closed: HEAD 소스 읽기 실패
+        _before_bodies = _extract_python_constant_bodies(_before_src, _critical_consts)
+        _after_bodies = _extract_python_constant_bodies(_after_src, _critical_consts)
+        _changed: List[str] = []
+        for _name in _critical_consts:
+            _b = _before_bodies.get(_name, "")
+            _a = _after_bodies.get(_name, "")
+            if _b != _a:
+                # 본문이 다르거나(수정/삭제/신규 추가) → 변경으로 간주
+                _changed.append(_name)
+            # _b == _a (둘 다 빈 문자열 포함): 변경 없음 → 목록에 추가 안 함
+        return _changed
+    except Exception:  # noqa: BLE001 — 예외 발생 시 fail-closed
+        return _critical_consts
+
+
 # [Purpose]: 변경 파일/함수 목록을 trust-chain risk level로 분류한다.
 # [Assumptions]: changed_functions는 변경된 함수명 문자열 목록이며 None 허용(빈 목록으로 처리).
 # [Vulnerability & Risks]: 함수명만으로 판정하므로 동명이인 함수가 있으면 오분류 가능(현 구조상 없음).
@@ -24756,31 +24864,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # IMP-20260712-DAE1 MT-6: Risk 분류 + 모델 정책 + Capability Gate (cache 체크 이전).
     _changed_files_for_risk: List[str] = [str(f) for f in (_preflight_bundle.get("changed_files") or [])]
     _changed_funcs_for_risk: List[str] = [str(f) for f in (_preflight_bundle.get("included_functions") or [])]
-    # REJECT#32 Fix: pipeline.py diff를 직접 재스캔하여 CODEX_CRITICAL_CONSTANTS 소속 상수 변경 감지.
-    #   번들 파일에 상수 원문을 넣으면 bundle_contains_nonce 오탐(CRITICAL=8자 대문자)이 발생하므로
-    #   _cmd_gates_codex_review에서 fresh git diff로 재계산한다 (번들 저장 없이 runtime에서만 사용).
-    _changed_consts_for_risk: List[str] = []
-    if "pipeline.py" in _changed_files_for_risk:
-        try:
-            _const_dr = subprocess.run(
-                ["git", "diff", "origin/main...HEAD", "--unified=0", "--", "pipeline.py"],
-                capture_output=True, text=True, timeout=30,
-                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
-            )
-            if _const_dr.returncode == 0:
-                _crit_const_names = set(CODEX_CRITICAL_CONSTANTS)
-                for _const_ln in _const_dr.stdout.splitlines():
-                    if not (_const_ln.startswith("+") or _const_ln.startswith("-")):
-                        continue
-                    if _const_ln.startswith(("---", "+++")):
-                        continue
-                    _const_stripped = _const_ln[1:].strip()
-                    for _cc in _crit_const_names:
-                        if _const_stripped.startswith(_cc) and _cc not in _changed_consts_for_risk:
-                            _changed_consts_for_risk.append(_cc)
-                            break
-        except Exception:  # noqa: BLE001 — 상수 스캔 실패는 risk 분류에서 무시 (보수적으로 HIGH에 머무름)
-            pass
+    # REJECT#33 Fix: _detect_changed_critical_constants로 origin/main↔HEAD SHA 비교.
+    #   선언 줄 시작 패턴만 검사하던 방식(REJECT#32)은 내부 값 변경(dict entry/list item)을
+    #   감지하지 못해 fail-open 취약점이 있었다. SHA 비교 방식은 어떤 내부 변경도 감지한다.
+    #   실패 시 fail-closed: 전체 CODEX_CRITICAL_CONSTANTS를 변경된 것으로 간주 → CRITICAL 강제.
+    _changed_consts_for_risk: List[str] = _detect_changed_critical_constants(_changed_files_for_risk)
     _risk_info = _classify_codex_review_risk(
         _changed_files_for_risk, _changed_funcs_for_risk, _changed_consts_for_risk
     )

@@ -3183,3 +3183,301 @@ def test_tc46h_no_functions_no_constants_pipeline_py_is_high() -> None:
     assert r["risk_level"] == "HIGH", (
         f"REJECT#32 회귀: 함수/상수 없이 pipeline.py만 변경하면 HIGH여야 함 — got {r['risk_level']!r}"
     )
+
+
+# =========================================================================== #
+# TC-47: REJECT#33 — SHA 비교 기반 상수 내부 값 변경 감지
+# =========================================================================== #
+
+def test_tc47a_extract_constant_bodies_single_line() -> None:
+    """REJECT#33: _extract_python_constant_bodies가 한 줄 상수를 추출한다."""
+    src = 'CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"\nOTHER = 1\n'
+    result = pipeline._extract_python_constant_bodies(src, ["CODEX_MODEL_ROUTER_VERSION"])
+    assert "CODEX_MODEL_ROUTER_VERSION" in result, (
+        "REJECT#33: 한 줄 상수 추출 실패 — _extract_python_constant_bodies 결과에 키 없음"
+    )
+    assert "2.0.0" in result["CODEX_MODEL_ROUTER_VERSION"], (
+        "REJECT#33: 한 줄 상수 추출 결과에 값이 없음"
+    )
+
+
+def test_tc47b_extract_constant_bodies_multiline_dict() -> None:
+    """REJECT#33: _extract_python_constant_bodies가 multi-line dict 상수를 추출한다."""
+    src = textwrap.dedent("""\
+        CODEX_MODEL_POLICIES: dict = {
+            "LOW": {"selected_model": "gpt-5.6-luna"},
+            "CRITICAL": {"selected_model": "gpt-5.6-sol"},
+        }
+        OTHER = 1
+    """)
+    result = pipeline._extract_python_constant_bodies(src, ["CODEX_MODEL_POLICIES"])
+    assert "CODEX_MODEL_POLICIES" in result, (
+        "REJECT#33: multi-line dict 상수 추출 실패"
+    )
+    body = result["CODEX_MODEL_POLICIES"]
+    assert "gpt-5.6-luna" in body and "gpt-5.6-sol" in body, (
+        f"REJECT#33: 추출된 상수 본문에 값이 없음: {body!r}"
+    )
+
+
+def test_tc47c_extract_constant_bodies_multiline_list() -> None:
+    """REJECT#33: _extract_python_constant_bodies가 multi-line list 상수를 추출한다."""
+    src = textwrap.dedent("""\
+        CODEX_CRITICAL_FUNCTIONS: list = [
+            "_cmd_gates_request_accept",
+            "_cmd_gates_accept",
+        ]
+    """)
+    result = pipeline._extract_python_constant_bodies(src, ["CODEX_CRITICAL_FUNCTIONS"])
+    assert "CODEX_CRITICAL_FUNCTIONS" in result, (
+        "REJECT#33: multi-line list 상수 추출 실패"
+    )
+    assert "_cmd_gates_accept" in result["CODEX_CRITICAL_FUNCTIONS"], (
+        "REJECT#33: list 상수 본문에 항목이 없음"
+    )
+
+
+def test_tc47d_detect_changed_constants_internal_value_change() -> None:
+    """REJECT#33 AC#1: CODEX_MODEL_POLICIES 내부 값(nested) 변경 시 CRITICAL로 분류된다.
+
+    선언 줄(CODEX_MODEL_POLICIES = {)은 그대로이고 내부 dict 값만 바꾼 경우를
+    SHA 비교로 감지하여 changed_constants에 포함돼야 한다.
+    """
+    import unittest.mock as mock
+
+    # before: CRITICAL selected_model=gpt-5.6-sol
+    _before_src = textwrap.dedent("""\
+        CODEX_MODEL_POLICIES: dict = {
+            "CRITICAL": {"selected_model": "gpt-5.6-sol"},
+        }
+        CODEX_CRITICAL_FUNCTIONS: list = ["_cmd_gates_accept"]
+        CODEX_ALLOWED_MODELS: frozenset = frozenset({"gpt-5.6-sol"})
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_MODEL_POLICIES"]
+        CODEX_HIGH_RISK_PATHS: list = ["pipeline.py"]
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+
+    # after: CRITICAL selected_model 을 luna로 변조 (선언 줄은 그대로)
+    _after_src = textwrap.dedent("""\
+        CODEX_MODEL_POLICIES: dict = {
+            "CRITICAL": {"selected_model": "gpt-5.6-luna"},
+        }
+        CODEX_CRITICAL_FUNCTIONS: list = ["_cmd_gates_accept"]
+        CODEX_ALLOWED_MODELS: frozenset = frozenset({"gpt-5.6-sol"})
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_MODEL_POLICIES"]
+        CODEX_HIGH_RISK_PATHS: list = ["pipeline.py"]
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 0
+    _mock_result.stdout = _before_src
+
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result), \
+         mock.patch.object(pipeline.Path, "read_text", return_value=_after_src):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    assert "CODEX_MODEL_POLICIES" in changed, (
+        f"REJECT#33 AC#1: CODEX_MODEL_POLICIES 내부 값 변경이 감지되지 않음 — got {changed!r}"
+    )
+    # 이제 CRITICAL로 분류되는지도 검증
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#33 AC#1: CODEX_MODEL_POLICIES 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc47e_detect_changed_constants_list_item_removal() -> None:
+    """REJECT#33 AC#2: CODEX_CRITICAL_FUNCTIONS에서 항목을 제거하면 CRITICAL로 분류된다."""
+    import unittest.mock as mock
+
+    _before_src = textwrap.dedent("""\
+        CODEX_CRITICAL_FUNCTIONS: list = [
+            "_cmd_gates_request_accept",
+            "_cmd_gates_accept",
+        ]
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_CRITICAL_FUNCTIONS"]
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+    # 항목 1개 제거
+    _after_src = textwrap.dedent("""\
+        CODEX_CRITICAL_FUNCTIONS: list = [
+            "_cmd_gates_accept",
+        ]
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_CRITICAL_FUNCTIONS"]
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 0
+    _mock_result.stdout = _before_src
+
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result), \
+         mock.patch.object(pipeline.Path, "read_text", return_value=_after_src):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    assert "CODEX_CRITICAL_FUNCTIONS" in changed, (
+        f"REJECT#33 AC#2: CODEX_CRITICAL_FUNCTIONS 항목 제거가 감지되지 않음 — got {changed!r}"
+    )
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#33 AC#2: CODEX_CRITICAL_FUNCTIONS 항목 제거가 CRITICAL 아님 — got {r!r}"
+    )
+
+
+def test_tc47f_detect_changed_constants_self_protection_removal() -> None:
+    """REJECT#33 AC#3: CODEX_CRITICAL_CONSTANTS에서 자기 보호 항목을 제거해도 CRITICAL로 차단된다."""
+    import unittest.mock as mock
+
+    _before_src = textwrap.dedent("""\
+        CODEX_CRITICAL_CONSTANTS: list = [
+            "CODEX_MODEL_POLICIES",
+            "CODEX_CRITICAL_CONSTANTS",
+        ]
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+    # 자기 보호 항목("CODEX_CRITICAL_CONSTANTS") 제거
+    _after_src = textwrap.dedent("""\
+        CODEX_CRITICAL_CONSTANTS: list = [
+            "CODEX_MODEL_POLICIES",
+        ]
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 0
+    _mock_result.stdout = _before_src
+
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result), \
+         mock.patch.object(pipeline.Path, "read_text", return_value=_after_src):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    # CODEX_CRITICAL_CONSTANTS 자체가 변경됐으므로 changed 목록에 포함됨
+    assert "CODEX_CRITICAL_CONSTANTS" in changed, (
+        f"REJECT#33 AC#3: CODEX_CRITICAL_CONSTANTS 자기 보호 항목 제거가 감지되지 않음 — got {changed!r}"
+    )
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#33 AC#3: CODEX_CRITICAL_CONSTANTS 변경이 CRITICAL 아님 — got {r!r}"
+    )
+
+
+def test_tc47g_detect_changed_constants_failclosed_on_git_error() -> None:
+    """REJECT#33 AC#4: git show 실패 시 fail-closed — 전체 상수를 변경된 것으로 반환한다."""
+    import unittest.mock as mock
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 1  # git show 실패
+    _mock_result.stdout = ""
+
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    # fail-closed: 전체 CODEX_CRITICAL_CONSTANTS를 반환해야 함
+    for _name in pipeline.CODEX_CRITICAL_CONSTANTS:
+        assert _name in changed, (
+            f"REJECT#33 AC#4: git 실패 시 fail-closed 미작동 — {_name!r}이 결과에 없음"
+        )
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#33 AC#4: fail-closed 상수로 CRITICAL이 아님 — got {r!r}"
+    )
+
+
+def test_tc47h_no_pipeline_py_change_returns_empty() -> None:
+    """REJECT#33 회귀 방지: pipeline.py가 없으면 _detect_changed_critical_constants는 빈 목록."""
+    changed = pipeline._detect_changed_critical_constants(["tests/e2e/some_test.py"])
+    assert changed == [], (
+        f"REJECT#33 회귀: pipeline.py 없으면 빈 목록이어야 함 — got {changed!r}"
+    )
+
+
+def test_tc47i_allowed_models_and_high_risk_paths_change_is_critical() -> None:
+    """REJECT#33 AC#2: CODEX_ALLOWED_MODELS, CODEX_HIGH_RISK_PATHS 항목 변경도 CRITICAL."""
+    import unittest.mock as mock
+
+    _before_src = textwrap.dedent("""\
+        CODEX_ALLOWED_MODELS: frozenset = frozenset({"gpt-5.6-sol", "gpt-5.6-luna"})
+        CODEX_HIGH_RISK_PATHS: list = ["pipeline.py", "CLAUDE.md"]
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_ALLOWED_MODELS", "CODEX_HIGH_RISK_PATHS"]
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+    # CODEX_ALLOWED_MODELS에 허가되지 않은 모델 추가, CODEX_HIGH_RISK_PATHS 항목 제거
+    _after_src = textwrap.dedent("""\
+        CODEX_ALLOWED_MODELS: frozenset = frozenset({"gpt-5.6-sol", "gpt-5.6-luna", "gpt-4o"})
+        CODEX_HIGH_RISK_PATHS: list = ["pipeline.py"]
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_ALLOWED_MODELS", "CODEX_HIGH_RISK_PATHS"]
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 0
+    _mock_result.stdout = _before_src
+
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result), \
+         mock.patch.object(pipeline.Path, "read_text", return_value=_after_src):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    assert "CODEX_ALLOWED_MODELS" in changed, (
+        f"REJECT#33 AC#2: CODEX_ALLOWED_MODELS 변경이 감지되지 않음 — got {changed!r}"
+    )
+    assert "CODEX_HIGH_RISK_PATHS" in changed, (
+        f"REJECT#33 AC#2: CODEX_HIGH_RISK_PATHS 변경이 감지되지 않음 — got {changed!r}"
+    )
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#33 AC#2: CODEX_ALLOWED_MODELS/HIGH_RISK_PATHS 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc47j_critical_policy_attributes_unchanged() -> None:
+    """REJECT#33 AC#5: CRITICAL 정책에서 force_review_required=True, cache_allowed=False,
+    actual_verified(최고 검증 수준) 요구가 유지된다.
+    CRITICAL + invocation_verified(actual=unknown)는 unknown_model_critical_blocked로 차단된다.
+    """
+    # (1) CRITICAL 정책 속성 직접 검증
+    policy = pipeline.CODEX_MODEL_POLICIES.get("CRITICAL")
+    assert policy is not None, "REJECT#33 AC#5: CODEX_MODEL_POLICIES에 CRITICAL 키 없음"
+    assert policy.get("force_review_required") is True, (
+        f"REJECT#33 AC#5: CRITICAL.force_review_required이 True 아님 — got {policy!r}"
+    )
+    assert policy.get("cache_allowed") is False, (
+        f"REJECT#33 AC#5: CRITICAL.cache_allowed이 False 아님 — got {policy!r}"
+    )
+    # (2) CRITICAL + invocation_verified(actual_model="unknown")는 unknown_model_critical_blocked
+    _sm = policy["selected_model"]   # gpt-5.6-sol
+    _se = policy["selected_reasoning_effort"]  # max
+    cap_result = pipeline._check_codex_model_capability_match(
+        selected_model=_sm,
+        selected_effort=_se,
+        invoked_model=_sm,   # invoked == selected
+        invoked_effort=_se,
+        actual_model="unknown",  # CLI가 actual을 보고하지 않은 상태
+        actual_effort="unknown",
+        risk_level="CRITICAL",
+        invocation_ok=True,
+    )
+    assert cap_result.get("result") == "BLOCKED", (
+        f"REJECT#33 AC#5: CRITICAL + invocation_verified가 BLOCKED 아님 — got {cap_result!r}"
+    )
+    assert cap_result.get("failure_code") == "unknown_model_critical_blocked", (
+        f"REJECT#33 AC#5: failure_code 불일치 — got {cap_result!r}"
+    )
