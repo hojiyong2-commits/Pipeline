@@ -26495,6 +26495,35 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             f"model_policy_signature={_stored_sig!r} != 재계산된 정책 서명 {_recomputed_sig!r} "
             "(정책 위조 또는 모델 불일치, fail-closed).",
         )
+    # (3c) REJECT#31 Fix: selected_model, selected_reasoning_effort, review_mode를
+    #   재계산된 정책과 직접 비교한다. model_policy_signature 일치만으로는 개별 필드가
+    #   서명과 다른 값으로 저장되는 위조(예: HIGH 서명은 유지하고 selected_model=luna로 변경)를
+    #   막지 못하므로 각 필드를 명시적으로 교차 검증한다 (fail-closed).
+    _stored_selected_model = str(result.get("selected_model", "") or "")
+    _stored_selected_effort = str(result.get("selected_reasoning_effort", "") or "")
+    _stored_review_mode = str(result.get("review_mode", "") or "")
+    _expected_mode = str(_recomputed_policy.get("mode", "") or "")
+    if _stored_selected_model != _expected_model:
+        return _blocked(
+            "codex_review_selected_model_policy_mismatch",
+            f"selected_model={_stored_selected_model!r} != 현재 정책 모델 {_expected_model!r} "
+            f"(risk_level={risk_level}) — 위조된 모델 사용 의심 (fail-closed).",
+        )
+    _stored_se_can = _canonicalize_effort(_stored_selected_effort)
+    _expected_e_can = _canonicalize_effort(_expected_effort)
+    if _stored_se_can != _expected_e_can:
+        return _blocked(
+            "codex_review_selected_effort_policy_mismatch",
+            f"selected_reasoning_effort={_stored_selected_effort!r}(canonical={_stored_se_can!r}) "
+            f"!= 현재 정책 effort {_expected_effort!r}(canonical={_expected_e_can!r}) "
+            f"(risk_level={risk_level}) — 정책 위반 (fail-closed).",
+        )
+    if _stored_review_mode and _expected_mode and _stored_review_mode != _expected_mode:
+        return _blocked(
+            "codex_review_mode_policy_mismatch",
+            f"review_mode={_stored_review_mode!r} != 현재 정책 모드 {_expected_mode!r} "
+            f"(risk_level={risk_level}) — 정책 위반 (fail-closed).",
+        )
     # (4) sanitized codex_cli_command 존재 + placeholder 금지.
     cli_command = str(result.get("codex_cli_command", "") or "").strip()
     if verdict_source == "verified_cache":
@@ -26510,6 +26539,15 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
                 "codex_review_cli_command_placeholder",
                 f"codex_cli_command가 실제 codex exec 명령이 아닙니다: {cli_command or '(없음)'} "
                 "(placeholder 금지, fail-closed).",
+            )
+        # REJECT#31 Fix: CLI command의 --model이 선택 정책 모델과 일치하는지 교차 검증.
+        #   invoked_model == selected_model 검사(하단 step 5)와 다른 층위의 검증이다.
+        #   cli_command 문자열에 실제로 정책 모델이 사용됐는지 확인한다.
+        if _expected_model and f"--model {_expected_model}" not in cli_command:
+            return _blocked(
+                "codex_review_cli_command_model_mismatch",
+                f"codex_cli_command에 '--model {_expected_model}'이 없습니다: "
+                f"{cli_command!r} (risk_level={risk_level}, fail-closed).",
             )
     # (5) IMP-20260712-DAE1 REJECT#3(요구4/9): invoked/actual/verification_level 검증.
     #   selected_model == invoked_model (요구9.7), selected_effort == invoked_effort (요구9.8),

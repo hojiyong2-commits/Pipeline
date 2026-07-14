@@ -2924,3 +2924,144 @@ def test_tc44g_hunk_count_approach_in_source() -> None:
         "REJECT#30 AC#4: _build_codex_semantic_evidence에 '_sel_crit_count' 없음 — "
         "hunk 단위 카운트(Fix 2) 미적용"
     )
+
+
+# =========================================================================== #
+# TC-45: REJECT#31 — 운영 신뢰 검사에서 selected/effort/mode 정책 직접 비교
+# =========================================================================== #
+
+def _make_trust_base_for_risk(risk_level: str) -> dict:
+    """지정 risk level로 정상 통과 가능한 운영 신뢰 기준 결과를 생성한다."""
+    policy = pipeline._build_codex_model_policy(risk_level)
+    sig = pipeline._codex_policy_signature(policy)
+    sel_model = str(policy.get("selected_model", "") or "")
+    sel_effort = str(policy.get("selected_reasoning_effort", "") or "")
+    mode = str(policy.get("mode", "") or "")
+    cli_cmd = (
+        f"codex exec --model {sel_model} -c model_reasoning_effort={sel_effort} "
+        "--sandbox read-only --ephemeral --json -"
+    )
+    return {
+        "status": "APPROVED",
+        "verdict_source": "codex_cli",
+        "acceptance_eligible": True,
+        "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
+        "risk_level": risk_level,
+        "model_policy_signature": sig,
+        "codex_cli_command": cli_cmd,
+        "selected_model": sel_model,
+        "selected_reasoning_effort": sel_effort,
+        "review_mode": mode,
+        "invoked_model": sel_model,
+        "invoked_effort": sel_effort,
+        "actual_model": "unknown",
+        "actual_effort": "unknown",
+        "model_verification_level": (
+            pipeline.CODEX_VERIFICATION_INVOCATION
+            if risk_level in ("HIGH", "LOW", "MEDIUM")
+            else pipeline.CODEX_VERIFICATION_INVOCATION  # CRITICAL: invocation_verified → will be blocked
+        ),
+        "auth_source": "chatgpt",
+    }
+
+
+def test_tc45a_high_luna_selected_but_sol_signature_blocked() -> None:
+    """REJECT#31 AC#1: HIGH 결과에서 정상 HIGH 서명 유지하고 selected_model=luna로 바꾸면 BLOCKED.
+
+    이전 코드는 signature 일치만 검사하여 selected_model 위조를 감지하지 못했다.
+    Fix에서 selected_model != _expected_model 검사가 추가돼야 한다.
+    """
+    result = _make_trust_base_for_risk("HIGH")
+    # signature는 그대로 (correct HIGH sig) but selected_model을 LOW 모델로 위조
+    result["selected_model"] = "gpt-5.6-luna"
+    result["invoked_model"] = "gpt-5.6-luna"
+    # actual_model도 일치시켜 consistency 통과 시도
+    result["actual_model"] = "gpt-5.6-luna"
+    result["model_verification_level"] = pipeline.CODEX_VERIFICATION_ACTUAL
+    result["actual_effort"] = result["selected_reasoning_effort"]
+    # CLI command도 luna로
+    result["codex_cli_command"] = (
+        "codex exec --model gpt-5.6-luna -c model_reasoning_effort=high "
+        "--sandbox read-only --ephemeral --json -"
+    )
+
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#31 AC#1: HIGH+서명정상+selected=luna 위조가 통과됨 — "
+        f"got status={r['status']!r}, failure_code={r.get('failure_code')!r}. "
+        "selected_model vs 정책 모델 직접 비교가 필요합니다."
+    )
+    assert r.get("failure_code") in (
+        "codex_review_selected_model_policy_mismatch",
+        "codex_review_cli_command_model_mismatch",
+        "codex_review_model_mismatch",  # invoked/selected consistency check가 선행할 수 있음
+    ), (
+        f"REJECT#31 AC#1: 예상 failure_code가 아님 — got {r.get('failure_code')!r}"
+    )
+
+
+def test_tc45b_critical_luna_selected_instead_of_sol_blocked() -> None:
+    """REJECT#31 AC#2: CRITICAL 결과에서 sol/max 대신 luna가 selected되면 BLOCKED.
+    (actual_verified를 주장해도 selected_model이 sol이 아니면 차단돼야 한다)
+    """
+    result = _make_trust_base_for_risk("CRITICAL")
+    # selected/invoked를 luna로 위조, actual도 일치
+    result["selected_model"] = "gpt-5.6-luna"
+    result["invoked_model"] = "gpt-5.6-luna"
+    result["actual_model"] = "gpt-5.6-luna"
+    result["model_verification_level"] = pipeline.CODEX_VERIFICATION_ACTUAL
+    result["actual_effort"] = result["selected_reasoning_effort"]
+    result["codex_cli_command"] = (
+        "codex exec --model gpt-5.6-luna -c model_reasoning_effort=max "
+        "--sandbox read-only --ephemeral --json -"
+    )
+
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#31 AC#2: CRITICAL+actual_verified+selected=luna가 통과됨 — "
+        f"got status={r['status']!r}, failure_code={r.get('failure_code')!r}"
+    )
+
+
+def test_tc45c_wrong_review_mode_blocked() -> None:
+    """REJECT#31 AC#3: 저장된 review_mode가 현재 정책과 다르면 BLOCKED."""
+    result = _make_trust_base_for_risk("HIGH")
+    # HIGH 정책의 mode는 "enforce"인데 "observe"로 위조
+    result["review_mode"] = "observe"
+
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#31 AC#3: HIGH review_mode=observe(정책은 enforce)가 통과됨 — "
+        f"got status={r['status']!r}, failure_code={r.get('failure_code')!r}"
+    )
+    assert r.get("failure_code") == "codex_review_mode_policy_mismatch", (
+        f"REJECT#31 AC#3: 예상 failure_code 'codex_review_mode_policy_mismatch' 아님 — "
+        f"got {r.get('failure_code')!r}"
+    )
+
+
+def test_tc45d_normal_high_invocation_verified_passes() -> None:
+    """REJECT#31 AC#4: 정상 HIGH+invocation_verified 결과는 기존처럼 PASS한다.
+    (CRITICAL+invocation_verified는 unknown_model_critical_blocked로 차단됨)
+    """
+    result = _make_trust_base_for_risk("HIGH")
+    # invocation_verified (not actual_verified) — HIGH에서는 허용
+    result["model_verification_level"] = pipeline.CODEX_VERIFICATION_INVOCATION
+
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "PASS", (
+        f"REJECT#31 AC#4: 정상 HIGH+invocation_verified가 BLOCKED됨 — "
+        f"got status={r['status']!r}, failure_code={r.get('failure_code')!r}"
+    )
+
+
+def test_tc45e_normal_low_medium_pass() -> None:
+    """REJECT#31 AC#4: 정상 LOW, MEDIUM 결과도 PASS한다."""
+    for risk in ("LOW", "MEDIUM"):
+        result = _make_trust_base_for_risk(risk)
+        result["model_verification_level"] = pipeline.CODEX_VERIFICATION_INVOCATION
+        r = pipeline._check_codex_review_operational_trust(result)
+        assert r["status"] == "PASS", (
+            f"REJECT#31 AC#4: 정상 {risk} 결과가 BLOCKED됨 — "
+            f"got status={r['status']!r}, failure_code={r.get('failure_code')!r}"
+        )
