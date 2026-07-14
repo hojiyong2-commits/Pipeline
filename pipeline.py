@@ -26449,6 +26449,10 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
     #   selected_model == invoked_model (요구9.7), selected_effort == invoked_effort (요구9.8),
     #   invoked_model이 GPT-5.6 허용 목록에 포함, CLI actual 보고 시 selected 일치,
     #   HIGH/CRITICAL은 model_verification_level이 최소 invocation_verified 이상.
+    # REJECT#26 Fix: effort 비교에 _canonicalize_effort를 적용하여 max/xhigh 동의어를 처리한다.
+    #   _invoke_codex_exec는 정책값 'max'를 CLI 인자 'xhigh'로 변환하여 실행한다.
+    #   CLI가 actual_effort='xhigh'를 보고하거나 invoked_effort가 'xhigh'로 기록된 경우,
+    #   정규형으로 변환한 뒤 selected_effort='max'와 비교해야 일치 판정된다.
     selected_model = str(result.get("selected_model", "") or "")
     selected_effort = str(result.get("selected_reasoning_effort", "") or "")
     invoked_model = str(result.get("invoked_model", "") or "")
@@ -26456,34 +26460,38 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
     actual_model = str(result.get("actual_model", "") or "")
     actual_effort = str(result.get("actual_effort", "") or "")
     verification_level = str(result.get("model_verification_level", "") or "")
+    # REJECT#26: effort 정규화 — max/xhigh 동의어 처리 (선택 정책값과 CLI 전달값 모두 canonical로 변환).
+    _se_can_ot = _canonicalize_effort(selected_effort)
+    _ie_can_ot = _canonicalize_effort(invoked_effort)
+    _ae_can_ot = _canonicalize_effort(actual_effort) if actual_effort not in ("", "unknown") else actual_effort
     if not selected_model or selected_model != invoked_model:
         return _blocked(
             "codex_review_model_mismatch",
             f"selected_model={selected_model or '(없음)'} != invoked_model="
             f"{invoked_model or '(없음)'} (fail-closed).",
         )
-    if not selected_effort or selected_effort != invoked_effort:
+    if not selected_effort or _se_can_ot != _ie_can_ot:
         return _blocked(
             "codex_review_effort_mismatch",
-            f"selected_reasoning_effort={selected_effort or '(없음)'} != invoked_effort="
-            f"{invoked_effort or '(없음)'} (fail-closed).",
+            f"selected_reasoning_effort={selected_effort or '(없음)'}(canonical={_se_can_ot!r}) "
+            f"!= invoked_effort={invoked_effort or '(없음)'}(canonical={_ie_can_ot!r}) (fail-closed).",
         )
     if invoked_model not in CODEX_ALLOWED_MODELS:
         return _blocked(
             "codex_review_invoked_model_disallowed",
             f"invoked_model={invoked_model or '(없음)'}이 GPT-5.6 허용 목록에 없습니다 (fail-closed).",
         )
-    # CLI가 actual을 명시 보고한 경우: selected와 정확히 일치해야 한다.
+    # CLI가 actual을 명시 보고한 경우: selected와 정확히 일치해야 한다(정규형 비교).
     if actual_model and actual_model != "unknown" and actual_model != selected_model:
         return _blocked(
             "codex_review_actual_model_mismatch",
             f"actual_model={actual_model} != selected_model={selected_model} (fail-closed).",
         )
-    if actual_effort and actual_effort != "unknown" and actual_effort != selected_effort:
+    if actual_effort and actual_effort != "unknown" and _ae_can_ot != _se_can_ot:
         return _blocked(
             "codex_review_actual_effort_mismatch",
-            f"actual_effort={actual_effort} != selected_reasoning_effort={selected_effort} "
-            "(fail-closed).",
+            f"actual_effort={actual_effort}(canonical={_ae_can_ot!r}) "
+            f"!= selected_reasoning_effort={selected_effort}(canonical={_se_can_ot!r}) (fail-closed).",
         )
     if verification_level not in {
         CODEX_VERIFICATION_ACTUAL, CODEX_VERIFICATION_INVOCATION, CODEX_VERIFICATION_UNVERIFIED,

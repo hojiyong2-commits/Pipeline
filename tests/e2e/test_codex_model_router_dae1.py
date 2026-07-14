@@ -2029,3 +2029,142 @@ def test_tc39c_write_blocked_invalidation_write_failure_deletes_old_file(
         "REJECT#25 AC#4: _write_json 실패 후 기존 APPROVED 파일이 남아 있음 — "
         "이전 APPROVED 결과가 재사용될 수 있어 trust-chain 위반"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-40: REJECT#26 — _check_codex_review_operational_trust effort 정규화.
+#         _canonicalize_effort를 선택/invoked/actual effort 비교에 적용.
+# --------------------------------------------------------------------------- #
+
+
+def _make_valid_result_for_operational_trust(
+    verdict_source: str = "codex_cli",
+    actual_effort: str = "xhigh",
+    invoked_effort: str = "xhigh",
+    actual_model: str = "gpt-5.6-sol",
+    risk_level: str = "CRITICAL",
+    verification_level: str = "actual_verified",
+) -> dict:
+    """_check_codex_review_operational_trust 테스트용 유효한 기본 result dict."""
+    cli_cmd = (
+        "N/A (cache hit)" if verdict_source == "verified_cache"
+        else "codex exec --model gpt-5.6-sol -c model_reasoning_effort=xhigh --sandbox read-only --ephemeral --json -"
+    )
+    return {
+        "status": "APPROVED",
+        "verdict_source": verdict_source,
+        "acceptance_eligible": True,
+        "router_version": "2.0.0",
+        "risk_level": risk_level,
+        "model_policy_signature": f"{risk_level}:gpt-5.6-sol:max:enforce",
+        "codex_cli_command": cli_cmd,
+        "selected_model": "gpt-5.6-sol",
+        "selected_reasoning_effort": "max",
+        "invoked_model": "gpt-5.6-sol",
+        "invoked_effort": invoked_effort,
+        "actual_model": actual_model,
+        "actual_effort": actual_effort,
+        "model_verification_level": verification_level,
+        "auth_source": "chatgpt",
+    }
+
+
+def test_tc40a_operational_trust_actual_effort_xhigh_passes() -> None:
+    """REJECT#26 AC#1: CRITICAL 정책에서 selected_effort=max, actual_effort=xhigh,
+    model_verification_level=actual_verified인 결과가 운영 신뢰 검사를 PASS한다.
+
+    AC#1: _canonicalize_effort 적용 후 xhigh≡max이므로 actual_effort_mismatch가 발생하지 않는다.
+    """
+    result = _make_valid_result_for_operational_trust(
+        verdict_source="codex_cli",
+        actual_effort="xhigh",
+        invoked_effort="xhigh",
+        actual_model="gpt-5.6-sol",
+        risk_level="CRITICAL",
+        verification_level=pipeline.CODEX_VERIFICATION_ACTUAL,
+    )
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "PASS", (
+        f"REJECT#26 AC#1: selected_effort=max, actual_effort=xhigh → actual_verified 결과가 PASS가 아님\n"
+        f"  result={r}\n"
+        f"  해결: _check_codex_review_operational_trust에서 _canonicalize_effort를 사용해야 함"
+    )
+
+
+def test_tc40b_operational_trust_actual_effort_high_blocked() -> None:
+    """REJECT#26 AC#2: actual_effort=high (max와 비동등)은 codex_review_actual_effort_mismatch로 차단된다.
+
+    AC#2: 정규화 후에도 실제로 다른 값(high ≠ max)은 여전히 차단된다.
+    """
+    result = _make_valid_result_for_operational_trust(
+        verdict_source="codex_cli",
+        actual_effort="high",     # high ≠ max (not an alias)
+        invoked_effort="xhigh",
+        actual_model="gpt-5.6-sol",
+        risk_level="CRITICAL",
+        verification_level=pipeline.CODEX_VERIFICATION_ACTUAL,
+    )
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#26 AC#2: actual_effort=high(≠max)이 BLOCKED가 아님 — {r!r}"
+    )
+    assert r.get("failure_code") == "codex_review_actual_effort_mismatch", (
+        f"REJECT#26 AC#2: failure_code가 codex_review_actual_effort_mismatch가 아님 — "
+        f"got {r.get('failure_code')!r}"
+    )
+
+
+def test_tc40c_operational_trust_verified_cache_xhigh_passes() -> None:
+    """REJECT#26 AC#3: verified_cache 결과에서 actual_effort=xhigh도 운영 신뢰 검사를 PASS한다.
+
+    AC#3: 동일한 max/xhigh 증거를 복원한 캐시 결과도 PASS한다.
+    """
+    result = _make_valid_result_for_operational_trust(
+        verdict_source="verified_cache",
+        actual_effort="xhigh",
+        invoked_effort="max",      # 캐시 재사용 시 invoked_effort는 정책값(max)일 수 있음
+        actual_model="gpt-5.6-sol",
+        risk_level="CRITICAL",
+        verification_level=pipeline.CODEX_VERIFICATION_ACTUAL,
+    )
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "PASS", (
+        f"REJECT#26 AC#3: verified_cache+actual_effort=xhigh 결과가 PASS가 아님\n  result={r}"
+    )
+
+
+def test_tc40d_canonicalize_effort_in_operational_trust_source() -> None:
+    """REJECT#26 AC#4: _check_codex_review_operational_trust 소스에 _canonicalize_effort가 포함된다.
+
+    AC#4: gates codex-review 결과 기록부터 request-accept 직전 신뢰 검사까지
+          _canonicalize_effort가 연결되어 통과하는 회귀 소스 검증.
+    """
+    import inspect
+
+    src = inspect.getsource(pipeline._check_codex_review_operational_trust)
+
+    # Fix: _canonicalize_effort가 operational_trust 소스에 존재해야 한다.
+    assert "_canonicalize_effort" in src, (
+        "REJECT#26 AC#4: _check_codex_review_operational_trust에 _canonicalize_effort가 없음 — "
+        "effort 비교가 정규화되지 않아 actual_effort=xhigh 시 codex_review_actual_effort_mismatch 발생"
+    )
+
+    # codex_review_actual_effort_mismatch가 canonicalized 비교 후에 발생해야 한다.
+    assert "codex_review_actual_effort_mismatch" in src, (
+        "REJECT#26 AC#4: codex_review_actual_effort_mismatch 코드가 operational_trust 소스에 없음"
+    )
+
+    # invocation_ok 없는 기본 high-risk result가 _check_codex_review_operational_trust를 통과하는지 검증.
+    # (request-accept 직전 신뢰 검사 통합 확인)
+    high_result = _make_valid_result_for_operational_trust(
+        verdict_source="codex_cli",
+        actual_effort="unknown",   # actual 미보고 시
+        invoked_effort="max",
+        actual_model="unknown",
+        risk_level="HIGH",
+        verification_level=pipeline.CODEX_VERIFICATION_INVOCATION,
+    )
+    r_high = pipeline._check_codex_review_operational_trust(high_result)
+    assert r_high["status"] == "PASS", (
+        f"REJECT#26 AC#4: HIGH+invocation_verified 결과가 operational_trust PASS가 아님 — {r_high!r}"
+    )
