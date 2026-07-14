@@ -4722,9 +4722,14 @@ class TestTC54CodexBinaryArbitraryPathBlocked:
         _mock_tmpdir.mkdir()
         monkeypatch.setattr(tempfile, "gettempdir", lambda: str(_mock_tmpdir))
 
-        # 3. npm global bin도 tmp_path/npm_bin으로 설정 (fake_bin과 다른 경로)
-        _mock_npm_bin = tmp_path / "npm_bin"
-        _mock_npm_bin.mkdir()
+        # 3. npm global bin은 "허용된 설치 루트"로 설정 (fake_bin과 다른 경로).
+        #    REJECT#18 문제 2: 허용 루트 밖 npm 출력은 npm_global_bin_not_in_allowed_root로
+        #    먼저 차단되므로, 이 테스트(arbitrary_user_path 사유 검증)는 허용 루트를 주입하여
+        #    fake_bin이 npm 미포함 + 시스템 경로 밖 → binary_in_arbitrary_user_path로 떨어지게 한다.
+        if sys.platform == "win32":
+            _mock_npm_bin = Path(r"C:\Program Files\nodejs")  # 하드코딩 허용 루트
+        else:
+            _mock_npm_bin = Path("/usr/bin")  # 허용 루트
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: str(_mock_npm_bin))
 
         # 4. _verify_codex_binary_path_trust 호출
@@ -6101,4 +6106,201 @@ class TestTC19TrustRootIndependence:
         assert _r["trusted"] is True, (
             f"REJECT#17 회귀: 실제 codex 설치가 수정 후 신뢰되지 않음: "
             f"reason={_r.get('untrusted_reason')!r} install_type={_r.get('install_type')!r}"
+        )
+
+
+# =========================================================================== #
+# TC-20: REJECT#18 — npm 출력 신뢰 경계 강화 + lockfile provenance 교차검증
+#
+# 문제 2(수정 A): npm이 반환한 global bin이 "허용된 설치 루트" 밖이면 거부
+#   (npm_global_bin_not_in_allowed_root). 조작된 npm 출력을 표준 Node/npm 루트로 bound한다.
+# 문제 3(수정 B): node_modules 루트의 .package-lock.json에서 @openai/codex integrity를 독립
+#   교차검증. present-but-malformed → fail-closed(npm_lockfile_integrity_invalid),
+#   absent → non-blocking(현재 Windows 설치 = npm 7+ global, lockfile·_integrity 부재 실측).
+#
+# 현재 시스템 호환성: %APPDATA%\npm(prefix) global bin + lockfile/_integrity 부재는 계속 PASS.
+# =========================================================================== #
+class TestTC20Reject18NpmOutputBoundAndLockfileProvenance:
+    """REJECT#18: npm 출력을 허용 루트로 bound하고 lockfile integrity를 독립 교차검증한다."""
+
+    # ---- 문제 2: npm global bin 허용 루트 bound ---- #
+    def test_tc20a_allowed_root_real_npm_bin_is_allowed(self) -> None:
+        """문제 2: 실제 _get_npm_global_bin()이 반환한 global bin은 허용 루트로 판정된다(회귀 방지)."""
+        _nb = pipeline._get_npm_global_bin()
+        if not _nb:
+            return  # npm 미설치 CI → 소프트 스킵
+        assert pipeline._verify_npm_global_bin_allowed(_nb) is True, (
+            f"문제 2: 실제 npm global bin이 허용 루트로 판정되지 않음(현재 설치 파괴): {_nb!r}"
+        )
+
+    def test_tc20b_allowed_root_tmp_fake_bin_rejected(self, tmp_path: "Path") -> None:
+        """문제 2: 임의 디렉토리(공격자 제어 가능)의 global bin은 허용 루트 밖이므로 거부된다."""
+        _rogue = tmp_path / "rogue_npm_bin"
+        _rogue.mkdir()
+        assert pipeline._verify_npm_global_bin_allowed(str(_rogue)) is False, (
+            f"문제 2: 임의 경로 npm global bin이 허용 루트로 신뢰됨(공격 벡터): {_rogue!r}"
+        )
+
+    def test_tc20c_allowed_root_none_raises_empty_false(self) -> None:
+        """문제 2: None 입력 TypeError, 빈 문자열 False(경계값 방어)."""
+        _raised = False
+        try:
+            pipeline._verify_npm_global_bin_allowed(None)  # type: ignore[arg-type]
+        except TypeError:
+            _raised = True
+        assert _raised, "문제 2: None global bin이 TypeError로 방어되지 않음"
+        assert pipeline._verify_npm_global_bin_allowed("") is False, (
+            "문제 2: 빈 문자열 global bin이 신뢰됨(경계값 방어 실패)"
+        )
+
+    def test_tc20d_allowed_root_wired_in_trust_source(self) -> None:
+        """문제 2: _verify_codex_binary_path_trust가 허용 루트 검증과 차단 사유를 배선한다."""
+        import inspect
+        _src = inspect.getsource(pipeline._verify_codex_binary_path_trust)
+        assert "_verify_npm_global_bin_allowed" in _src, (
+            "문제 2: 신뢰 함수가 npm global bin 허용 루트 검증을 배선하지 않음"
+        )
+        assert "npm_global_bin_not_in_allowed_root" in _src, (
+            "문제 2: 허용 루트 밖 fail-closed(차단 사유)가 신뢰 함수에 없음"
+        )
+
+    def test_tc20e_trust_blocks_when_npm_bin_not_in_allowed_root(
+        self, tmp_path: "Path", monkeypatch
+    ) -> None:
+        """문제 2 E2E: npm이 허용 루트 밖 global bin을 반환하면 시스템 바이너리조차 fail-closed된다.
+
+        조작된 npm 출력(임의 경로)은 codex가 시스템 경로에 있어도 신뢰 체인을 차단한다.
+        """
+        _rogue_npm_bin = str(tmp_path / "rogue_npm_bin")  # 허용 루트 밖(비표준)
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: _rogue_npm_bin)
+        # repo/tempdir 밖에 실재하는 시스템 바이너리를 bin_path로 사용.
+        if sys.platform == "win32":
+            _sys_bin = str(
+                Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "where.exe"
+            )
+        else:
+            _sys_bin = "/bin/sh"
+        if not Path(_sys_bin).exists():
+            return  # 시스템 바이너리 부재 환경 → 소프트 스킵
+        _r = pipeline._verify_codex_binary_path_trust(_sys_bin)
+        assert _r["trusted"] is False, (
+            f"문제 2: 조작된 npm 출력인데 신뢰됨(fail-closed 실패): {_r!r}"
+        )
+        assert str(_r.get("untrusted_reason") or "").startswith(
+            "npm_global_bin_not_in_allowed_root"
+        ), f"문제 2: 차단 사유가 npm_global_bin_not_in_allowed_root가 아님: {_r!r}"
+
+    # ---- 문제 3: .package-lock.json integrity provenance ---- #
+    def _make_codex_pkg_root(self, tmp_path: "Path") -> "Path":
+        """tmp에 .../node_modules/@openai/codex 구조를 만들고 pkg_root를 반환한다."""
+        _pkg_root = tmp_path / "node_modules" / "@openai" / "codex"
+        _pkg_root.mkdir(parents=True)
+        return _pkg_root
+
+    def test_tc20f_lockfile_absent_is_non_blocking(self, tmp_path: "Path") -> None:
+        """문제 3: .package-lock.json 부재(npm 7+ 정상 global 설치)는 차단하지 않는다(현재 설치 호환)."""
+        _pkg_root = self._make_codex_pkg_root(tmp_path)
+        _res = pipeline._check_npm_lockfile_integrity(_pkg_root)
+        assert _res["available"] is False and _res["ok"] is True, (
+            f"문제 3: lockfile 부재가 non-blocking이 아님(정상 global 설치를 깸): {_res!r}"
+        )
+
+    def test_tc20g_lockfile_valid_integrity_confirmed(self, tmp_path: "Path") -> None:
+        """문제 3: lockfile에 @openai/codex sha512- integrity가 있으면 provenance 확인(ok=True)."""
+        _pkg_root = self._make_codex_pkg_root(tmp_path)
+        _nm_root = tmp_path / "node_modules"
+        (_nm_root / ".package-lock.json").write_text(
+            '{"name":"root","lockfileVersion":3,"packages":{'
+            '"node_modules/@openai/codex":{"version":"0.144.1",'
+            '"integrity":"sha512-AAAABBBBCCCCDDDDEEEEFFFF=="}}}',
+            encoding="utf-8",
+        )
+        _res = pipeline._check_npm_lockfile_integrity(_pkg_root)
+        assert _res["available"] is True and _res["ok"] is True, (
+            f"문제 3: 유효 sha512- integrity가 확인(ok=True)되지 않음: {_res!r}"
+        )
+
+    def test_tc20h_lockfile_malformed_integrity_blocked(self, tmp_path: "Path") -> None:
+        """문제 3: lockfile integrity가 sha512- 형식이 아니면(조작 양성) available=True, ok=False."""
+        _pkg_root = self._make_codex_pkg_root(tmp_path)
+        _nm_root = tmp_path / "node_modules"
+        (_nm_root / ".package-lock.json").write_text(
+            '{"name":"root","lockfileVersion":3,"packages":{'
+            '"node_modules/@openai/codex":{"version":"0.144.1",'
+            '"integrity":"tampered_no_sri_prefix"}}}',
+            encoding="utf-8",
+        )
+        _res = pipeline._check_npm_lockfile_integrity(_pkg_root)
+        assert _res["available"] is True and _res["ok"] is False, (
+            f"문제 3: 조작된 integrity가 차단 대상(ok=False)으로 판정되지 않음: {_res!r}"
+        )
+
+    def test_tc20i_lockfile_present_no_codex_entry_non_blocking(
+        self, tmp_path: "Path"
+    ) -> None:
+        """문제 3: lockfile은 있으나 @openai/codex 엔트리 부재면 검증 불가 → non-blocking(오탐 회피)."""
+        _pkg_root = self._make_codex_pkg_root(tmp_path)
+        _nm_root = tmp_path / "node_modules"
+        (_nm_root / ".package-lock.json").write_text(
+            '{"name":"root","lockfileVersion":3,"packages":{'
+            '"node_modules/left-pad":{"version":"1.0.0","integrity":"sha512-ZZZZ=="}}}',
+            encoding="utf-8",
+        )
+        _res = pipeline._check_npm_lockfile_integrity(_pkg_root)
+        assert _res["available"] is False and _res["ok"] is True, (
+            f"문제 3: codex 엔트리 부재 lockfile이 non-blocking이 아님: {_res!r}"
+        )
+
+    def test_tc20j_lockfile_none_raises_and_wired_in_trust(self) -> None:
+        """문제 3: None 입력 TypeError + 신뢰 함수가 lockfile provenance를 fail-closed로 배선."""
+        _raised = False
+        try:
+            pipeline._check_npm_lockfile_integrity(None)  # type: ignore[arg-type]
+        except TypeError:
+            _raised = True
+        assert _raised, "문제 3: None pkg_root가 TypeError로 방어되지 않음"
+        import inspect
+        _src = inspect.getsource(pipeline._verify_codex_binary_path_trust)
+        assert "_check_npm_lockfile_integrity" in _src, (
+            "문제 3: _verify_codex_binary_path_trust가 lockfile provenance를 배선하지 않음"
+        )
+        assert "npm_lockfile_integrity_invalid" in _src, (
+            "문제 3: lockfile 조작 fail-closed(차단 사유)가 신뢰 함수에 없음"
+        )
+
+    # ---- 등록 / E2E 공격 / 회귀 ---- #
+    def test_tc20k_new_trust_helpers_registered_in_all(self) -> None:
+        """REJECT#18 신규 trust helper 2종이 CRITICAL 보호 목록에 등록됨(단독 변경 감지)."""
+        for _fn in ("_verify_npm_global_bin_allowed", "_check_npm_lockfile_integrity"):
+            assert _fn in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+                f"REJECT#18: {_fn}이 CRITICAL 보호 목록에 등록되지 않음(우회 가능)"
+            )
+
+    def test_tc20l_complete_fake_codex_environment_blocked(self, tmp_path: "Path") -> None:
+        """E2E 공격: 완전한 가짜 codex 환경(가짜 npm bin + wrapper + JS)을 구성해도 BLOCKED된다."""
+        _fake_npm_bin = tmp_path / "fake_npm_bin"
+        _fake_pkg = _fake_npm_bin / "node_modules" / "@openai" / "codex" / "bin"
+        _fake_pkg.mkdir(parents=True)
+        (_fake_pkg / "codex.js").write_text("#!/usr/bin/env node\n// fake codex\n", encoding="utf-8")
+        _fake_cmd = _fake_npm_bin / ("codex.cmd" if sys.platform == "win32" else "codex")
+        _fake_cmd.write_text(
+            '@node "%~dp0\\node_modules\\@openai\\codex\\bin\\codex.js" %*\n', encoding="utf-8"
+        )
+        _r = pipeline._verify_codex_binary_path_trust(str(_fake_cmd))
+        assert _r["trusted"] is False, (
+            f"E2E: 완전한 가짜 codex 환경이 신뢰됨(공격 성공): {_r!r}"
+        )
+        assert _r.get("untrusted_reason"), (
+            f"E2E: 가짜 환경 차단인데 untrusted_reason이 비어 있음: {_r!r}"
+        )
+
+    def test_tc20m_real_install_still_trusted_regression(self) -> None:
+        """회귀 방지: 실제 설치된 codex(있으면)는 REJECT#18 수정 후에도 계속 신뢰된다."""
+        _codex = pipeline.shutil.which("codex")
+        if not _codex:
+            return
+        _r = pipeline._verify_codex_binary_path_trust(_codex)
+        assert _r["trusted"] is True, (
+            f"REJECT#18 회귀: 실제 codex 설치가 수정 후 신뢰되지 않음: "
+            f"reason={_r.get('untrusted_reason')!r}"
         )

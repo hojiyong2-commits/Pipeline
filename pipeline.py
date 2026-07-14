@@ -2420,6 +2420,11 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_verify_npm_binary_is_system_path",
     "_check_package_json_npm_integrity",
     "_verify_direct_native_ownership",
+    # IMP-20260712-DAE1 REJECT#18: trust-root 독립성 강화 helper 2종 추가 등록.
+    #   npm global bin 허용 루트 bound(문제 2), .package-lock.json integrity provenance(문제 3).
+    #   단독 변경 시 npm 출력 신뢰 경계와 lockfile provenance 교차검증을 우회할 수 있어 CRITICAL.
+    "_verify_npm_global_bin_allowed",
+    "_check_npm_lockfile_integrity",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -9018,6 +9023,113 @@ def _verify_npm_binary_is_system_path(npm_path: str) -> bool:
     return False
 
 
+# [Purpose]: REJECT#18 문제 2 — npm이 반환한 global bin 디렉토리가 "허용된 설치 루트" 안에 있는지
+#            검증한다. PATH 주입/조작된 npm이 임의 경로(공격자 제어 디렉토리)를 global bin으로
+#            반환해도, 그 반환값이 표준 Node/npm 설치 루트 밖이면 신뢰하지 않는다(fail-closed).
+#            _verify_npm_binary_is_system_path(문제 1: npm 바이너리 위치)와 독립적인 2차 경계로,
+#            npm 출력(prefix/bin)을 알려진 설치 루트로 bound하여 자기참조 신뢰를 좁힌다.
+# [Assumptions]: 공식 npm global bin은 Windows에서 prefix 자체(%APPDATA%\npm 또는
+#            <ProgramFiles>\nodejs)이고, Unix에서는 prefix/bin(/usr/bin, /usr/local/bin,
+#            /opt/homebrew/bin, ~/.nvm/versions/node/*/bin)이다.
+# [Vulnerability & Risks]: 비표준(그러나 합법) 커스텀 prefix(예: 사용자 지정 npm prefix)를 쓰는
+#            환경에서는 오탐(False)으로 fail-closed되어 codex 신뢰가 거부될 수 있다. 안전측 오류이며
+#            필요 시 허용 루트를 확장한다. %APPDATA%\npm 자체는 사용자 쓰기 가능하나, 문제 1(npm
+#            바이너리 시스템 경로)·binary 내용 검증·JS/native SHA 체인과 결합하여 심층 방어를 형성한다.
+# [Improvement]: OS 패키지 매니저 소유권/코드 서명으로 루트 자체의 무결성까지 검증하면 경로 bound
+#            heuristic보다 강한 보장을 얻는다.
+def _verify_npm_global_bin_allowed(npm_global_bin: str) -> bool:
+    """REJECT#18 문제 2: npm이 반환한 global bin이 허용된 설치 루트 내에 있는지 확인한다.
+
+    _get_npm_global_bin()이 반환한 디렉토리(Windows: prefix, Unix: prefix/bin)를 표준 Node/npm
+    설치 루트 목록과 대조한다. 목록 밖이면 조작된 npm 출력으로 간주하여 False(미신뢰)를 반환하고,
+    상위(_verify_codex_binary_path_trust)에서 npm_global_bin_not_in_allowed_root로 fail-closed한다.
+
+    허용 루트:
+      - Windows: %APPDATA%\\npm, <ProgramFiles>\\nodejs, <ProgramFiles(x86)>\\nodejs,
+                 <ProgramW6432>\\nodejs, nvm-for-windows(NVM_SYMLINK, NVM_HOME\\*)
+      - Unix: /usr/bin, /usr/local/bin, /bin, /opt/homebrew/bin,
+              ~/.nvm/versions/node/*/bin
+
+    Args:
+        npm_global_bin: _get_npm_global_bin()이 반환한 global bin 디렉토리 경로.
+    Returns:
+        허용 설치 루트 내(동일 또는 하위)이면 True, 아니면 False.
+    Raises:
+        TypeError: npm_global_bin이 None이거나 str이 아닌 경우.
+    """
+    if npm_global_bin is None:
+        raise TypeError("npm_global_bin must not be None")
+    if not isinstance(npm_global_bin, str):
+        raise TypeError(
+            f"npm_global_bin must be str, got {type(npm_global_bin).__name__}"
+        )
+    if not npm_global_bin.strip():
+        # 빈 경로는 신뢰 불가(경계값: 빈 문자열 → 미신뢰).
+        return False
+    try:
+        _p = Path(os.path.abspath(npm_global_bin)).resolve()
+    except Exception:  # noqa: BLE001
+        return False
+
+    _allowed_roots: List[Path] = []
+    if sys.platform == "win32":
+        _appdata = os.environ.get("APPDATA")
+        if _appdata:
+            _allowed_roots.append(Path(_appdata) / "npm")
+        for _envk in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+            _pf = os.environ.get(_envk)
+            if _pf:
+                _allowed_roots.append(Path(_pf) / "nodejs")
+        _allowed_roots.append(Path(r"C:\Program Files\nodejs"))
+        # nvm-for-windows: 활성 심볼릭 링크(NVM_SYMLINK) 및 버전별 설치(NVM_HOME\*).
+        _nvm_sym = os.environ.get("NVM_SYMLINK")
+        if _nvm_sym:
+            _allowed_roots.append(Path(_nvm_sym))
+        _nvm_home = os.environ.get("NVM_HOME")
+        if _nvm_home:
+            try:
+                for _ver in Path(_nvm_home).glob("*"):
+                    if _ver.is_dir():
+                        _allowed_roots.append(_ver)
+            except Exception:  # noqa: BLE001
+                pass
+    else:
+        _allowed_roots.extend([
+            Path("/usr/bin"), Path("/usr/local/bin"), Path("/bin"),
+            Path("/opt/homebrew/bin"),
+        ])
+        _home = os.environ.get("HOME") or ""
+        if not _home:
+            try:
+                _home = str(Path.home())
+            except Exception:  # noqa: BLE001
+                _home = ""
+        if _home:
+            # nvm: ~/.nvm/versions/node/<ver>/bin
+            _nvm_dir = os.environ.get("NVM_DIR") or str(Path(_home) / ".nvm")
+            try:
+                _node_root = Path(_nvm_dir) / "versions" / "node"
+                if _node_root.exists():
+                    for _ver in _node_root.glob("*"):
+                        _allowed_roots.append(_ver / "bin")
+            except Exception:  # noqa: BLE001
+                pass
+
+    for _root in _allowed_roots:
+        try:
+            _root_abs = Path(os.path.abspath(str(_root))).resolve()
+        except Exception:  # noqa: BLE001
+            continue
+        if _p == _root_abs:
+            return True
+        try:
+            _p.relative_to(_root_abs)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 def _get_npm_global_bin() -> Optional[str]:
     """REJECT#10: npm global bin 디렉토리를 쿼리한다.
 
@@ -9350,6 +9462,118 @@ def _check_package_json_npm_integrity(pkg_root: "Path") -> Dict[str, Any]:
         return _out
 
 
+# [Purpose]: REJECT#18 문제 3 — npm 7+ global 설치가 node_modules 루트에 남기는 .package-lock.json의
+#            _integrity(sha512- 서브리소스 해시)를 package.json 자기참조와 독립적으로 교차검증한다.
+#            npm이 레지스트리 tarball 다운로드 시 계산·기록한 해시이므로, 수동 복사/조작된 패키지를
+#            자기참조 SHA와 무관하게 탐지하는 provenance 소스가 된다.
+# [Assumptions]: .package-lock.json은 global node_modules 루트(pkg_root의 두 단계 상위, 스코프
+#            패키지는 <node_modules>/.package-lock.json)에 위치할 수 있다. packages 맵의 키는
+#            "node_modules/@openai/codex" 형태, 또는 dependencies["@openai/codex"].integrity로 노출된다.
+# [Vulnerability & Risks]: 실측 결과 현재 `npm install -g @openai/codex`(npm 7+)는 global
+#            node_modules 루트에 .package-lock.json을 생성하지 않고 package.json._integrity도
+#            남기지 않으며 `npm list --json`에도 integrity 필드가 없다. 따라서 lockfile "부재"를
+#            하드 fail-closed하면 모든 정상 global 설치가 깨진다(현재 Windows 설치 = 필수 PASS 대상).
+#            → 부재는 non-blocking(available=False, ok=True). 오직 lockfile이 존재하고 @openai/codex
+#            엔트리에 integrity가 명시되어 있으나 sha512- 형식이 아닌 조작 양성 증거일 때만 fail-closed.
+#            신뢰의 하한은 문제 1/2(npm 바이너리 시스템 경로 + global bin 허용 루트 bound)와 JS/native
+#            SHA 3-layer 재검증이 담당한다(depth-in-defense).
+# [Improvement]: 온라인이면 registry.npmjs.org의 @openai/codex tarball SHA를 실제 질의하여 오프라인
+#            조작까지 탐지할 수 있으나, 네트워크 의존이 CI/오프라인에서 fail-closed 오탐을 유발한다.
+def _check_npm_lockfile_integrity(pkg_root: "Path") -> Dict[str, Any]:
+    """REJECT#18 문제 3: node_modules 루트의 .package-lock.json에서 @openai/codex의 npm
+    레지스트리 integrity(sha512- SRI)를 독립적으로 교차검증한다.
+
+    현재 시스템 호환성(중요): npm 7+ `npm install -g`는 global node_modules 루트에 .package-lock.json을
+    생성하지 않을 수 있다(실측 확인). 따라서 lockfile 부재나 엔트리 부재는 차단하지 않는다(non-blocking).
+    lockfile이 존재하고 @openai/codex 엔트리에 integrity가 기록되어 있으나 sha512- 유효 형식이 아니면
+    조작 양성 증거로 보고 available=True, ok=False로 반환하여 상위에서 fail-closed 차단한다.
+
+    Args:
+        pkg_root: @openai/codex 패키지 루트(.../node_modules/@openai/codex).
+    Returns:
+        {"available": bool, "ok": bool, "integrity": str, "source": str, "reason": str}.
+        - available=False, ok=True: lockfile/엔트리 부재 또는 파싱 불가(정상 global 설치) → 미차단.
+        - available=True, ok=True: 유효 sha512- integrity 확인(강한 provenance).
+        - available=True, ok=False: integrity가 존재하나 sha512- 형식이 아님 → 상위에서 차단.
+    Raises:
+        TypeError: pkg_root가 None인 경우.
+    """
+    if pkg_root is None:
+        raise TypeError("pkg_root must not be None")
+    _out: Dict[str, Any] = {
+        "available": False, "ok": True,
+        "integrity": "", "source": "", "reason": "",
+    }
+    try:
+        if not isinstance(pkg_root, Path):
+            _out["reason"] = f"invalid_pkg_root_type:{type(pkg_root).__name__}"
+            return _out
+        # lockfile 후보: 스코프 패키지(.../node_modules/@openai/codex)는 node_modules 루트가
+        #   pkg_root.parent.parent. 비스코프 fallback으로 pkg_root.parent도 확인한다.
+        _candidates: List[Path] = []
+        try:
+            _candidates.append(pkg_root.parent.parent / ".package-lock.json")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            _candidates.append(pkg_root.parent / ".package-lock.json")
+        except Exception:  # noqa: BLE001
+            pass
+        _lock_path: "Optional[Path]" = None
+        for _c in _candidates:
+            try:
+                if _c.exists():
+                    _lock_path = _c
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        if _lock_path is None:
+            # lockfile 부재 — 정상 global 설치(npm 7+)로 간주, non-blocking.
+            _out["reason"] = "lockfile_absent(global_install_ok)"
+            return _out
+        _out["source"] = str(_lock_path)
+        _raw = _read_text_fallback(_lock_path)  # 4-encoding fallback
+        _data = json.loads(_raw)
+        if not isinstance(_data, dict):
+            _out["reason"] = "lockfile_not_object"
+            return _out
+        # integrity 추출: packages 맵(키가 @openai/codex로 끝남) 또는 dependencies["@openai/codex"].
+        _integrity = ""
+        _pkgs = _data.get("packages")
+        if isinstance(_pkgs, dict):
+            for _k, _v in _pkgs.items():
+                if isinstance(_k, str) and _k.endswith("@openai/codex") and isinstance(_v, dict):
+                    _integrity = str(_v.get("integrity", "") or "")
+                    if _integrity:
+                        break
+        if not _integrity:
+            _deps = _data.get("dependencies")
+            if isinstance(_deps, dict):
+                _cx = _deps.get("@openai/codex")
+                if isinstance(_cx, dict):
+                    _integrity = str(_cx.get("integrity", "") or "")
+        if not _integrity:
+            # lockfile은 있으나 codex integrity 엔트리 부재 — 검증 불가, non-blocking(오탐 회피).
+            _out["reason"] = "lockfile_present_no_codex_integrity"
+            return _out
+        _out["available"] = True
+        _out["integrity"] = _integrity
+        # npm SRI 표준 형식: "sha512-<base64>" (sha256/sha384도 허용). 형식 위반은 조작 양성 증거.
+        if _integrity.split("-", 1)[0].lower() in ("sha512", "sha384", "sha256") and "-" in _integrity:
+            _out["ok"] = True
+            _out["reason"] = "lockfile_integrity_confirmed"
+        else:
+            _out["ok"] = False
+            _out["reason"] = f"lockfile_integrity_malformed:{_integrity[:60]}"
+        return _out
+    except Exception as _exc:  # noqa: BLE001
+        # 파싱/IO 실패는 non-blocking(정상 설치를 깨지 않음) — 문제 1/2/SHA 체인이 신뢰를 담당.
+        _out["available"] = False
+        _out["ok"] = True
+        _out["reason"] = f"lockfile_check_error:{type(_exc).__name__}"
+        return _out
+
+
 # [Purpose]: REJECT#17 수정 C — install_type=direct_native(시스템 경로 직접 native 설치)를 경로
 #            접두사만으로 신뢰하지 않고, 파일 위치·소유권으로 추가 검증한다. 시스템 경로에 사용자가
 #            직접 쓴 바이너리(공격자 제어 가능)를 차단한다.
@@ -9496,6 +9720,12 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         _npm_bin = _get_npm_global_bin()
         _trusted_by_npm = False
         if _npm_bin:
+            # REJECT#18 문제 2: npm이 반환한 global bin이 허용된 설치 루트 밖이면 거부(fail-closed).
+            #   조작된/주입된 npm이 임의 경로를 global bin으로 반환해도 표준 설치 루트 밖이면 신뢰하지
+            #   않는다. 문제 1(_verify_npm_binary_is_system_path)과 독립적인 2차 경계이다.
+            if not _verify_npm_global_bin_allowed(_npm_bin):
+                _r["untrusted_reason"] = f"npm_global_bin_not_in_allowed_root:{_npm_bin}"
+                return _r
             _npm_bin_p = Path(_npm_bin).resolve()
             _in_npm_dir = False
             for _cand_bin in (_bin_p_lexical, _bin_p_resolved):
@@ -9584,6 +9814,17 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
             #   필드 부재(정상 global 설치)는 non-blocking; _resolved가 비레지스트리면 fail-closed.
             try:
                 _pkg_root_for_integrity = _js_ep.parent.parent
+                # REJECT#18 문제 3: .package-lock.json 독립 provenance 교차검증.
+                #   lockfile이 존재하고 @openai/codex integrity가 sha512- 형식이 아니면(조작 양성 증거)
+                #   fail-closed. lockfile/엔트리 부재(npm 7+ 정상 global 설치)는 non-blocking으로
+                #   현재 Windows 설치 호환을 보존한다(실측: 현재 설치에 lockfile·_integrity 모두 부재).
+                _lock = _check_npm_lockfile_integrity(_pkg_root_for_integrity)
+                if _lock.get("available") and not _lock.get("ok"):
+                    _r["trusted"] = False
+                    _r["untrusted_reason"] = (
+                        f"npm_lockfile_integrity_invalid:{_lock.get('reason', '')}"
+                    )
+                    return _r
                 _integ = _check_package_json_npm_integrity(_pkg_root_for_integrity)
                 if _integ.get("available") and not _integ.get("ok"):
                     _r["trusted"] = False
