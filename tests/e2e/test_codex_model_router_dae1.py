@@ -1734,6 +1734,26 @@ def test_tc37c_write_blocked_invalidation_called_before_model_mismatch_die() -> 
 # TC-38: REJECT#23 — auth_source 검증 강화 + snapshot 실패 specific failure_code + 문서 일치.
 # --------------------------------------------------------------------------- #
 
+def test_tc38d_write_blocked_invalidation_in_critical_functions() -> None:
+    """REJECT#24 AC#1: _write_codex_review_blocked_invalidation이 CODEX_CRITICAL_FUNCTIONS에 등록되어
+    review bundle에 before/after SHA가 포함된다.
+
+    AC#2: evidence_complete는 누락된 helper 구현이 있으면 false가 되도록 CRITICAL로 분류 필수.
+    """
+    assert "_write_codex_review_blocked_invalidation" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+        "REJECT#24 AC#1: _write_codex_review_blocked_invalidation이 CODEX_CRITICAL_FUNCTIONS에 없음 — "
+        "review bundle에 구현 diff가 포함되지 않아 Codex가 신뢰 판정 불가"
+    )
+    assert "_finish_codex_review_error" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+        "REJECT#24 AC#1: _finish_codex_review_error가 CODEX_CRITICAL_FUNCTIONS에 없음 — "
+        "acceptance_eligible 제어 함수의 구현 diff가 누락됨"
+    )
+    assert "_check_codex_chatgpt_auth" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+        "REJECT#24 AC#1: _check_codex_chatgpt_auth가 CODEX_CRITICAL_FUNCTIONS에 없음 — "
+        "인증 검증 함수의 구현 diff가 누락됨"
+    )
+
+
 def test_tc38a_auth_source_invalid_blocked_in_source() -> None:
     """REJECT#23 AC#1: _cmd_gates_codex_review 소스에 auth_source 기본값 폴백이 없고
     'chatgpt'가 아닌 경우 codex_auth_source_invalid BLOCKED invalidation을 저장하는 코드가 존재한다.

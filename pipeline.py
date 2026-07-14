@@ -2362,6 +2362,13 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     # IMP-20260712-DAE1 REJECT#10: 진입점 함수 추가 — 이 함수가 semantic evidence 완전성 검증과
     #   trust gate를 모두 제어하므로 CRITICAL 분류 필수.
     "_cmd_gates_codex_review",
+    # IMP-20260712-DAE1 REJECT#24: 신규 trust-chain helper 추가 — before/after SHA가 bundle에 포함돼야 함.
+    #   _write_codex_review_blocked_invalidation: acceptance_eligible=false BLOCKED 결과 원자 기록(REJECT#22 신규).
+    #   _finish_codex_review_error: CLI 실행 오류 시 ERROR 결과 기록, acceptance_eligible 제어.
+    #   _check_codex_chatgpt_auth: ChatGPT Plus 인증 검증 — 인증 실패 시 trust chain 전체 차단.
+    "_write_codex_review_blocked_invalidation",
+    "_finish_codex_review_error",
+    "_check_codex_chatgpt_auth",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
