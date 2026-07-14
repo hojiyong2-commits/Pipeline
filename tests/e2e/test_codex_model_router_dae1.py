@@ -4294,46 +4294,47 @@ class TestTC52CriticalPythonDiffChunking:
             )
 
     def test_tc52d_budget_overflow_causes_evidence_incomplete(self) -> None:
-        """REJECT#8 AC#2/AC#4: budget이 작아서 CRITICAL Python 청크 일부가 제거되면
+        """REJECT#8/11 AC#2/AC#4: budget이 작아서 CRITICAL Python 청크 일부가 제거되면
         truncated_critical_hunks > 0 이고 evidence_complete=False가 된다.
 
-        기존 CODEX_REVIEW_BUNDLE_BUDGET_CHARS를 임시로 작게 패치해 overflow를 유발한다.
+        REJECT#11: _build_codex_semantic_evidence를 올바른 인수(pipeline_id,
+        changed_files, included_functions)로 호출하고 환경 제약 skip 없이 실패시킨다.
         """
+        import json
+        from pathlib import Path
+
+        # 실제 bundle에서 changed_files / included_functions 추출
+        try:
+            ar = Path(".pipeline/active_run.json")
+            ptr = json.loads(ar.read_text(encoding="utf-8"))
+            _sp = ptr.get("state_path")
+            state = json.loads(Path(_sp).read_text(encoding="utf-8"))
+            pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+        except Exception:
+            state = {}
+            pid = "IMP-20260712-DAE1"
+
+        _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
+        assert _bundle_path, "TC-52d: _build_codex_review_bundle 실패"
+        bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
+        _changed_files = list(bundle.get("changed_files", []) or [])
+        _included_fns = list(bundle.get("included_functions", []) or [])
+        assert _changed_files, "TC-52d: changed_files 비어있음"
+
         _orig_budget = pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS
         try:
             # 극소 budget(100자)으로 패치 → CRITICAL hunk가 들어가지 않아야 함
             pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS = 100
-            try:
-                import json
-                from pathlib import Path
-
-                try:
-                    ar = Path(".pipeline/active_run.json")
-                    ptr = json.loads(ar.read_text(encoding="utf-8"))
-                    _sp = ptr.get("state_path")
-                    state = json.loads(Path(_sp).read_text(encoding="utf-8"))
-                    pid = state.get("pipeline_id", "IMP-20260712-DAE1")
-                except Exception:
-                    state = {}
-                    pid = "IMP-20260712-DAE1"
-
-                sem = pipeline._build_codex_semantic_evidence(state, pid)
-                # budget 100자에서는 CRITICAL hunk가 제거되어야 함
-                assert sem["truncated_critical_hunks"] > 0, (
-                    "REJECT#8 AC#2: budget=100에서도 truncated_critical_hunks=0 — "
-                    "budget 초과 감지 로직이 동작하지 않음"
-                )
-                assert sem["evidence_complete"] is False, (
-                    "REJECT#8 AC#2: budget=100에서도 evidence_complete=True — "
-                    "fail-closed 동작 실패"
-                )
-            except Exception as _e:
-                # _build_codex_semantic_evidence가 예외를 던지는 경우도 허용 (git 없는 환경 등)
-                if "evidence_complete" in str(_e) or "truncated" in str(_e):
-                    raise
-                # 다른 예외(git 없음, 파일 없음 등)는 테스트 환경 제약으로 스킵
-                import pytest
-                pytest.skip(f"_build_codex_semantic_evidence 실행 환경 제약: {_e}")
+            sem = pipeline._build_codex_semantic_evidence(pid, _changed_files, _included_fns)
+            # budget 100자에서는 CRITICAL hunk가 제거되어야 함
+            assert sem["truncated_critical_hunks"] > 0, (
+                "REJECT#8/11 AC#2: budget=100에서도 truncated_critical_hunks=0 — "
+                "budget 초과 감지 로직이 동작하지 않음"
+            )
+            assert sem["evidence_complete"] is False, (
+                "REJECT#8/11 AC#2: budget=100에서도 evidence_complete=True — "
+                "fail-closed 동작 실패"
+            )
         finally:
             pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS = _orig_budget
 
@@ -4605,4 +4606,63 @@ class TestTC54CodexBinaryArbitraryPathBlocked:
         # 이전 fail-open 패턴("SHA 재검증 실패는 fail-open")이 제거됐는지 확인
         assert "SHA 재검증 실패는 fail-open" not in _src, (
             "REJECT#10 AC4: request-accept에 여전히 fail-open 주석/패턴이 남아 있음"
+        )
+
+
+class TestTC55CriticalPythonDiffCoverageRequired:
+    """REJECT#11 검증: CRITICAL Python 파일은 실제 diff hunk가 있어야 evidence_complete=True가 된다.
+
+    AC1: diff 실패/빈 출력 + SHA만 있는 CRITICAL Python 파일 → evidence_complete=False.
+    AC2: changed_files의 모든 CRITICAL 파일이 실제 diff 없으면 missing_critical_files에 기록.
+    AC3: file_sha_attestations만으로 _diff_ok 또는 evidence_complete=True가 되지 않음.
+    AC4: test_tc52d가 skip 없이 올바른 인수로 실행되어 budget overflow를 실제 검증함.
+    """
+
+    def test_tc55a_sha_only_not_sufficient_for_evidence_complete_in_source(self) -> None:
+        """REJECT#11 AC3: _build_codex_semantic_evidence 소스에서 SHA만으로는 _diff_ok=True가 되지 않는다."""
+        import inspect
+        _src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+        # REJECT#11: SHA 수집 후 _diff_ok=True 하지 않음을 주석으로 명시해야 함
+        assert "SHA 수집 성공만으로 _diff_ok=True" in _src or "SHA 아닌 실제 diff 청크 수집 성공" in _src, (
+            "REJECT#11 AC3: _build_codex_semantic_evidence에 SHA-only _diff_ok 차단 주석 없음"
+        )
+
+    def test_tc55b_hunk_covered_files_uses_part_base_in_source(self) -> None:
+        """REJECT#11 AC2: missing_critical_files 계산이 _hunk_covered_files(PART base명) 기준이다."""
+        import inspect
+        _src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+        assert "_hunk_covered_files" in _src, (
+            "REJECT#11 AC2: _build_codex_semantic_evidence에 _hunk_covered_files 없음"
+        )
+        assert "PART " in _src and "split" in _src, (
+            "REJECT#11 AC2: PART suffix 제거 로직 없음 — multi-chunk 파일 커버 판정 오류 가능"
+        )
+
+    def test_tc55c_evidence_complete_requires_diff_hunks_not_sha(self) -> None:
+        """REJECT#11 AC3: evidence_complete 조건에서 file_sha_attestations 단독 허용이 제거됐다."""
+        import inspect
+        _src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+        # REJECT#11 전: "(len(sem["diff_hunks"]) > 0 or len(sem["file_sha_attestations"]) > 0)"
+        # REJECT#11 후: "len(sem["diff_hunks"]) > 0" 만 있어야 함
+        assert "len(sem[\"file_sha_attestations\"]) > 0" not in _src or \
+               "or len(sem[\"file_sha_attestations\"])" not in _src, (
+            "REJECT#11 AC3: evidence_complete 조건에 여전히 file_sha_attestations 단독 허용 있음"
+        )
+        # evidence_complete 계산에 diff_hunks > 0 조건이 있어야 함
+        assert 'len(sem["diff_hunks"]) > 0' in _src, (
+            "REJECT#11 AC3: evidence_complete에 diff_hunks > 0 조건 없음"
+        )
+
+    def test_tc55d_missing_critical_files_excludes_only_hunk_covered(self) -> None:
+        """REJECT#11 AC2: missing_critical_files가 _hunk_covered_files 기준(SHA 불포함)이다."""
+        import inspect
+        _src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+        # REJECT#11 전: "f not in _hunk_covered and f not in _sha_covered"
+        # REJECT#11 후: "f not in _hunk_covered_files" (SHA 제외)
+        assert "f not in _hunk_covered_files" in _src, (
+            "REJECT#11 AC2: missing_critical_files가 _hunk_covered_files 기준이 아님"
+        )
+        # 이전 패턴(SHA를 커버 조건으로 허용) 제거 확인
+        assert "f not in _hunk_covered and f not in _sha_covered" not in _src, (
+            "REJECT#11 AC2: 이전 SHA 허용 패턴이 여전히 남아 있음"
         )

@@ -9461,7 +9461,10 @@ def _build_codex_semantic_evidence(
                         "changed": _b_file_sha != _a_file_sha,
                     }
                     if _a_file_sha:
-                        _diff_ok = True  # SHA 증거 수집 성공 → evidence 진행 가능
+                        # REJECT#11: SHA 수집 성공만으로 _diff_ok=True 하지 않음.
+                        # SHA attestation은 무결성 결합용이며 semantic evidence를 대체하지 않는다.
+                        # _diff_ok는 실제 diff 청크 수집 후에만 True로 설정.
+                        pass
                 except Exception:  # noqa: BLE001
                     pass  # SHA 수집 실패는 missing_critical_files에서 감지됨
                 # REJECT#7: 실제 unified diff 수집 — Codex가 decorator/import/assert 변경을 볼 수 있어야 함.
@@ -9470,6 +9473,8 @@ def _build_codex_semantic_evidence(
                 #   → 45K 청크로 분할하여 전체 diff를 _all_hunks에 추가.
                 #   budget 초과로 청크가 제거되면 budget trimmer가 truncated_critical_hunks를 증가시켜
                 #   evidence_complete=False로 차단한다 (fail-closed).
+                # REJECT#11: diff 청크가 추가된 경우에만 _diff_ok=True로 설정.
+                _before_hunk_count = len(_all_hunks)
                 _PY_CRIT_CHUNK_SIZE = 45000  # 청크당 45K (part 헤더 포함 후 50K 이내 안전 마진)
                 try:
                     _py_diff_r = subprocess.run(
@@ -9506,7 +9511,10 @@ def _build_codex_semantic_evidence(
                                     "hunk_sha256": hashlib.sha256(_ck_hdr.encode("utf-8")).hexdigest(),
                                 })
                 except Exception:  # noqa: BLE001
-                    pass  # diff 수집 실패는 SHA attestation이 대체
+                    pass  # diff 수집 실패는 missing_critical_files에서 감지됨
+                # REJECT#11: SHA가 아닌 실제 diff 청크 수집 성공 시에만 _diff_ok=True
+                if len(_all_hunks) > _before_hunk_count:
+                    _diff_ok = True
                 continue
             _nonpy_crit_expected.append(_cpf_n)
             _npdr = subprocess.run(
@@ -9708,27 +9716,34 @@ def _build_codex_semantic_evidence(
         _ores = []
     sem["oracle_results"] = _ores
 
-    # 5) evidence_complete: 모든 변경 파일이 diff hunk 또는 SHA attestation에 커버되었고
+    # 5) evidence_complete: 모든 CRITICAL 변경 파일이 실제 diff hunk에 커버되었고
     #    budget 초과 없을 때 True.
-    #    REJECT#35: non-critical 예산 초과 → False. CRITICAL Python 파일은 SHA attestation 허용.
+    #    REJECT#11: SHA attestation은 무결성 증거로만 사용하며 evidence_complete 판정에 불충분.
+    #    CRITICAL 파일은 반드시 실제 diff hunk가 있어야 evidence_complete=True가 된다.
     #    fail-closed: changed_files가 비었고 CRITICAL 파일도 없으면 False.
     _has_critical_file = any(_is_codex_critical_file(f) for f in _cf)
-    # REJECT#35: CRITICAL 파일 중 diff도 SHA도 없는 누락 파일 식별.
-    # pipeline.py는 section 1에서 function-level hunk로 처리되므로
-    #   hunk의 "function" 키가 함수명(예: "_build_codex_semantic_evidence")임.
-    #   파일 경로 "pipeline.py" 자체는 hunk_covered에 없으므로
-    #   section 1이 성공한 경우(_diff_ok가 pipeline.py diff로 True가 된 경우) 커버 파일에 추가.
-    _hunk_covered = {h["function"] for h in sem["diff_hunks"]}
+    # REJECT#11: _hunk_covered_files = 실제 diff hunk가 있는 파일의 base명 집합.
+    # pipeline.py는 function-level hunk로 처리되며 함수명이 "function" 키다.
+    # 다른 CRITICAL Python 파일은 file 경로가 "function" 키 또는 "[PART N/M]" suffix 형태.
+    # "[PART N/M]" suffix를 제거해 base 파일명을 추출한다.
+    _hunk_covered_files: set = set()
+    for _h in sem["diff_hunks"]:
+        _fn_str: str = _h.get("function", "") or ""
+        # PART suffix 제거 (예: "tests/e2e/foo.py [PART 2/4]" → "tests/e2e/foo.py")
+        _fn_base = _fn_str.split(" [PART ")[0]
+        _hunk_covered_files.add(_fn_base)
+    # pipeline.py: CRITICAL hunk가 하나라도 있으면 pipeline.py 자체를 커버됨으로 처리
+    if "pipeline.py" in _cf and any(h.get("is_critical") for h in sem["diff_hunks"]):
+        _hunk_covered_files.add("pipeline.py")
     _sha_covered = set(sem["file_sha_attestations"].keys())
-    # pipeline.py가 changed_files에 있고 section 1 diff가 성공했으면 파일 커버로 추가.
-    if "pipeline.py" in _cf and len([h for h in sem["diff_hunks"] if h.get("is_critical")]) > 0:
-        _hunk_covered.add("pipeline.py")
     _crit_changed = [
         f.replace("\\", "/") for f in _cf if _is_codex_critical_file(f.replace("\\", "/"))
     ]
+    # REJECT#11: CRITICAL 파일은 실제 diff hunk 기준으로 누락 판정
+    # (SHA attestation만으로는 missing에서 제외되지 않음)
     sem["missing_critical_files"] = [
         f for f in _crit_changed
-        if f not in _hunk_covered and f not in _sha_covered
+        if f not in _hunk_covered_files
     ]
     if not _cf and not _has_critical_file:
         sem["evidence_complete"] = False
@@ -9738,7 +9753,7 @@ def _build_codex_semantic_evidence(
             and _truncated_crit == 0
             and _truncated_noncrit == 0
             and len(sem["missing_critical_files"]) == 0
-            and (len(sem["diff_hunks"]) > 0 or len(sem["file_sha_attestations"]) > 0)
+            and len(sem["diff_hunks"]) > 0  # REJECT#11: file_sha_attestations만으로는 불충분
         )
 
     # 6) semantic_evidence_sha256: 원문 포함 semantic 섹션의 결정적 integrity digest.
