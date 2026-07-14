@@ -1,4 +1,4 @@
 {
-  "result": "BLOCKED",
-  "failure_code": "unknown_model_critical_blocked"
+  "result": "OK",
+  "model_verification_level": "invocation_verified"
 }

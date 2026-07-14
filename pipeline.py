@@ -7943,6 +7943,22 @@ def _codex_review_result_path() -> Path:
     return PIPELINE_CI_DIR / "codex_review_result.json"
 
 
+def _codex_review_blocked_flag_path() -> Path:
+    """BLOCKED 상태를 나타내는 보조 플래그 파일 경로(Fix 5: BLOCKED 영속성).
+
+    _write_codex_review_blocked_invalidation이 메인 JSON 쓰기 전에 먼저 이 파일을 작성한다.
+    메인 JSON 쓰기가 실패해도 이 플래그 파일이 남아 request-accept를 차단한다.
+    APPROVED 결과가 성공적으로 기록되면 이 파일을 삭제하여 정상 흐름을 복구한다.
+
+    Returns:
+        .pipeline/codex_review_blocked.flag 절대 경로.
+    """
+    env_state = os.environ.get("PIPELINE_STATE_PATH")
+    if env_state:
+        return Path(env_state).resolve().parent / ".pipeline" / "codex_review_blocked.flag"
+    return PIPELINE_CI_DIR / "codex_review_blocked.flag"
+
+
 # [Purpose]: BUG-20260702-E69E — Codex Review 입력 bundle(codex_review_bundle.json)의 경로를
 #            producer(_build_codex_review_bundle)와 consumer(_codex_snapshot_identity)가 동일하게
 #            해석하도록 단일 헬퍼로 통일한다. _codex_review_result_path와 동일한 PIPELINE_STATE_PATH
@@ -8837,22 +8853,15 @@ def _check_codex_model_capability_match(
     _level = _compute_model_verification_level(
         _sm, _se, _im, _ie, _am, _ae, invocation_ok,
     )
-    # (요구4) HIGH/CRITICAL은 최소 invocation_verified 이상이어야 한다. unverified는 차단.
-    if _risk in {"HIGH", "CRITICAL"} and _level == CODEX_VERIFICATION_UNVERIFIED:
-        return {"result": "BLOCKED", "failure_code": "model_verification_unverified"}
-    # REJECT#21: CRITICAL은 actual_verified만 허용한다 (invocation_verified 불충분).
-    #   actual_model=unknown이면 CLI가 실제 사용 모델을 보고하지 않은 것이므로
-    #   CRITICAL 검토 품질을 보증할 수 없어 unknown_model_critical_blocked로 차단한다.
-    #   HIGH의 invocation_verified 허용 정책은 별도로 유지된다.
-    #   주의: CLI 실행 자체는 허용하되, acceptance 자격(_check_codex_review_operational_trust)에서도
-    #   동일 규칙이 적용되어 invocation_verified CRITICAL 결과가 request-accept를 통과하지 못한다.
-    if _risk == "CRITICAL" and _level != CODEX_VERIFICATION_ACTUAL:
-        # REJECT#21 deadlock fix: model_verification_level을 포함하여 기록에 사용 가능하게 한다.
-        #   cmd 경로에서 CLI 실행 자체는 이미 완료됐으므로 verdict를 수집·기록하되,
-        #   acceptance_eligible=false를 강제하고 최종 종료 시 BLOCKED를 보고한다.
+    # (요구4, REJECT#12 fix) _check_codex_capability_gate에 위임.
+    #   REJECT#12: CRITICAL도 invocation_verified 허용. unverified만 차단.
+    #   HIGH/CRITICAL에서 invocation_verified 이상을 보장하는 단일 진입점.
+    #   이전 REJECT#21 블록(unknown_model_critical_blocked)은 삭제됨 — 정책 번복.
+    _cap_gate = _check_codex_capability_gate(_am, _risk, _level)
+    if _cap_gate.get("result") == "BLOCKED":
         return {
             "result": "BLOCKED",
-            "failure_code": "unknown_model_critical_blocked",
+            "failure_code": _cap_gate.get("failure_code", "model_verification_unverified"),
             "model_verification_level": _level,
         }
     return {"result": "OK", "model_verification_level": _level}
@@ -8940,6 +8949,41 @@ def _verify_npm_wrapper_content(bin_path: "Path") -> bool:
         return False
 
 
+def _find_codex_js_entrypoint(wrapper_path: "Path") -> "Optional[Path]":
+    """npm .cmd 래퍼에서 JS 진입점 파일 경로를 추출한다(REJECT#12 AC#3).
+
+    Windows .cmd 래퍼에서 '%~dp0\\...\\*.js' 패턴을 찾아 실제 파일 경로로 변환한다.
+    파싱 실패 또는 JS 파일 미존재 시 None을 반환한다(best-effort).
+
+    Returns:
+        Path: JS 진입점 파일 경로. 찾지 못하면 None.
+    """
+    try:
+        if not isinstance(wrapper_path, Path):
+            return None
+        _suf = wrapper_path.suffix.lower()
+        if _suf not in (".cmd", ".bat"):
+            return None
+        _txt = wrapper_path.read_text(encoding="utf-8", errors="replace")
+        # '%~dp0\...\*.js' 패턴 추출 (따옴표 포함)
+        import re as _re
+        for _m in _re.finditer(r'"%~dp0\\([^"]+\.js)"', _txt, _re.IGNORECASE):
+            _rel = _m.group(1)
+            _candidate = wrapper_path.parent / _rel
+            if _candidate.exists():
+                return _candidate.resolve()
+        # 절대 경로 인용 패턴 fallback
+        for _m in _re.finditer(r'"([^"]+\.js)"', _txt):
+            _cand_str = _m.group(1)
+            if not _cand_str.startswith("%"):
+                _cand = Path(_cand_str)
+                if _cand.exists():
+                    return _cand.resolve()
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
     """REJECT#10: 공식 npm 설치 또는 시스템 경로만 신뢰; 임의 사용자 경로는 fail-closed.
 
@@ -8966,6 +9010,9 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         "sha256": "",
         "untrusted_reason": None,
         "install_source": "unknown",
+        # REJECT#12 AC#3: JS 진입점 경로/SHA (npm 래퍼용; native .exe는 빈 값)
+        "js_entrypoint_path": "",
+        "js_entrypoint_sha256": "",
     }
     try:
         _bin_p = Path(bin_path).resolve()
@@ -9041,6 +9088,15 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
             return _r
 
         _r.update({"trusted": True, "path": str(_bin_p), "sha256": _sha})
+        # REJECT#12 AC#3: npm 래퍼인 경우 JS 진입점을 추가로 해시한다.
+        try:
+            _js_ep = _find_codex_js_entrypoint(_bin_p)
+            if _js_ep is not None:
+                _js_sha = hashlib.sha256(_js_ep.read_bytes()).hexdigest()
+                _r["js_entrypoint_path"] = str(_js_ep)
+                _r["js_entrypoint_sha256"] = _js_sha
+        except Exception:  # noqa: BLE001 — JS 진입점 해시 실패는 non-fatal(best-effort)
+            pass
         return _r
     except Exception as _exc:  # noqa: BLE001
         _r["untrusted_reason"] = f"path_verification_error:{type(_exc).__name__}:{_exc}"
@@ -9243,22 +9299,29 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
     return "\n".join(lines)
 
 
-def _check_codex_capability_gate(actual_model: str, risk_level: str) -> Dict[str, Any]:
-    """actual_model=unknown + CRITICAL → fail-closed BLOCKED (REJECT#21: CRITICAL 전용).
+def _check_codex_capability_gate(
+    actual_model: str,
+    risk_level: str,
+    verification_level: str = CODEX_VERIFICATION_UNVERIFIED,
+) -> Dict[str, Any]:
+    """HIGH/CRITICAL에서 최소 invocation_verified 이상 필요(IMP-20260712-DAE1 REJECT#12 정책).
 
-    REJECT#21: CRITICAL만 actual_verified 필수. HIGH는 invocation_verified 허용(별도 정책).
-    actual_model=unknown이면 CLI가 실제 사용 모델을 보고하지 않은 것이므로 CRITICAL
-    검토 품질을 보증할 수 없어 차단한다.
+    REJECT#12 fix: CRITICAL도 invocation_verified 허용. actual_verified 필수 요건 제거.
+    gpt-5.6-* CLI는 actual_model/effort를 보고하지 않으므로 actual_verified는 달성 불가.
+    unverified(명시 인자 실행 불확실 또는 exit 비정상)만 HIGH/CRITICAL에서 차단한다.
 
     Args:
-        actual_model: 감지된 실제 모델명("unknown"이면 확인 불가).
+        actual_model: 감지된 실제 모델명 (REJECT#12: 미사용으로 전환, 호환성 보존용 유지).
         risk_level: 현재 risk level (대소문자 무관).
+        verification_level: _compute_model_verification_level 결과.
     Returns:
         {"result": "OK"} 또는
-        {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}.
+        {"result": "BLOCKED", "failure_code": "model_verification_unverified"}.
     """
-    if str(actual_model) == "unknown" and str(risk_level).upper() == "CRITICAL":
-        return {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
+    _risk = str(risk_level or "").upper()
+    _vl = str(verification_level or CODEX_VERIFICATION_UNVERIFIED)
+    if _risk in {"HIGH", "CRITICAL"} and _vl == CODEX_VERIFICATION_UNVERIFIED:
+        return {"result": "BLOCKED", "failure_code": "model_verification_unverified"}
     return {"result": "OK"}
 
 
@@ -25739,28 +25802,21 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             )
             if _match.get("result") == "BLOCKED":
                 _cap_fc = str(_match.get("failure_code", "model_mismatch"))
-                if _cap_fc != "unknown_model_critical_blocked":
-                    # REJECT#22: model_mismatch — specific failure_code로 결과를 덮어 기록한다.
-                    #   AC#1: force-review model_mismatch 시 기존 APPROVED 결과가 더 이상 effective하지 않다.
-                    #   AC#2: actual_model_mismatch에서 BLOCKED + acceptance_eligible=false로 저장된다.
-                    #   (review_in_progress 기록은 이미 위에서 완료됨 — 이 쪽이 더 specific한 값으로 갱신)
-                    _write_codex_review_blocked_invalidation(
-                        pipeline_id, _cap_fc,
-                        prev_reject_count, prev_cli_error_count,
-                        _review_bundle_sha256, _risk_level_str, _model_policy,
-                    )
-                    # 모델 불일치/허용 목록 외: CLI 실행 전에 차단(verdict 없음, fail-closed).
-                    _die(
-                        f"[BLOCKED] failure_code={_cap_fc}\n"
-                        f"  selected={_selected_model_now!r}/{_selected_effort_now!r} "
-                        f"invoked={_invoked_model_str!r}/{_invoked_effort_str!r} "
-                        f"actual={_actual_model_str!r}/{_actual_effort_str!r} "
-                        f"(risk_level={_risk_level_str!r}) — Codex Review 차단 (fail-closed)."
-                    )
-                # REJECT#21 deadlock fix: unknown_model_critical_blocked — CLI는 이미 실행됐으므로
-                # verdict를 수집·기록하되 acceptance_eligible=false를 강제한다.
-                # (_check_codex_model_capability_match 주석의 "CLI 실행 자체는 허용" 의도 구현)
-                _capability_blocked_failure_code = _cap_fc
+                # REJECT#12 fix: 모든 capability BLOCKED는 즉시 종료한다.
+                #   REJECT#21 deadlock fix(unknown_model_critical_blocked 특수 경로)는 삭제됨.
+                #   policy가 invocation_verified를 CRITICAL에서도 허용하므로 deadlock이 불필요.
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, _cap_fc,
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
+                _die(
+                    f"[BLOCKED] failure_code={_cap_fc}\n"
+                    f"  selected={_selected_model_now!r}/{_selected_effort_now!r} "
+                    f"invoked={_invoked_model_str!r}/{_invoked_effort_str!r} "
+                    f"actual={_actual_model_str!r}/{_actual_effort_str!r} "
+                    f"(risk_level={_risk_level_str!r}) — Codex Review 차단 (fail-closed)."
+                )
             _model_verification_level = str(
                 _match.get("model_verification_level", CODEX_VERIFICATION_UNVERIFIED)
             )
@@ -26305,6 +26361,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # REJECT#9 AC#3: 검증된 Codex 실행 파일 절대 경로 + SHA-256을 결과에 기록
     result["codex_binary_path"] = str(_codex_binary_trust.get("path", "") or "")
     result["codex_binary_sha256"] = str(_codex_binary_trust.get("sha256", "") or "")
+    # REJECT#12 AC#3: JS 진입점 경로/SHA를 결과에 추가 기록 (npm 래퍼용; 없으면 빈 문자열)
+    result["codex_js_entrypoint_path"] = str(_codex_binary_trust.get("js_entrypoint_path", "") or "")
+    result["codex_js_entrypoint_sha256"] = str(_codex_binary_trust.get("js_entrypoint_sha256", "") or "")
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
     # github_canonical_pr_body_sha256 필드는 acceptance_request에서 가져온다 (fail-closed).
@@ -26360,6 +26419,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     result_path = _codex_review_result_path()
     result_path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(result_path, result)
+    # REJECT#12 Fix 5: APPROVED 결과가 성공적으로 기록되면 보조 플래그 파일을 삭제한다.
+    try:
+        _codex_review_blocked_flag_path().unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001
+        pass
 
     # BUG-20260702-E69E MT-6/REJECT-1: append-only 이력 기록 (attempt_id + snapshot_identity).
     _append_codex_history({
@@ -26928,9 +26992,23 @@ def _write_codex_review_blocked_invalidation(
         # REJECT#9 AC#3: 검증된 Codex 실행 파일 절대 경로 + SHA-256
         "codex_binary_path": "",
         "codex_binary_sha256": "",
+        # REJECT#12 AC#3: JS 진입점 경로/SHA (BLOCKED 시 빈 값)
+        "codex_js_entrypoint_path": "",
+        "codex_js_entrypoint_sha256": "",
     }
     result_path = _codex_review_result_path()
     result_path.parent.mkdir(parents=True, exist_ok=True)
+    # REJECT#12 Fix 5: 보조 플래그 파일을 메인 JSON 쓰기 전에 먼저 기록한다.
+    #   메인 JSON 쓰기가 실패해도 이 플래그 파일이 남아 request-accept를 차단한다.
+    _flag_path = _codex_review_blocked_flag_path()
+    try:
+        _flag_path.parent.mkdir(parents=True, exist_ok=True)
+        _flag_path.write_text(
+            f'{{"failure_code":"{failure_code}","pipeline_id":"{pipeline_id}"}}',
+            encoding="utf-8",
+        )
+    except Exception:  # noqa: BLE001 — 플래그 쓰기 실패는 메인 JSON 경로를 계속 진행
+        pass
     try:
         _write_json(result_path, result)
     except Exception:  # noqa: BLE001
@@ -27206,16 +27284,9 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             f"risk_level={risk_level}에서 model_verification_level=unverified — "
             "최소 invocation_verified가 필요합니다 (fail-closed).",
         )
-    # REJECT#21: CRITICAL은 actual_verified만 허용. invocation_verified/unverified는 차단.
-    #   actual_model=unknown이면 CLI가 실제 사용 모델을 보고하지 않은 것이므로 CRITICAL
-    #   검토 품질을 보증할 수 없다. HIGH의 invocation_verified 허용 정책과 명확히 분리.
-    if risk_level == "CRITICAL" and verification_level != CODEX_VERIFICATION_ACTUAL:
-        return _blocked(
-            "unknown_model_critical_blocked",
-            f"risk_level=CRITICAL에서 model_verification_level={verification_level} — "
-            "actual_verified 증거(actual_model=선택값)만 허용합니다. "
-            "actual_model=unknown은 CRITICAL에서 차단됩니다 (fail-closed).",
-        )
+    # REJECT#12 fix: REJECT#21 블록(unknown_model_critical_blocked) 삭제.
+    #   CRITICAL도 invocation_verified면 통과한다. gpt-5.6-sol CLI는 actual_model을 보고하지 않으므로
+    #   actual_verified는 달성 불가 — 이를 필수로 요구하면 CRITICAL 검토가 영구 차단된다.
     # REJECT#27 Fix B: actual_verified를 주장하는 경우 actual_model/actual_effort가 실제로
     #   알려져 있고 선택 정책과 일치하는지 강제 재검증한다.
     #   저장된 verification_level=actual_verified만 신뢰하지 않고, actual_model/actual_effort
@@ -27233,7 +27304,16 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
                 "model_verification_level=actual_verified이지만 actual_effort=unknown — "
                 "actual_verified는 CLI가 실제 effort를 보고해야 합니다 (fail-closed).",
             )
-    # (6) auth_source는 chatgpt여야 한다(요구9: ChatGPT Plus 인증 승계).
+    # (6) REJECT#12 AC#3: codex_binary_path가 기록됐는데 codex_binary_sha256이 비어 있으면 차단.
+    _bin_path_rec = str(result.get("codex_binary_path", "") or "")
+    _bin_sha_rec = str(result.get("codex_binary_sha256", "") or "")
+    if _bin_path_rec and not _bin_sha_rec:
+        return _blocked(
+            "codex_review_binary_sha_missing",
+            f"codex_binary_path={_bin_path_rec!r} 가 기록됐으나 "
+            "codex_binary_sha256이 비어 있습니다 (fail-closed).",
+        )
+    # (7) auth_source는 chatgpt여야 한다(요구9: ChatGPT Plus 인증 승계).
     if str(result.get("auth_source", "") or "") != "chatgpt":
         return _blocked(
             "codex_review_auth_source_not_chatgpt",
@@ -28014,6 +28094,22 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             "   파이프라인 내부 산출물이며 PR diff에 포함될 수 없습니다.)"
         )
 
+    # REJECT#12 Fix 5: BLOCKED 보조 플래그 파일이 존재하면 즉시 차단한다.
+    #   메인 JSON 쓰기가 실패해도 플래그 파일이 남아 fail-closed를 보장한다.
+    _blocked_flag = _codex_review_blocked_flag_path()
+    if _blocked_flag.exists():
+        try:
+            _flag_content = json.loads(_blocked_flag.read_text(encoding="utf-8", errors="replace"))
+            _flag_fc = _flag_content.get("failure_code", "blocked_flag_present")
+        except Exception:  # noqa: BLE001
+            _flag_fc = "blocked_flag_present"
+        _die(
+            f"[BLOCKED] failure_code={_flag_fc}\n"
+            "  Codex Review BLOCKED 플래그 파일이 존재합니다.\n"
+            "  이전 codex-review 실행이 실패 또는 BLOCKED 상태로 종료됐습니다.\n"
+            "  gates codex-review를 재실행하여 새 검토를 완료하세요."
+        )
+
     # REJECT#9/10 AC#3/4: Codex 실행 파일 경로 신뢰 + SHA 재검증 (fail-closed).
     # gates codex-review 시점에 기록된 binary path/sha256이 현재도 유효한지 확인한다.
     # 신뢰 실패 / SHA 변경 / SHA 계산 불가 / 예외 모두 BLOCKED (fail-closed).
@@ -28050,6 +28146,26 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                         f"  현재 SHA: {_cur_sha[:16]}...\n"
                         "  gates codex-review를 재실행하여 최신 binary로 검토를 갱신하세요."
                     )
+                # REJECT#12 AC#3: JS 진입점 SHA 재검증 (npm 래퍼용; 없으면 skip).
+                _stored_js_sha = str(_cx_res.get("codex_js_entrypoint_sha256", "") or "")
+                if _stored_js_sha:
+                    _cur_js_sha = _cur_trust.get("js_entrypoint_sha256", "")
+                    if _cur_js_sha and _cur_js_sha != _stored_js_sha:
+                        _die(
+                            "[BLOCKED] failure_code=codex_js_entrypoint_sha_changed\n"
+                            f"  Codex JS 진입점 SHA가 변경됐습니다.\n"
+                            f"  저장 시점 SHA: {_stored_js_sha[:16]}...\n"
+                            f"  현재 SHA: {_cur_js_sha[:16]}...\n"
+                            "  gates codex-review를 재실행하여 최신 JS 파일로 검토를 갱신하세요."
+                        )
+            # REJECT#12 AC#3: 바이너리 경로는 있는데 SHA가 없으면 차단 (fail-closed).
+            elif _stored_bin_path and not _stored_bin_sha:
+                _die(
+                    "[BLOCKED] failure_code=codex_binary_sha_missing\n"
+                    f"  codex_binary_path={_stored_bin_path!r} 가 기록됐으나 "
+                    "codex_binary_sha256이 비어 있습니다.\n"
+                    "  gates codex-review를 재실행하세요."
+                )
         except (json.JSONDecodeError, OSError) as _exc:
             # REJECT#10: JSON 파싱 실패 / 파일 읽기 실패도 fail-closed
             _die(

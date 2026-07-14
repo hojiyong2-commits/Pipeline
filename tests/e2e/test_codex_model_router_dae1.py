@@ -926,19 +926,20 @@ def test_tc28d_cache_probe_unknown_not_blocked_source_check() -> None:
 
 
 def test_tc28e_tc11_oracle_unknown_model_critical_gate() -> None:
-    """REJECT#12 AC#3: TC-11 oracle — actual_model=unknown + CRITICAL 시
-    _check_codex_capability_gate가 expected.json과 일치하는 BLOCKED를 반환해야 한다."""
-    # oracle input
+    """REJECT#12 AC#1+AC#3: TC-11 oracle — actual_model=unknown + CRITICAL + verification_level 미지정(unverified) 시
+    _check_codex_capability_gate는 BLOCKED with model_verification_unverified를 반환해야 한다.
+    REJECT#12 fix: 이전 unknown_model_critical_blocked는 model_verification_unverified로 변경됨."""
+    # oracle input (verification_level 미지정 → CODEX_VERIFICATION_UNVERIFIED 기본값)
     actual_model = "unknown"
     risk_level = "CRITICAL"
-    # oracle expected: {"result": "BLOCKED", "failure_code": "unknown_model_critical_blocked"}
     result = pipeline._check_codex_capability_gate(actual_model, risk_level)
     assert result.get("result") == "BLOCKED", (
-        f"REJECT#12 TC-11 oracle: actual_model=unknown+CRITICAL은 BLOCKED여야 한다. "
+        f"REJECT#12 TC-11 oracle: CRITICAL+unverified는 BLOCKED여야 한다. "
         f"got result={result.get('result')!r}"
     )
-    assert result.get("failure_code") == "unknown_model_critical_blocked", (
-        f"REJECT#12 TC-11 oracle: failure_code는 unknown_model_critical_blocked여야 한다. "
+    # REJECT#12 fix: failure_code가 model_verification_unverified로 변경됨
+    assert result.get("failure_code") == "model_verification_unverified", (
+        f"REJECT#12 TC-11 oracle: failure_code는 model_verification_unverified여야 한다. "
         f"got failure_code={result.get('failure_code')!r}"
     )
 
@@ -1441,10 +1442,10 @@ def test_tc34c_single_invalid_json_is_parse_failure() -> None:
 # --------------------------------------------------------------------------- #
 # TC-35: REJECT#21 — CRITICAL은 actual_verified만 허용 (invocation_verified 차단).
 # --------------------------------------------------------------------------- #
-def test_tc35a_critical_invocation_verified_blocked_in_capability_match() -> None:
-    """REJECT#21 AC#1+AC#5: CRITICAL risk + actual_model=unknown + invocation_ok=True 시
-    _check_codex_model_capability_match는 unknown_model_critical_blocked를 반환해야 한다.
-    tc11 Oracle을 실제 명령 경로(_check_codex_model_capability_match)에 연결한 회귀 테스트."""
+def test_tc35a_critical_invocation_verified_passes_capability_match() -> None:
+    """REJECT#12 AC#1: CRITICAL risk + actual_model=unknown + invocation_ok=True 시
+    _check_codex_model_capability_match는 OK(invocation_verified)를 반환해야 한다.
+    REJECT#12 fix: REJECT#21(unknown_model_critical_blocked) 정책 번복 — invocation_verified로 충분."""
     r = pipeline._check_codex_model_capability_match(
         "gpt-5.6-sol", "max",    # selected
         "gpt-5.6-sol", "max",    # invoked (일치)
@@ -1452,19 +1453,20 @@ def test_tc35a_critical_invocation_verified_blocked_in_capability_match() -> Non
         "CRITICAL",               # risk_level
         invocation_ok=True,
     )
-    assert r["result"] == "BLOCKED", (
-        f"REJECT#21 AC#1: CRITICAL+unknown이 BLOCKED가 아님 — "
-        f"invocation_verified가 CRITICAL을 통과함\n  result={r}"
+    assert r["result"] == "OK", (
+        f"REJECT#12 AC#1: CRITICAL+invocation_verified가 BLOCKED됨 — "
+        f"invocation_verified는 CRITICAL에서도 OK여야 한다.\n  result={r}"
     )
-    assert r["failure_code"] == "unknown_model_critical_blocked", (
-        f"REJECT#21 AC#1: failure_code가 unknown_model_critical_blocked가 아님\n  "
-        f"failure_code={r.get('failure_code')!r}"
+    assert r.get("model_verification_level") == pipeline.CODEX_VERIFICATION_INVOCATION, (
+        f"REJECT#12 AC#1: model_verification_level이 invocation_verified가 아님\n  "
+        f"level={r.get('model_verification_level')!r}"
     )
 
 
-def test_tc35b_critical_invocation_verified_blocked_in_operational_trust() -> None:
-    """REJECT#21 AC#3: request-accept 경로의 _check_codex_review_operational_trust에서도
-    CRITICAL+invocation_verified는 unknown_model_critical_blocked로 차단돼야 한다."""
+def test_tc35b_critical_invocation_verified_passes_operational_trust() -> None:
+    """REJECT#12 AC#1: request-accept 경로의 _check_codex_review_operational_trust에서
+    CRITICAL+invocation_verified는 PASS여야 한다.
+    REJECT#12 fix: REJECT#21 블록(unknown_model_critical_blocked) 제거."""
     _fake_result = {
         "status": "APPROVED",
         "verdict_source": "codex_cli",
@@ -1483,12 +1485,8 @@ def test_tc35b_critical_invocation_verified_blocked_in_operational_trust() -> No
         "auth_source": "chatgpt",
     }
     r = pipeline._check_codex_review_operational_trust(_fake_result)
-    assert r["status"] == "BLOCKED", (
-        f"REJECT#21 AC#3: CRITICAL+invocation_verified 결과가 operational_trust를 통과함\n  result={r}"
-    )
-    assert r["failure_code"] == "unknown_model_critical_blocked", (
-        f"REJECT#21 AC#3: failure_code가 unknown_model_critical_blocked가 아님\n  "
-        f"failure_code={r.get('failure_code')!r}"
+    assert r["status"] == "PASS", (
+        f"REJECT#12 AC#1: CRITICAL+invocation_verified가 operational_trust에서 차단됨\n  result={r}"
     )
 
 
@@ -1517,12 +1515,13 @@ def test_tc35c_high_invocation_verified_still_passes() -> None:
 # --------------------------------------------------------------------------- #
 
 def test_tc36a_oracle_tc11_connected_to_invoke_and_capability_match(tmp_path: Path) -> None:
-    """REJECT#21 AC#4: tc11 Oracle(input/expected)을 실제 명령 경로(_invoke_codex_exec +
+    """REJECT#12 AC#1: tc11 Oracle(input/expected)을 실제 명령 경로(_invoke_codex_exec +
     _check_codex_model_capability_match)에 연결한 회귀 테스트.
 
+    REJECT#12 fix: tc11 oracle expected가 OK+invocation_verified로 변경됨.
     tc11 oracle input (actual_model=unknown, risk_level=CRITICAL, mode=enforce) →
     fake codex 실행(_invoke_codex_exec) + capability match 검사 →
-    oracle expected (result=BLOCKED, failure_code=unknown_model_critical_blocked).
+    oracle expected (result=OK, model_verification_level=invocation_verified).
     """
     import json
 
@@ -1562,18 +1561,27 @@ def test_tc36a_oracle_tc11_connected_to_invoke_and_capability_match(tmp_path: Pa
         invocation_ok=invocation_ok,
     )
 
+    # REJECT#12 fix: oracle expected → result=OK, model_verification_level=invocation_verified
     assert r["result"] == tc11_expected["result"], (
         f"tc11 oracle 불일치: result={r['result']!r} != expected={tc11_expected['result']!r}\n  {r}"
     )
-    assert r.get("failure_code") == tc11_expected["failure_code"], (
+    # OK 결과에는 failure_code가 없으므로 oracle에 "failure_code" 키가 없으면 None == None
+    _expected_fc = tc11_expected.get("failure_code")
+    assert r.get("failure_code") == _expected_fc, (
         f"tc11 oracle 불일치: failure_code={r.get('failure_code')!r} "
-        f"!= expected={tc11_expected['failure_code']!r}"
+        f"!= expected={_expected_fc!r}"
     )
+    if tc11_expected.get("model_verification_level"):
+        assert r.get("model_verification_level") == tc11_expected["model_verification_level"], (
+            f"tc11 oracle 불일치: model_verification_level={r.get('model_verification_level')!r} "
+            f"!= expected={tc11_expected['model_verification_level']!r}"
+        )
 
 
-def test_tc36b_critical_unknown_blocked_result_includes_verification_level(tmp_path: Path) -> None:
-    """REJECT#21 deadlock fix AC#2: _check_codex_model_capability_match가 BLOCKED 반환 시
-    model_verification_level을 포함해야 한다 (verdic 기록 경로에서 invocation_verified 증거 보존).
+def test_tc36b_critical_invocation_verified_passes_capability_match(tmp_path: Path) -> None:
+    """REJECT#12 AC#1: CRITICAL + invocation_verified 경로에서 _check_codex_model_capability_match가
+    OK를 반환하고 model_verification_level=invocation_verified를 포함해야 한다.
+    REJECT#12 fix: 이전 BLOCKED(unknown_model_critical_blocked) → OK(invocation_verified).
     """
     fake = _make_fake_codex(tmp_path, exit_code=0, stdout_text=_approve_json())
     run_result = pipeline._invoke_codex_exec(
@@ -1588,8 +1596,13 @@ def test_tc36b_critical_unknown_blocked_result_includes_verification_level(tmp_p
         "CRITICAL",
         invocation_ok=(run_result.get("exit_code") == 0),
     )
-    assert r["result"] == "BLOCKED"
-    assert r["failure_code"] == "unknown_model_critical_blocked"
+    assert r["result"] == "OK", (
+        f"REJECT#12 AC#1: CRITICAL+invocation_verified가 BLOCKED됨\n  result={r}"
+    )
+    assert r.get("model_verification_level") == pipeline.CODEX_VERIFICATION_INVOCATION, (
+        f"REJECT#12 AC#1: model_verification_level={r.get('model_verification_level')!r} "
+        "— invocation_verified 증거가 보존되어야 한다."
+    )
     # deadlock fix: BLOCKED 반환에 model_verification_level이 포함돼야 verdict 기록 경로에서 사용 가능.
     assert "model_verification_level" in r, (
         f"REJECT#21 deadlock fix: BLOCKED 반환에 model_verification_level이 없음\n  {r}"
@@ -3454,9 +3467,8 @@ def test_tc47i_allowed_models_and_high_risk_paths_change_is_critical() -> None:
 
 
 def test_tc47j_critical_policy_attributes_unchanged() -> None:
-    """REJECT#33 AC#5: CRITICAL 정책에서 force_review_required=True, cache_allowed=False,
-    actual_verified(최고 검증 수준) 요구가 유지된다.
-    CRITICAL + invocation_verified(actual=unknown)는 unknown_model_critical_blocked로 차단된다.
+    """REJECT#33 AC#5 + REJECT#12 fix: CRITICAL 정책에서 force_review_required=True, cache_allowed=False가
+    유지된다. REJECT#12 fix: CRITICAL + invocation_verified는 이제 OK를 반환한다(unknown_model_critical_blocked 삭제).
     """
     # (1) CRITICAL 정책 속성 직접 검증
     policy = pipeline.CODEX_MODEL_POLICIES.get("CRITICAL")
@@ -3467,7 +3479,8 @@ def test_tc47j_critical_policy_attributes_unchanged() -> None:
     assert policy.get("cache_allowed") is False, (
         f"REJECT#33 AC#5: CRITICAL.cache_allowed이 False 아님 — got {policy!r}"
     )
-    # (2) CRITICAL + invocation_verified(actual_model="unknown")는 unknown_model_critical_blocked
+    # (2) REJECT#12 fix: CRITICAL + invocation_verified(actual_model="unknown")는 이제 OK다.
+    #   REJECT#21(unknown_model_critical_blocked)은 삭제됨 — gpt-5.6-sol는 actual을 보고 안 함.
     _sm = policy["selected_model"]   # gpt-5.6-sol
     _se = policy["selected_reasoning_effort"]  # max
     cap_result = pipeline._check_codex_model_capability_match(
@@ -3480,11 +3493,11 @@ def test_tc47j_critical_policy_attributes_unchanged() -> None:
         risk_level="CRITICAL",
         invocation_ok=True,
     )
-    assert cap_result.get("result") == "BLOCKED", (
-        f"REJECT#33 AC#5: CRITICAL + invocation_verified가 BLOCKED 아님 — got {cap_result!r}"
+    assert cap_result.get("result") == "OK", (
+        f"REJECT#12 fix: CRITICAL + invocation_verified는 OK여야 한다 — got {cap_result!r}"
     )
-    assert cap_result.get("failure_code") == "unknown_model_critical_blocked", (
-        f"REJECT#33 AC#5: failure_code 불일치 — got {cap_result!r}"
+    assert cap_result.get("model_verification_level") == pipeline.CODEX_VERIFICATION_INVOCATION, (
+        f"REJECT#12 fix: model_verification_level=invocation_verified 여야 한다 — got {cap_result!r}"
     )
 
 
@@ -4379,7 +4392,7 @@ class TestTC53CodexBinaryPathTrust:
             import stat as _stat
             _named_bin = tmp_path / "codex"
             _named_bin.write_text(
-                f'#!/bin/sh\necho "Logged in using ChatGPT"\nexit 0\n', encoding="utf-8"
+                '#!/bin/sh\necho "Logged in using ChatGPT"\nexit 0\n', encoding="utf-8"
             )
             _named_bin.chmod(_named_bin.stat().st_mode | _stat.S_IEXEC)
 
@@ -4547,7 +4560,7 @@ class TestTC54CodexBinaryArbitraryPathBlocked:
         )
 
     def test_tc54c_arbitrary_path_binary_blocked_by_trust_check(
-        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+        self, tmp_path: "Path", monkeypatch
     ) -> None:
         """REJECT#10 AC1: npm global bin / 시스템 경로 밖의 실제 파일 → trusted=False, binary_in_arbitrary_user_path."""
         import tempfile
@@ -4665,4 +4678,157 @@ class TestTC55CriticalPythonDiffCoverageRequired:
         # 이전 패턴(SHA를 커버 조건으로 허용) 제거 확인
         assert "f not in _hunk_covered and f not in _sha_covered" not in _src, (
             "REJECT#11 AC2: 이전 SHA 허용 패턴이 여전히 남아 있음"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# TC-56: REJECT#12 — CRITICAL invocation_verified 정책 + binary SHA + BLOCKED 영속성
+# --------------------------------------------------------------------------- #
+
+class TestTC56Reject12CriticalPolicyAndBinarySha:
+    """REJECT#12 AC#1/AC#3/AC#4/AC#5 회귀 테스트."""
+
+    def test_tc56a_critical_unverified_still_blocked_in_capability_gate(self) -> None:
+        """REJECT#12 AC#5: CRITICAL + unverified(invocation_ok=False)는 여전히 BLOCKED다.
+        REJECT#12는 invocation_verified 허용이지, unverified 허용이 아니다."""
+        r = pipeline._check_codex_capability_gate(
+            "unknown", "CRITICAL", pipeline.CODEX_VERIFICATION_UNVERIFIED,
+        )
+        assert r["result"] == "BLOCKED", (
+            f"REJECT#12 AC#5: CRITICAL+unverified는 BLOCKED여야 한다. got={r!r}"
+        )
+        assert r.get("failure_code") == "model_verification_unverified", (
+            f"REJECT#12 AC#5: failure_code={r.get('failure_code')!r} — model_verification_unverified여야 한다."
+        )
+
+    def test_tc56b_critical_invocation_verified_passes_capability_gate(self) -> None:
+        """REJECT#12 AC#1: CRITICAL + invocation_verified는 _check_codex_capability_gate에서 OK다."""
+        r = pipeline._check_codex_capability_gate(
+            "unknown", "CRITICAL", pipeline.CODEX_VERIFICATION_INVOCATION,
+        )
+        assert r["result"] == "OK", (
+            f"REJECT#12 AC#1: CRITICAL+invocation_verified가 BLOCKED됨. got={r!r}"
+        )
+
+    def test_tc56c_binary_path_with_empty_sha_blocked_in_operational_trust(self) -> None:
+        """REJECT#12 AC#3: codex_binary_path 기록 + codex_binary_sha256 빈값 → operational_trust BLOCKED."""
+        _base = {
+            "status": "APPROVED",
+            "verdict_source": "codex_cli",
+            "acceptance_eligible": True,
+            "router_version": "2.0.0",
+            "risk_level": "HIGH",
+            "model_policy_signature": "HIGH:gpt-5.6-sol:high:enforce",
+            "codex_cli_command": "codex exec --model gpt-5.6-sol ...",
+            "selected_model": "gpt-5.6-sol",
+            "selected_reasoning_effort": "high",
+            "invoked_model": "gpt-5.6-sol",
+            "invoked_effort": "high",
+            "actual_model": "unknown",
+            "actual_effort": "unknown",
+            "model_verification_level": pipeline.CODEX_VERIFICATION_INVOCATION,
+            "auth_source": "chatgpt",
+            # REJECT#12 AC#3: 경로는 있는데 SHA가 빈값
+            "codex_binary_path": "/usr/bin/codex",
+            "codex_binary_sha256": "",
+        }
+        r = pipeline._check_codex_review_operational_trust(_base)
+        assert r["status"] == "BLOCKED", (
+            f"REJECT#12 AC#3: binary_path 기록 + sha 없음이 BLOCKED가 아님. got={r!r}"
+        )
+        assert r.get("failure_code") == "codex_review_binary_sha_missing", (
+            f"REJECT#12 AC#3: failure_code={r.get('failure_code')!r} "
+            "— codex_review_binary_sha_missing이어야 한다."
+        )
+
+    def test_tc56d_binary_path_empty_sha_empty_passes_operational_trust(self) -> None:
+        """REJECT#12 AC#3: codex_binary_path 빈값 + codex_binary_sha256 빈값 → 체크 skip → PASS.
+        경로 자체가 없으면 SHA 부재 체크는 적용하지 않는다."""
+        _base = {
+            "status": "APPROVED",
+            "verdict_source": "codex_cli",
+            "acceptance_eligible": True,
+            "router_version": "2.0.0",
+            "risk_level": "HIGH",
+            "model_policy_signature": "HIGH:gpt-5.6-sol:high:enforce",
+            "codex_cli_command": "codex exec --model gpt-5.6-sol ...",
+            "selected_model": "gpt-5.6-sol",
+            "selected_reasoning_effort": "high",
+            "invoked_model": "gpt-5.6-sol",
+            "invoked_effort": "high",
+            "actual_model": "unknown",
+            "actual_effort": "unknown",
+            "model_verification_level": pipeline.CODEX_VERIFICATION_INVOCATION,
+            "auth_source": "chatgpt",
+            "codex_binary_path": "",
+            "codex_binary_sha256": "",
+        }
+        r = pipeline._check_codex_review_operational_trust(_base)
+        assert r["status"] == "PASS", (
+            f"REJECT#12 AC#3: binary_path 없으면 SHA 체크 skip → PASS여야 한다. got={r!r}"
+        )
+
+    def test_tc56e_blocked_flag_file_source_check(self) -> None:
+        """REJECT#12 Fix 5: _codex_review_blocked_flag_path 소스 존재 + request-accept가 플래그 체크한다."""
+        import inspect
+        # 플래그 경로 헬퍼가 pipeline에 존재해야 함
+        assert hasattr(pipeline, "_codex_review_blocked_flag_path"), (
+            "REJECT#12 Fix5: _codex_review_blocked_flag_path 함수가 pipeline에 없음"
+        )
+        _req_src = inspect.getsource(pipeline._cmd_gates_request_accept)
+        assert "codex_review_blocked_flag_path" in _req_src, (
+            "REJECT#12 Fix5: request-accept가 _codex_review_blocked_flag_path를 체크하지 않음"
+        )
+        assert "blocked_flag_present" in _req_src or "codex_review_blocked.flag" in _req_src, (
+            "REJECT#12 Fix5: request-accept에 BLOCKED 플래그 파일 체크 메시지 없음"
+        )
+
+    def test_tc56f_blocked_flag_written_before_json_in_source(self) -> None:
+        """REJECT#12 Fix 5: _write_codex_review_blocked_invalidation이 플래그 파일을 먼저 기록한다(소스 확인)."""
+        import inspect
+        _src = inspect.getsource(pipeline._write_codex_review_blocked_invalidation)
+        assert "_codex_review_blocked_flag_path" in _src, (
+            "REJECT#12 Fix5: _write_codex_review_blocked_invalidation에 플래그 기록 코드 없음"
+        )
+        # 플래그 write가 _write_json 호출보다 앞에 나와야 함
+        _flag_idx = _src.find("_codex_review_blocked_flag_path")
+        _json_idx = _src.find("_write_json(result_path")
+        assert _flag_idx >= 0 and _json_idx >= 0 and _flag_idx < _json_idx, (
+            "REJECT#12 Fix5: 플래그 파일 기록이 _write_json 호출보다 나중에 나옴 — 순서가 잘못됨"
+        )
+
+    def test_tc56g_js_entrypoint_sha_change_blocked_in_request_accept_source(self) -> None:
+        """REJECT#12 AC#3: request-accept 소스에 JS 진입점 SHA 변경 체크가 있어야 한다."""
+        import inspect
+        _src = inspect.getsource(pipeline._cmd_gates_request_accept)
+        assert "codex_js_entrypoint_sha_changed" in _src, (
+            "REJECT#12 AC#3: request-accept에 JS 진입점 SHA 변경 체크(codex_js_entrypoint_sha_changed) 없음"
+        )
+        assert "codex_js_entrypoint_sha256" in _src, (
+            "REJECT#12 AC#3: request-accept에 codex_js_entrypoint_sha256 필드 접근 없음"
+        )
+
+    def test_tc56h_high_unverified_still_blocked(self) -> None:
+        """REJECT#12 AC#5: HIGH + unverified도 여전히 BLOCKED다 (REJECT#12는 unverified 허용 아님)."""
+        r = pipeline._check_codex_capability_gate(
+            "unknown", "HIGH", pipeline.CODEX_VERIFICATION_UNVERIFIED,
+        )
+        assert r["result"] == "BLOCKED", (
+            f"REJECT#12 AC#5: HIGH+unverified는 BLOCKED여야 한다. got={r!r}"
+        )
+
+    def test_tc56i_mismatch_still_blocked_even_with_invocation_verified(self) -> None:
+        """REJECT#12 AC#1: model mismatch는 invocation_verified라도 BLOCKED다 (기존 정책 유지)."""
+        r = pipeline._check_codex_model_capability_match(
+            "gpt-5.6-sol", "max",   # selected
+            "gpt-5.6-terra", "max", # invoked (불일치)
+            "unknown", "unknown",
+            "CRITICAL",
+            invocation_ok=True,
+        )
+        assert r["result"] == "BLOCKED", (
+            f"REJECT#12 AC#1: model mismatch + CRITICAL이 BLOCKED가 아님. got={r!r}"
+        )
+        assert r.get("failure_code") == "model_mismatch", (
+            f"REJECT#12 AC#1: failure_code={r.get('failure_code')!r} — model_mismatch여야 한다."
         )
