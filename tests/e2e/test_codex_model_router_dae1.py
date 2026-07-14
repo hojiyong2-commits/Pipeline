@@ -447,6 +447,10 @@ def _trust_base(**over) -> dict:
         "actual_effort": "max",
         "model_verification_level": pipeline.CODEX_VERIFICATION_ACTUAL,
         "auth_source": "chatgpt",
+        # IMP-20260712-DAE1 REJECT#16: codex_cli/verified_cache에는 binary 신뢰 증거 필수.
+        #   테스트용 dummy 값 (운영 신뢰 검사 단위 테스트 전용).
+        "codex_binary_path": "/usr/local/bin/codex",
+        "codex_binary_sha256": "b" * 64,
     }
     base.update(over)
     return base
@@ -1483,6 +1487,9 @@ def test_tc35b_critical_invocation_verified_passes_operational_trust() -> None:
         "actual_effort": "unknown",
         "model_verification_level": pipeline.CODEX_VERIFICATION_INVOCATION,
         "auth_source": "chatgpt",
+        # IMP-20260712-DAE1 REJECT#16: binary 신뢰 증거 필수
+        "codex_binary_path": "/usr/local/bin/codex",
+        "codex_binary_sha256": "c" * 64,
     }
     r = pipeline._check_codex_review_operational_trust(_fake_result)
     assert r["status"] == "PASS", (
@@ -2111,6 +2118,10 @@ def _make_valid_result_for_operational_trust(
         "actual_effort": actual_effort,
         "model_verification_level": verification_level,
         "auth_source": "chatgpt",
+        # IMP-20260712-DAE1 REJECT#16: codex_cli/verified_cache에는 binary 신뢰 증거가 필수.
+        #   테스트용 dummy 값 (실제 경로가 아님 — 운영 신뢰 검사 단위 테스트 전용).
+        "codex_binary_path": "/usr/local/bin/codex",
+        "codex_binary_sha256": "a" * 64,  # dummy SHA-256 (test-only placeholder)
     }
 
 
@@ -3095,6 +3106,9 @@ def _make_trust_base_for_risk(risk_level: str) -> dict:
             else pipeline.CODEX_VERIFICATION_INVOCATION  # CRITICAL: invocation_verified → will be blocked
         ),
         "auth_source": "chatgpt",
+        # IMP-20260712-DAE1 REJECT#16: binary 신뢰 증거 필수 (테스트용 dummy 값)
+        "codex_binary_path": "/usr/local/bin/codex",
+        "codex_binary_sha256": "d" * 64,
     }
 
 
@@ -4857,8 +4871,9 @@ class TestTC56Reject12CriticalPolicyAndBinarySha:
         )
 
     def test_tc56d_binary_path_empty_sha_empty_passes_operational_trust(self) -> None:
-        """REJECT#12 AC#3: codex_binary_path 빈값 + codex_binary_sha256 빈값 → 체크 skip → PASS.
-        경로 자체가 없으면 SHA 부재 체크는 적용하지 않는다."""
+        """IMP-20260712-DAE1 REJECT#16: codex_binary_path 빈값이면 codex_cli에서 BLOCKED.
+        (REJECT#12 이전 동작: empty path → skip SHA → PASS는 REJECT#16에서 강화됨)
+        codex_cli/verified_cache 경로에서 binary_path 없으면 binary 신뢰 미보장 → BLOCKED."""
         _base = {
             "status": "APPROVED",
             "verdict_source": "codex_cli",
@@ -4879,8 +4894,13 @@ class TestTC56Reject12CriticalPolicyAndBinarySha:
             "codex_binary_sha256": "",
         }
         r = pipeline._check_codex_review_operational_trust(_base)
-        assert r["status"] == "PASS", (
-            f"REJECT#12 AC#3: binary_path 없으면 SHA 체크 skip → PASS여야 한다. got={r!r}"
+        # REJECT#16: codex_cli에서 binary_path가 비어있으면 BLOCKED (신뢰 미보장).
+        assert r["status"] == "BLOCKED", (
+            f"REJECT#16: binary_path 빈값인 codex_cli 결과가 PASS됨 — BLOCKED여야 한다. got={r!r}"
+        )
+        assert r.get("failure_code") == "codex_review_binary_path_missing", (
+            f"REJECT#16: failure_code={r.get('failure_code')!r} "
+            "— codex_review_binary_path_missing이어야 한다."
         )
 
     def test_tc56e_blocked_flag_file_source_check(self) -> None:

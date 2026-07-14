@@ -549,6 +549,9 @@ def _trust_result(**overrides) -> dict:
         "actual_effort": "unknown",
         "model_verification_level": "invocation_verified",
         "auth_source": "chatgpt",
+        # IMP-20260712-DAE1 REJECT#16: codex_cli/verified_cache에 binary 신뢰 증거 필수.
+        "codex_binary_path": "/usr/local/bin/codex",
+        "codex_binary_sha256": "e" * 64,
     }
     base.update(overrides)
     return base
@@ -691,6 +694,9 @@ def test_acceptance_eligible_ops_gating(
     ) if trusted else "N/A (external verdict)"
     # 정책 시그니처: "<risk>:<model>:<effort>:<mode>" 형식 (HIGH → enforce 모드)
     _policy_sig = "HIGH:gpt-5.6-sol:high:enforce"
+    # REJECT#16: codex_cli/verified_cache에는 binary 신뢰 증거 필수 (테스트용 dummy 값).
+    _bin_path = "/usr/local/bin/codex" if trusted else ""
+    _bin_sha = "f" * 64 if trusted else ""
     code = (
         "res = {'verdict_source': %r, 'acceptance_eligible': True,\n" % source +
         "  'router_version': '2.0.0', 'risk_level': 'HIGH',\n"
@@ -698,7 +704,8 @@ def test_acceptance_eligible_ops_gating(
         "  'selected_model': 'gpt-5.6-sol', 'selected_reasoning_effort': 'high',\n"
         "  'invoked_model': 'gpt-5.6-sol', 'invoked_effort': 'high',\n"
         "  'actual_model': 'unknown', 'actual_effort': 'unknown',\n"
-        "  'model_verification_level': 'invocation_verified', 'auth_source': 'chatgpt'}\n"
+        "  'model_verification_level': 'invocation_verified', 'auth_source': 'chatgpt',\n"
+        "  'codex_binary_path': %r, 'codex_binary_sha256': %r}\n" % (_bin_path, _bin_sha) +
         "chk = p._check_codex_review_operational_trust(res)\n"
         "open(%r,'w',encoding='utf-8').write(json.dumps(chk))\n" % str(final_state)
     )

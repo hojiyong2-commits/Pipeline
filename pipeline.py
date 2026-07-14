@@ -10547,6 +10547,37 @@ def _check_codex_cache(
                     ),
                 }
 
+    # IMP-20260712-DAE1 REJECT#16: 캐시 hit 전 binary 신뢰 재검증.
+    #   원 실행에서 저장한 codex_binary_path + sha256이 현재도 유효한지 확인한다.
+    #   비어있거나(저장 안 됨), 파일이 없거나, SHA가 바뀌면 cache miss로 처리(fail-closed).
+    _cached_bin_path = str(cached.get("codex_binary_path", "") or "")
+    _cached_bin_sha = str(cached.get("codex_binary_sha256", "") or "")
+    _cached_js_path = str(cached.get("codex_js_entrypoint_path", "") or "")
+    _cached_js_sha = str(cached.get("codex_js_entrypoint_sha256", "") or "")
+    if _cached_bin_path:
+        try:
+            _cur_bin_sha = _sha256_file(Path(_cached_bin_path)) if Path(_cached_bin_path).exists() else ""
+        except Exception:  # noqa: BLE001
+            _cur_bin_sha = ""
+        if not _cur_bin_sha or _cur_bin_sha != _cached_bin_sha:
+            miss["reason"] = (
+                "codex binary SHA 불일치 또는 파일 부재 — cache miss (fail-closed). "
+                f"binary_path={_cached_bin_path!r}"
+            )
+            return miss
+        # JS 진입점도 저장돼 있으면 SHA 재검증
+        if _cached_js_path and _cached_js_sha:
+            try:
+                _cur_js_sha = _sha256_file(Path(_cached_js_path)) if Path(_cached_js_path).exists() else ""
+            except Exception:  # noqa: BLE001
+                _cur_js_sha = ""
+            if not _cur_js_sha or _cur_js_sha != _cached_js_sha:
+                miss["reason"] = (
+                    "codex JS 진입점 SHA 불일치 또는 파일 부재 — cache miss (fail-closed). "
+                    f"js_path={_cached_js_path!r}"
+                )
+                return miss
+
     _live_snap = cached.get("live_sha_snapshot")
     return {
         "hit": True,
@@ -10567,6 +10598,11 @@ def _check_codex_cache(
         "cached_verification_level": str(cached.get("model_verification_level", "") or "") or None,
         # REJECT#18: 원 실행의 auth_source를 캐시에서 복원한다 (하드코딩 chatgpt 제거).
         "cached_auth_source": _cached_auth,
+        # REJECT#16: binary trust 증거를 hit 결과로 전달 (복원 후 재검증·기록용).
+        "cached_codex_binary_path": _cached_bin_path,
+        "cached_codex_binary_sha256": _cached_bin_sha,
+        "cached_js_entrypoint_path": _cached_js_path,
+        "cached_js_entrypoint_sha256": _cached_js_sha,
     }
 
 
@@ -25583,6 +25619,22 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     "  캐시를 삭제하고 gates codex-review를 재실행하세요 (fail-closed)."
                 )
             _auth_source_str = _cached_auth_src
+            # IMP-20260712-DAE1 REJECT#16: verified_cache 경로에서 binary trust 증거 복원.
+            #   cache hit으로 reuse하면 _codex_binary_trust가 빈 dict로 남아있으므로,
+            #   캐시에 저장된 값으로 복원하고 결과 기록에 포함시킨다.
+            #   binary_path 또는 sha256이 비어있으면 acceptance_eligible=False(운영 신뢰 미보장).
+            _cached_bin_path_restore = str(_cache_probe.get("cached_codex_binary_path") or "")
+            _cached_bin_sha_restore = str(_cache_probe.get("cached_codex_binary_sha256") or "")
+            _cached_js_path_restore = str(_cache_probe.get("cached_js_entrypoint_path") or "")
+            _cached_js_sha_restore = str(_cache_probe.get("cached_js_entrypoint_sha256") or "")
+            _codex_binary_trust = {
+                "trusted": bool(_cached_bin_path_restore and _cached_bin_sha_restore),
+                "path": _cached_bin_path_restore,
+                "sha256": _cached_bin_sha_restore,
+                "js_entrypoint_path": _cached_js_path_restore,
+                "js_entrypoint_sha256": _cached_js_sha_restore,
+                "install_source": "cached",
+            }
             print("  [CACHE REUSE] Codex CLI 호출 없이 캐시된 APPROVE verdict를 재사용합니다.")
     else:
         print(f"  [CACHE MISS] {_cache_probe.get('reason')}")
@@ -26550,6 +26602,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "model_policy_signature": _codex_policy_signature(_model_policy),
             # REJECT#18: 원 실행의 인증 출처를 캐시에 저장 — cache hit 시 복원·검증에 사용한다.
             "auth_source": _auth_source_str,
+            # IMP-20260712-DAE1 REJECT#16: Codex binary 신뢰 증거를 캐시에 저장.
+            #   캐시 재사용 시 원 binary와 동일한 신뢰 경로인지 재검증하기 위해 저장한다.
+            #   fake_codex_bin이 설정된 test 환경은 캐시 저장이 이미 금지되므로 이 코드에 도달하지 않는다.
+            "codex_binary_path": str(_codex_binary_trust.get("path", "") or ""),
+            "codex_binary_sha256": str(_codex_binary_trust.get("sha256", "") or ""),
+            "codex_js_entrypoint_path": str(_codex_binary_trust.get("js_entrypoint_path", "") or ""),
+            "codex_js_entrypoint_sha256": str(_codex_binary_trust.get("js_entrypoint_sha256", "") or ""),
             "cached_at": _now(),
         }
         _cache_path = _codex_review_cache_path()
@@ -27333,10 +27392,26 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
                 "model_verification_level=actual_verified이지만 actual_effort=unknown — "
                 "actual_verified는 CLI가 실제 effort를 보고해야 합니다 (fail-closed).",
             )
-    # (6) REJECT#12 AC#3: codex_binary_path가 기록됐는데 codex_binary_sha256이 비어 있으면 차단.
+    # (6) REJECT#12 AC#3 + REJECT#16: binary 경로/SHA 검증.
+    #   - codex_binary_path가 기록됐는데 sha256이 비어있으면 차단.
+    #   - IMP-20260712-DAE1 REJECT#16: codex_cli 또는 verified_cache에서 binary_path나
+    #     sha256 자체가 비어있으면 운영 신뢰 미보장 → BLOCKED.
     _bin_path_rec = str(result.get("codex_binary_path", "") or "")
     _bin_sha_rec = str(result.get("codex_binary_sha256", "") or "")
-    if _bin_path_rec and not _bin_sha_rec:
+    if verdict_source in ("codex_cli", "verified_cache"):
+        if not _bin_path_rec:
+            return _blocked(
+                "codex_review_binary_path_missing",
+                f"verdict_source={verdict_source}에서 codex_binary_path가 비어 있습니다 — "
+                "binary 신뢰 미보장으로 운영 승인 자격 부여 불가 (fail-closed).",
+            )
+        if not _bin_sha_rec:
+            return _blocked(
+                "codex_review_binary_sha_missing",
+                f"verdict_source={verdict_source}에서 codex_binary_sha256이 비어 있습니다 — "
+                "binary 신뢰 미보장으로 운영 승인 자격 부여 불가 (fail-closed).",
+            )
+    elif _bin_path_rec and not _bin_sha_rec:
         return _blocked(
             "codex_review_binary_sha_missing",
             f"codex_binary_path={_bin_path_rec!r} 가 기록됐으나 "
