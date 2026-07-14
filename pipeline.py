@@ -2510,7 +2510,7 @@ CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
 #   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
 #   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
-CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 250000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000; REJECT#18: 73000→76000; REJECT#22: 76000→85000; REJECT#24: 85000→165000 (3개 helper CODEX_CRITICAL_FUNCTIONS 추가로 cumulative diff 145145자 필요); REJECT#35: 165000→250000 (18파일 PR에서 non-critical 파일 2개 budget 초과 해소)
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 400000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000; REJECT#18: 73000→76000; REJECT#22: 76000→85000; REJECT#24: 85000→165000 (3개 helper CODEX_CRITICAL_FUNCTIONS 추가로 cumulative diff 145145자 필요); REJECT#35: 165000→250000 (18파일 PR에서 non-critical 파일 2개 budget 초과 해소); REJECT#7: 250000→400000 (CRITICAL Python 파일 diff 추가로 pipeline.py+test_codex*.py 합산 250K 초과)
 
 
 class _CodexCacheSkipError(Exception):
@@ -9202,8 +9202,11 @@ def _build_codex_semantic_evidence(
                 continue  # pipeline.py는 위에서 이미 처리
             if not _is_codex_critical_file(_cpf_n):
                 continue
-            # REJECT#35: Python CRITICAL 파일은 file-level SHA attestation (diff hunk 아님).
+            # REJECT#35: Python CRITICAL 파일은 file-level SHA attestation으로 무결성 증거 수집.
+            # REJECT#7: SHA 외에 실제 unified diff도 수집하여 Codex가 decorator/import 변경을 볼 수 있도록.
+            #   (SHA만 제공 시 @_CODEX_SKIP 추가 같은 변경이 Codex 입력에서 숨겨지는 문제).
             if _cpf_n.endswith(".py"):
+                # SHA attestation (무결성 증거)
                 try:
                     _before_sha_r = subprocess.run(
                         ["git", "show", f"origin/main:{_cpf_n}"],
@@ -9224,6 +9227,31 @@ def _build_codex_semantic_evidence(
                         _diff_ok = True  # SHA 증거 수집 성공 → evidence 진행 가능
                 except Exception:  # noqa: BLE001
                     pass  # SHA 수집 실패는 missing_critical_files에서 감지됨
+                # REJECT#7: 실제 unified diff 수집 — Codex가 decorator/import/assert 변경을 볼 수 있어야 함.
+                # per-file 50K 한도로 예산 보호. diff가 없으면 SHA attestation 으로 충분.
+                try:
+                    _py_diff_r = subprocess.run(
+                        ["git", "diff", "origin/main", "--unified=3", "--", _cpf_n],
+                        capture_output=True, text=True, timeout=30,
+                        cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+                    )
+                    if _py_diff_r.returncode == 0 and _py_diff_r.stdout.strip():
+                        _PY_CRIT_DIFF_PER_FILE_LIMIT = 50000  # 파일당 50K 상한
+                        _py_diff_text = _py_diff_r.stdout.strip()
+                        if len(_py_diff_text) > _PY_CRIT_DIFF_PER_FILE_LIMIT:
+                            _py_diff_text = (
+                                _py_diff_text[:_PY_CRIT_DIFF_PER_FILE_LIMIT]
+                                + "\n[CRITICAL_PYTHON_DIFF_TRUNCATED_AT_50K]"
+                            )
+                        _all_hunks.append({
+                            "function": _cpf_n,
+                            "hunk": _py_diff_text,
+                            "is_critical": True,
+                            "chars": len(_py_diff_text),
+                            "hunk_sha256": hashlib.sha256(_py_diff_text.encode("utf-8")).hexdigest(),
+                        })
+                except Exception:  # noqa: BLE001
+                    pass  # diff 수집 실패는 SHA attestation이 대체
                 continue
             _nonpy_crit_expected.append(_cpf_n)
             _npdr = subprocess.run(

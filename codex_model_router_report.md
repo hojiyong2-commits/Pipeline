@@ -76,7 +76,7 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
 
 > **자기 보호**: `CODEX_CRITICAL_FUNCTIONS` 목록에서 함수를 제거하거나, `CODEX_MODEL_POLICIES`에서 정책을 변조해도 CRITICAL로 분류되어 최고 수준의 검토를 강제합니다.
 
-> **완전성 검사**: `tests/e2e/test_codex_model_router_dae1.py`의 TC-46~TC-50 테스트는 각 상수를 단독으로 변경했을 때 CRITICAL이 반환되는지, 중첩 값만 변경해도 감지되는지(SHA 비교), fail-closed 동작, 자기보호 우회 차단, 신뢰 판정 상수 보호, CRITICAL Python 파일 SHA 증거 수집, non-critical 예산 초과 추적, SHA 증거 Codex prompt 포함, `_is_codex_test_path` 경로 제한(REJECT#6)을 자동으로 검증합니다(REJECT#35, REJECT#6).
+> **완전성 검사**: `tests/e2e/test_codex_model_router_dae1.py`의 TC-46~TC-51 테스트는 각 상수를 단독으로 변경했을 때 CRITICAL이 반환되는지, 중첩 값만 변경해도 감지되는지(SHA 비교), fail-closed 동작, 자기보호 우회 차단, 신뢰 판정 상수 보호, CRITICAL Python 파일 SHA 증거 수집, non-critical 예산 초과 추적, SHA 증거 Codex prompt 포함, `_is_codex_test_path` 경로 제한(REJECT#6), CRITICAL Python 파일 diff Codex prompt 포함(REJECT#7)을 자동으로 검증합니다(REJECT#35, REJECT#6, REJECT#7).
 
 ### CRITICAL — 신뢰 경계 함수 (`CODEX_CRITICAL_FUNCTIONS`)
 
@@ -208,4 +208,4 @@ HIGH/CRITICAL risk에서는 `downgrade_blocked=True`이므로, 더 낮은 모델
 | 캐시 정책 통합 | `pipeline.py::_check_codex_cache` |
 | 실행 통합 | `pipeline.py::_cmd_gates_codex_review` |
 | bundle 정책 섹션 | `pipeline.py::_build_codex_review_bundle` (model_policy + raw ACCEPT/nonce 금지 가드) |
-| E2E 테스트 | `tests/e2e/test_codex_model_router_dae1.py` (TC-1~TC-50) |
+| E2E 테스트 | `tests/e2e/test_codex_model_router_dae1.py` (TC-1~TC-51) |

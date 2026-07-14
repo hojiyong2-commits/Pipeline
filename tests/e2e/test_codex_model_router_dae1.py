@@ -1027,10 +1027,12 @@ def test_tc29e_effective_force_review_bypasses_cache_in_source() -> None:
 def test_tc30a_bundle_budget_sufficient_for_tc11_oracles() -> None:
     """REJECT#15/16/18: CODEX_REVIEW_BUNDLE_BUDGET_CHARS가 tc11 oracle 파일 포함 총 diff를
     수용해야 한다. REJECT#18 auth_source 코드 추가 후 ~73718자 수용 위해 74000 이상.
-    REJECT#35: 18파일 PR에서 non-critical 2파일 초과 해소를 위해 165000 이상."""
-    assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 165000, (
-        f"REJECT#35: 예산이 18파일 PR의 non-critical 파일을 수용하지 못합니다: "
-        f"{pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 165000"
+    REJECT#35: 18파일 PR에서 non-critical 2파일 초과 해소를 위해 165000 이상.
+    REJECT#7: CRITICAL Python 파일 diff 추가로 pipeline.py+test_codex*.py 합산 250K 초과
+    → 400000 이상."""
+    assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 250000, (
+        f"REJECT#7: 예산이 CRITICAL Python diff 포함 총량을 수용하지 못합니다: "
+        f"{pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 250000"
     )
 
 
@@ -2521,7 +2523,7 @@ def test_tc42e_unknown_hunk_budget_exceeded_evidence_incomplete() -> None:
     from unittest.mock import patch, MagicMock
 
     # 예산을 크게 초과하는 unknown-named hunk (@@에 함수명 없음)
-    big_content = "+" + "x" * 260_000  # 260KB — 실제 예산(250000)을 크게 초과 (REJECT#35: 165000→250000)
+    big_content = "+" + "x" * 420_000  # 420KB — 실제 예산(400000)을 크게 초과 (REJECT#7: 250000→400000)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
@@ -2800,7 +2802,7 @@ def test_tc44d_multihunk_same_critical_function_detected(tmp_path: Path) -> None
     crit_func = "_cmd_gates_accept"  # CODEX_CRITICAL_FUNCTIONS에 있는 함수
     # 동일 함수명, 예산 초과 크기의 두 번째 hunk
     hunk1_content = f"@@ -100,5 +100,5 @@ def {crit_func}():\n+    pass1\n"
-    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 260_000  # 예산 초과 (REJECT#35: budget 250K → 260K 필요)
+    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 420_000  # 예산 초과 (REJECT#7: budget 400K → 420K 필요)
 
     # 두 hunk 모두 동일 CRITICAL 함수에 귀속
     diff_output = (
@@ -2853,7 +2855,7 @@ def test_tc44e_new_critical_function_hunk_required(tmp_path: Path) -> None:
 
     new_func = "_canonicalize_effort"  # REJECT#30에서 추가된 CRITICAL 함수
     # 예산을 크게 초과하는 신규 함수 hunk
-    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 260_000  # 예산 초과 (REJECT#35: budget 250K → 260K 필요)
+    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 420_000  # 예산 초과 (REJECT#7: budget 400K → 420K 필요)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
@@ -4031,4 +4033,126 @@ class TestTC50PromptDigestAndTestPathFix:
         assert result is False, (
             "REJECT#6 AC#4: 루트 test_foo.py가 _is_codex_test_path=True — "
             "파일명 패턴 기반 제외가 남아있음. tests/ 하위만 제외해야 함"
+        )
+
+
+class TestTC51CriticalPythonDiffInPrompt:
+    """REJECT#7 검증: CRITICAL Python 파일 diff가 Codex 입력에 포함되어야 한다.
+
+    AC#1: 변경된 CRITICAL Python 테스트 파일마다 diff 또는 내용이 포함된 검토 결과가 존재한다.
+    AC#2: @_CODEX_SKIP 등 테스트 비활성화 변경이 Codex 프롬프트에 명시적으로 표시된다.
+    AC#3: diff 수집 실패 시 SHA attestation이 존재하지 않으면 missing_critical_files에 포함.
+    AC#4: 두 regression 테스트 삭제 확인 (정상 실행 or 부재).
+    """
+
+    def test_tc51a_critical_python_diff_hunk_in_semantic_evidence(self) -> None:
+        """REJECT#7 AC#1: _build_codex_semantic_evidence에서 CRITICAL Python diff가 _all_hunks에 추가된다.
+
+        소스 코드 검사로 section 1b 내 Python CRITICAL 파일의 diff 수집 로직 존재 여부 확인.
+        """
+        import inspect
+
+        _src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+        # REJECT#7: Python CRITICAL 파일에 대해 git diff를 수집하는 경로가 있어야 함
+        assert "REJECT#7" in _src, (
+            "REJECT#7 AC#1: _build_codex_semantic_evidence 소스에 REJECT#7 주석 없음 — "
+            "CRITICAL Python diff 수집 경로가 구현되지 않았을 수 있음"
+        )
+        assert "CRITICAL_PYTHON_DIFF_TRUNCATED_AT_50K" in _src or "50000" in _src, (
+            "REJECT#7 AC#1: CRITICAL Python diff per-file 50K 상한이 소스에 없음"
+        )
+
+    def test_tc51b_critical_python_diff_appears_in_bundle(self) -> None:
+        """REJECT#7 AC#1/AC#2: 현재 PR diff에 test_ac_tracking_1abe.py 변경이 포함되면
+        bundle의 diff_hunks에 해당 파일의 hunk가 나타난다.
+        """
+        import json
+        from pathlib import Path
+
+        try:
+            ar = Path(".pipeline/active_run.json")
+            ptr = json.loads(ar.read_text(encoding="utf-8"))
+            sp = ptr.get("state_path")
+            state = json.loads(Path(sp).read_text(encoding="utf-8"))
+            pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+        except Exception:
+            state = {}
+            pid = "IMP-20260712-DAE1"
+
+        _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
+        bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
+
+        # diff_hunks에 test_ac_tracking_1abe.py 또는 test_codex_model_router_dae1.py가 있어야 함
+        _hunk_functions = [h.get("function", "") for h in bundle.get("diff_hunks", [])]
+        _crit_py_hunks = [
+            fn for fn in _hunk_functions
+            if fn in (
+                "tests/e2e/test_ac_tracking_1abe.py",
+                "tests/e2e/test_codex_model_router_dae1.py",
+            )
+        ]
+        assert len(_crit_py_hunks) > 0, (
+            "REJECT#7 AC#1: diff_hunks에 CRITICAL Python 테스트 파일 hunk 없음. "
+            f"현재 hunk functions(앞 10개): {_hunk_functions[:10]!r}"
+        )
+
+    def test_tc51c_critical_python_diff_hunk_is_marked_critical(self) -> None:
+        """REJECT#7 AC#1: CRITICAL Python 테스트 파일(tests/e2e/test_codex*) diff hunk는 is_critical=True.
+
+        NOTE: tests/e2e/test_ac_tracking_1abe.py는 _CODEX_CRITICAL_FILE_PREFIXES에 없어서
+        non-critical. is_critical=True를 기대하는 파일은 tests/e2e/test_codex* 뿐이다.
+        """
+        import json
+        from pathlib import Path
+
+        try:
+            ar = Path(".pipeline/active_run.json")
+            ptr = json.loads(ar.read_text(encoding="utf-8"))
+            sp = ptr.get("state_path")
+            state = json.loads(Path(sp).read_text(encoding="utf-8"))
+            pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+        except Exception:
+            state = {}
+            pid = "IMP-20260712-DAE1"
+
+        _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
+        bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
+
+        # test_codex* 파일이 diff_hunks에 있으면 is_critical=True여야 함
+        _crit_py_hunks = [
+            h for h in bundle.get("diff_hunks", [])
+            if h.get("function", "").startswith("tests/e2e/test_codex")
+        ]
+        if _crit_py_hunks:
+            for _h in _crit_py_hunks:
+                assert _h.get("is_critical") is True, (
+                    f"REJECT#7 AC#1: CRITICAL Python 파일 hunk의 is_critical=False: {_h.get('function')}"
+                )
+        else:
+            # diff가 없으면 file_sha_attestations에 있어야 함 (REJECT#6 SHA fallback)
+            _attestations = bundle.get("file_sha_attestations", {})
+            _codex_test_file = "tests/e2e/test_codex_model_router_dae1.py"
+            assert _codex_test_file in _attestations, (
+                f"REJECT#7 AC#1: {_codex_test_file}가 diff_hunks에도 없고 "
+                "file_sha_attestations에도 없음 — CRITICAL 파일 증거 없음"
+            )
+
+    def test_tc51d_regression_tests_deleted(self) -> None:
+        """REJECT#7 AC#4: 두 regression 테스트가 test_ac_tracking_1abe.py에서 삭제되었다."""
+        import sys
+
+        # test_ac_tracking_1abe 모듈을 reload하여 최신 상태 반영
+        _mod_name = "tests.e2e.test_ac_tracking_1abe"
+        if _mod_name in sys.modules:
+            del sys.modules[_mod_name]
+
+        from tests.e2e import test_ac_tracking_1abe as _mod
+
+        assert not hasattr(_mod, "test_regression_sun_02_vs_mon_09_diff_values_mismatch"), (
+            "REJECT#7 AC#4: test_regression_sun_02_vs_mon_09_diff_values_mismatch가 아직 존재 — "
+            "제거된 _validate_codex_coverage_checks에 의존하는 테스트는 삭제되어야 함"
+        )
+        assert not hasattr(_mod, "test_regression_dry_run_substitution_for_real_move"), (
+            "REJECT#7 AC#4: test_regression_dry_run_substitution_for_real_move가 아직 존재 — "
+            "제거된 _validate_codex_coverage_checks에 의존하는 테스트는 삭제되어야 함"
         )

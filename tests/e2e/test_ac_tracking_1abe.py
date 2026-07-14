@@ -592,62 +592,12 @@ def test_codex_coverage_check_fields_count():
 
 
 # ---------------------------------------------------------------------------
-# 회귀 케이스 (SUN/02:00 vs MON/09:00, dry-run vs 실제 동작)
+# 회귀 케이스: IMP-20260612-8104에서 _validate_codex_coverage_checks 제거됨.
+# REJECT#7 (IMP-20260712-DAE1): 회귀 테스트 2개 삭제.
+#   이전 test_regression_sun_02_vs_mon_09_diff_values_mismatch와
+#   test_regression_dry_run_substitution_for_real_move는 제거된 함수에 의존했으므로
+#   삭제 처리. 기능 자체가 pipeline.py에 없으므로 테스트도 더 이상 필요 없음.
 # ---------------------------------------------------------------------------
-
-@_CODEX_SKIP
-def test_regression_sun_02_vs_mon_09_diff_values_mismatch():
-    """회귀1: 사용자 AC=MON/09:00, diff=SUN/02:00 → diff_values_match_ac=false 시
-    QA 차단됨을 검증. _validate_codex_coverage_checks가 그 false를 잡아낸다.
-    """
-    ck = _all_true_coverage()
-    ck["diff_values_match_ac"] = False
-    review_data = {
-        "schema_version": 1,
-        "stage": "code",
-        "result": "ACCEPT",
-        "reviewer": "qa-test",
-        "review_model": "GPT-5.5",
-        "coverage_checks": ck,
-        # 회귀를 설명하는 메타 정보:
-        "criteria_review": [
-            {
-                "ac_id": "AC-1",
-                "status": "FAIL",
-                "blocking": True,
-                "reason": "사용자 AC=MON/09:00, diff=SUN/02:00 불일치",
-            }
-        ],
-    }
-    cov_r = _validate_codex_coverage_checks(review_data)
-    assert not cov_r["valid"]
-    assert any("diff_values_match_ac" in e for e in cov_r["errors"])
-
-
-@_CODEX_SKIP
-def test_regression_dry_run_substitution_for_real_move():
-    """회귀2: 사용자 AC=실제 파일 이동, 테스트=dry-run만 → no_dry_run_substitution=false → FAIL."""
-    ck = _all_true_coverage()
-    ck["no_dry_run_substitution"] = False
-    review_data = {
-        "schema_version": 1,
-        "stage": "code",
-        "result": "ACCEPT",
-        "reviewer": "qa-test",
-        "review_model": "GPT-5.5",
-        "coverage_checks": ck,
-        "criteria_review": [
-            {
-                "ac_id": "AC-2",
-                "status": "FAIL",
-                "blocking": True,
-                "reason": "사용자 AC=실제 파일 이동, 테스트는 dry-run만 검증",
-            }
-        ],
-    }
-    cov_r = _validate_codex_coverage_checks(review_data)
-    assert not cov_r["valid"]
-    assert any("no_dry_run_substitution" in e for e in cov_r["errors"])
 
 
 # ---------------------------------------------------------------------------
