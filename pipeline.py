@@ -2430,6 +2430,10 @@ CODEX_ALLOWED_MODELS: frozenset = frozenset({
 # 이 상수들이 변경되면 라우터 동작·모델 정책·신뢰 경계 자체가 바뀔 수 있으므로
 # 함수 변경이 없어도 _classify_codex_review_risk가 CRITICAL을 반환한다.
 # 이 목록 자체(CODEX_CRITICAL_CONSTANTS)도 자기 보호 대상에 포함한다.
+# REJECT#34: 신뢰 판정 상수 추가 — 이 상수들은 모델 검증·인증·effort 정규화에 직접 사용된다.
+#   CODEX_VERIFICATION_ACTUAL: actual_verified 판정 기준값 — 변조 시 CRITICAL 검증이 우회된다.
+#   CODEX_CHATGPT_LOGIN_MARKER: ChatGPT 인증 감지 문자열 — 변조 시 미인증 실행 허용.
+#   _CODEX_EFFORT_CANONICAL: effort 정규화 맵 — 변조 시 effort 불일치 검증이 무력화된다.
 CODEX_CRITICAL_CONSTANTS: List[str] = [
     "CODEX_MODEL_POLICIES",
     "CODEX_ALLOWED_MODELS",
@@ -2437,6 +2441,10 @@ CODEX_CRITICAL_CONSTANTS: List[str] = [
     "CODEX_CRITICAL_CONSTANTS",
     "CODEX_HIGH_RISK_PATHS",
     "CODEX_MODEL_ROUTER_VERSION",
+    # REJECT#34: 신뢰 판정·인증·정규화 상수 추가
+    "CODEX_VERIFICATION_ACTUAL",
+    "CODEX_CHATGPT_LOGIN_MARKER",
+    "_CODEX_EFFORT_CANONICAL",
 ]
 
 # risk level별 모델 정책 SSoT.
@@ -8228,7 +8236,8 @@ def _extract_python_constant_bodies(
     _lines = source.splitlines()
     _result: Dict[str, str] = {}
     # 모듈 상단 대문자 상수 할당: `NAME: Type = value` 또는 `NAME = value`
-    _const_re = re.compile(r'^([A-Z][A-Z0-9_]*)\s*(?::[^=\n]+)?\s*=')
+    # REJECT#34: 밑줄 선행 상수(_CODEX_EFFORT_CANONICAL 등)도 추출하도록 패턴 확장.
+    _const_re = re.compile(r'^(_?[A-Z][A-Z0-9_]*)\s*(?::[^=\n]+)?\s*=')
     i = 0
     while i < len(_lines) and len(_result) < len(_const_set):
         _ln = _lines[i]
@@ -8273,7 +8282,13 @@ def _detect_changed_critical_constants(changed_files: List[str]) -> List[str]:
     """
     if "pipeline.py" not in (str(f) for f in (changed_files or [])):
         return []
-    _critical_consts = list(CODEX_CRITICAL_CONSTANTS)
+    # REJECT#34: 가변 목록(CODEX_CRITICAL_CONSTANTS) 우회 방지 — 독립 최소 보호 집합.
+    #   CODEX_CRITICAL_CONSTANTS가 비워지거나 자기 자신 항목을 제거해도 항상 감지한다.
+    #   _CODEX_MIN_PROTECTED는 함수 내부 리터럴로, 외부 상수에 의존하지 않는다.
+    #   이 함수(_detect_changed_critical_constants)가 CODEX_CRITICAL_FUNCTIONS에 보호되므로
+    #   공격자는 이 최소 집합을 제거하려면 CRITICAL 함수를 수정해야 한다.
+    _CODEX_MIN_PROTECTED: frozenset = frozenset({"CODEX_CRITICAL_CONSTANTS"})
+    _critical_consts = list(set(CODEX_CRITICAL_CONSTANTS) | _CODEX_MIN_PROTECTED)
     # fail-closed fallback: 추출/git 실패 시 전체 상수를 변경된 것으로 간주
     try:
         _before_r = subprocess.run(
@@ -9174,6 +9189,10 @@ def _build_codex_semantic_evidence(
                     "is_critical": True,
                     "chars": len(_nptxt),
                 })
+                # REJECT#34: 비Python CRITICAL 파일 diff 수집 성공 → evidence_complete 조건 충족.
+                #   pipeline.py가 없어도 .claude/agents/*.md 등 CRITICAL 파일만 변경한 PR에서
+                #   hunk 수집 성공 시 evidence_complete=True가 되어야 한다.
+                _diff_ok = True
     except Exception:  # noqa: BLE001 — 비Python diff 실패는 cross-validation에서 감지
         pass
 

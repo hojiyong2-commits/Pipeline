@@ -3481,3 +3481,222 @@ def test_tc47j_critical_policy_attributes_unchanged() -> None:
     assert cap_result.get("failure_code") == "unknown_model_critical_blocked", (
         f"REJECT#33 AC#5: failure_code 불일치 — got {cap_result!r}"
     )
+
+
+# =========================================================================== #
+# TC-48: REJECT#34 — 자기보호 fail-closed, 신뢰 상수 보호, TC-04 oracle, evidence_complete
+# =========================================================================== #
+
+def test_tc48a_min_protected_catches_cleared_critical_constants() -> None:
+    """REJECT#34 AC#1: CODEX_CRITICAL_CONSTANTS가 비워져도 자기 보호로 CRITICAL 감지된다.
+
+    _detect_changed_critical_constants는 내부 _CODEX_MIN_PROTECTED로 인해
+    CODEX_CRITICAL_CONSTANTS가 런타임 빈 목록이어도 항상 자기 자신을 비교 대상에 포함한다.
+    """
+    import unittest.mock as mock
+
+    # before: CODEX_CRITICAL_CONSTANTS에 자기 자신 포함
+    _before_src = textwrap.dedent("""\
+        CODEX_CRITICAL_CONSTANTS: list = [
+            "CODEX_MODEL_POLICIES",
+            "CODEX_CRITICAL_CONSTANTS",
+        ]
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+        CODEX_VERIFICATION_ACTUAL: str = "actual_verified"
+        CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
+        _CODEX_EFFORT_CANONICAL: dict = {"xhigh": "max"}
+    """)
+    # after: CODEX_CRITICAL_CONSTANTS가 완전히 비워짐 — 자기 자신 항목도 제거
+    _after_src = textwrap.dedent("""\
+        CODEX_CRITICAL_CONSTANTS: list = []
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+        CODEX_VERIFICATION_ACTUAL: str = "actual_verified"
+        CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
+        _CODEX_EFFORT_CANONICAL: dict = {"xhigh": "max"}
+    """)
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 0
+    _mock_result.stdout = _before_src
+
+    # CODEX_CRITICAL_CONSTANTS를 빈 목록으로 패치해도 _CODEX_MIN_PROTECTED로 감지된다
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result), \
+         mock.patch.object(pipeline.Path, "read_text", return_value=_after_src), \
+         mock.patch.object(pipeline, "CODEX_CRITICAL_CONSTANTS", []):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    assert "CODEX_CRITICAL_CONSTANTS" in changed, (
+        f"REJECT#34 AC#1: 빈 CODEX_CRITICAL_CONSTANTS 변경이 감지되지 않음 — got {changed!r}"
+    )
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#34 AC#1: 빈 CODEX_CRITICAL_CONSTANTS가 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc48b_verification_actual_change_is_critical() -> None:
+    """REJECT#34 AC#2: CODEX_VERIFICATION_ACTUAL 단독 변경이 CRITICAL로 분류된다."""
+    import unittest.mock as mock
+
+    _base_src_template = textwrap.dedent("""\
+        CODEX_VERIFICATION_ACTUAL: str = "{val}"
+        CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
+        _CODEX_EFFORT_CANONICAL: dict = {{"xhigh": "max"}}
+        CODEX_MODEL_POLICIES: dict = {{}}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_VERIFICATION_ACTUAL"]
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+    _before_src = _base_src_template.format(val="actual_verified")
+    _after_src = _base_src_template.format(val="TAMPERED_VALUE")
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 0
+    _mock_result.stdout = _before_src
+
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result), \
+         mock.patch.object(pipeline.Path, "read_text", return_value=_after_src):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    assert "CODEX_VERIFICATION_ACTUAL" in changed, (
+        f"REJECT#34 AC#2: CODEX_VERIFICATION_ACTUAL 변경이 감지되지 않음 — got {changed!r}"
+    )
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#34 AC#2: CODEX_VERIFICATION_ACTUAL 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc48c_chatgpt_login_marker_change_is_critical() -> None:
+    """REJECT#34 AC#2: CODEX_CHATGPT_LOGIN_MARKER 단독 변경이 CRITICAL로 분류된다."""
+    import unittest.mock as mock
+
+    _before_src = textwrap.dedent("""\
+        CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
+        CODEX_VERIFICATION_ACTUAL: str = "actual_verified"
+        _CODEX_EFFORT_CANONICAL: dict = {"xhigh": "max"}
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_CHATGPT_LOGIN_MARKER"]
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+    _after_src = textwrap.dedent("""\
+        CODEX_CHATGPT_LOGIN_MARKER: str = "TAMPERED_AUTH_MARKER"
+        CODEX_VERIFICATION_ACTUAL: str = "actual_verified"
+        _CODEX_EFFORT_CANONICAL: dict = {"xhigh": "max"}
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_CRITICAL_CONSTANTS: list = ["CODEX_CHATGPT_LOGIN_MARKER"]
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 0
+    _mock_result.stdout = _before_src
+
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result), \
+         mock.patch.object(pipeline.Path, "read_text", return_value=_after_src):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    assert "CODEX_CHATGPT_LOGIN_MARKER" in changed, (
+        f"REJECT#34 AC#2: CODEX_CHATGPT_LOGIN_MARKER 변경이 감지되지 않음 — got {changed!r}"
+    )
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#34 AC#2: CODEX_CHATGPT_LOGIN_MARKER 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc48d_codex_effort_canonical_change_is_critical() -> None:
+    """REJECT#34 AC#2: _CODEX_EFFORT_CANONICAL(밑줄 선행 상수) 단독 변경이 CRITICAL로 분류된다.
+
+    _extract_python_constant_bodies의 정규식이 _로 시작하는 상수도 추출해야 한다.
+    """
+    import unittest.mock as mock
+
+    _before_src = textwrap.dedent("""\
+        _CODEX_EFFORT_CANONICAL: dict = {"xhigh": "max"}
+        CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
+        CODEX_VERIFICATION_ACTUAL: str = "actual_verified"
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_CRITICAL_CONSTANTS: list = ["_CODEX_EFFORT_CANONICAL"]
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+    # xhigh→max 대신 xhigh→xhigh로 변조 (실제 effort 정규화가 무력화됨)
+    _after_src = textwrap.dedent("""\
+        _CODEX_EFFORT_CANONICAL: dict = {"xhigh": "xhigh"}
+        CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
+        CODEX_VERIFICATION_ACTUAL: str = "actual_verified"
+        CODEX_MODEL_POLICIES: dict = {}
+        CODEX_ALLOWED_MODELS: frozenset = frozenset()
+        CODEX_CRITICAL_FUNCTIONS: list = []
+        CODEX_CRITICAL_CONSTANTS: list = ["_CODEX_EFFORT_CANONICAL"]
+        CODEX_HIGH_RISK_PATHS: list = []
+        CODEX_MODEL_ROUTER_VERSION: str = "2.0.0"
+    """)
+
+    _mock_result = mock.MagicMock()
+    _mock_result.returncode = 0
+    _mock_result.stdout = _before_src
+
+    with mock.patch("pipeline.subprocess.run", return_value=_mock_result), \
+         mock.patch.object(pipeline.Path, "read_text", return_value=_after_src):
+        changed = pipeline._detect_changed_critical_constants(["pipeline.py"])
+
+    assert "_CODEX_EFFORT_CANONICAL" in changed, (
+        f"REJECT#34 AC#2: _CODEX_EFFORT_CANONICAL 변경이 감지되지 않음 — got {changed!r}. "
+        "밑줄 선행 상수 추출 파서 확인 필요"
+    )
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], [], changed)
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#34 AC#2: _CODEX_EFFORT_CANONICAL 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc48e_underscore_constant_extraction() -> None:
+    """REJECT#34: _extract_python_constant_bodies가 밑줄 선행 상수(_NAME)를 추출한다."""
+    src = textwrap.dedent("""\
+        _CODEX_EFFORT_CANONICAL: Dict[str, str] = {"xhigh": "max"}
+        OTHER = 1
+    """)
+    result = pipeline._extract_python_constant_bodies(src, ["_CODEX_EFFORT_CANONICAL"])
+    assert "_CODEX_EFFORT_CANONICAL" in result, (
+        "REJECT#34: 밑줄 선행 상수 추출 실패 — 파서 정규식 확인 필요"
+    )
+    assert "xhigh" in result["_CODEX_EFFORT_CANONICAL"], (
+        f"REJECT#34: 추출된 상수 본문에 값 없음: {result!r}"
+    )
+
+
+def test_tc48f_tc04_oracle_build_parser_is_high() -> None:
+    """REJECT#34 AC#3: TC-04 Oracle 정합성 — pipeline.py + build_parser 변경 시 HIGH.
+
+    이전 TC-04 oracle은 _cmd_gates_codex_review(CRITICAL 함수)를 입력해 HIGH를 기대했으나 불일치.
+    수정 후 oracle input은 build_parser(비CRITICAL 함수)를 사용하여 HIGH를 반환해야 한다.
+    """
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"],
+        ["build_parser"],  # 비CRITICAL 함수
+        [],
+    )
+    assert r["risk_level"] == "HIGH", (
+        f"REJECT#34 AC#3: pipeline.py + build_parser가 HIGH 아님 — got {r['risk_level']!r}. "
+        "TC-04 Oracle 입력이 CRITICAL 함수이면 이 테스트가 실패함"
+    )

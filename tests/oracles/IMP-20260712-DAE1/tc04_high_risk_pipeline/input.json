@@ -1,6 +1,6 @@
 {
   "changed_files": ["pipeline.py"],
-  "changed_functions": ["_cmd_gates_codex_review"],
+  "changed_functions": ["build_parser"],
   "changed_lines": 120,
   "pipeline_type": "IMP",
   "execution_profile": "HIGH_RISK",
