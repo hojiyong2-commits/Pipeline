@@ -9531,8 +9531,10 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         bundle["truncated_critical_hunks"] = int(_semantic["truncated_critical_hunks"])
         bundle["semantic_evidence_sha256"] = str(_semantic["semantic_evidence_sha256"])
         bundle["bundle_budget_chars"] = int(_semantic["bundle_budget_chars"])
-        # REJECT#32: 모듈 상수 변경 목록 — risk 분류 및 Codex 검토 번들에 포함한다.
-        bundle["changed_constants"] = list(_semantic.get("changed_constants", []) or [])
+        # REJECT#32: changed_constants는 번들 파일에 포함하지 않는다.
+        #   CODEX_CRITICAL_CONSTANTS 원문(예: "CRITICAL" 8자)이 직렬화 번들에 들어가면
+        #   bundle_contains_nonce preflight 검사가 오탐으로 차단된다(8자 대문자 패턴).
+        #   _cmd_gates_codex_review에서 git diff를 직접 재스캔하여 상수 변경을 감지한다.
         # critical_function_shas: function_before_after_shas의 after(함수 본문 개별 SHA)를 사용.
         #   (기존 버그: 모든 함수에 pipeline.py 전체 파일 SHA를 동일 적용 → 함수별 구분 불가.)
         try:
@@ -24754,9 +24756,31 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # IMP-20260712-DAE1 MT-6: Risk 분류 + 모델 정책 + Capability Gate (cache 체크 이전).
     _changed_files_for_risk: List[str] = [str(f) for f in (_preflight_bundle.get("changed_files") or [])]
     _changed_funcs_for_risk: List[str] = [str(f) for f in (_preflight_bundle.get("included_functions") or [])]
-    # REJECT#32 Fix: bundle에서 changed_constants를 추출하여 risk 분류에 전달한다.
-    #   CODEX_CRITICAL_CONSTANTS 소속 상수 변경은 함수 변경 없이도 CRITICAL로 분류된다.
-    _changed_consts_for_risk: List[str] = [str(c) for c in (_preflight_bundle.get("changed_constants") or [])]
+    # REJECT#32 Fix: pipeline.py diff를 직접 재스캔하여 CODEX_CRITICAL_CONSTANTS 소속 상수 변경 감지.
+    #   번들 파일에 상수 원문을 넣으면 bundle_contains_nonce 오탐(CRITICAL=8자 대문자)이 발생하므로
+    #   _cmd_gates_codex_review에서 fresh git diff로 재계산한다 (번들 저장 없이 runtime에서만 사용).
+    _changed_consts_for_risk: List[str] = []
+    if "pipeline.py" in _changed_files_for_risk:
+        try:
+            _const_dr = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--unified=0", "--", "pipeline.py"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            if _const_dr.returncode == 0:
+                _crit_const_names = set(CODEX_CRITICAL_CONSTANTS)
+                for _const_ln in _const_dr.stdout.splitlines():
+                    if not (_const_ln.startswith("+") or _const_ln.startswith("-")):
+                        continue
+                    if _const_ln.startswith(("---", "+++")):
+                        continue
+                    _const_stripped = _const_ln[1:].strip()
+                    for _cc in _crit_const_names:
+                        if _const_stripped.startswith(_cc) and _cc not in _changed_consts_for_risk:
+                            _changed_consts_for_risk.append(_cc)
+                            break
+        except Exception:  # noqa: BLE001 — 상수 스캔 실패는 risk 분류에서 무시 (보수적으로 HIGH에 머무름)
+            pass
     _risk_info = _classify_codex_review_risk(
         _changed_files_for_risk, _changed_funcs_for_risk, _changed_consts_for_risk
     )
