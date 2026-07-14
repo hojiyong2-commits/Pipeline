@@ -8939,7 +8939,10 @@ def _build_codex_semantic_evidence(
                     _all_hunks.append({
                         "function": _fn,
                         "hunk": _txt,
-                        "is_critical": _fn in _crit_funcs,
+                        # REJECT#28 Fix 2: pipeline.py의 unknown function hunk는 최소 CRITICAL로
+                        #   취급한다. hunk 헤더에서 함수명을 추출할 수 없을 때 non-critical로 분류하면
+                        #   예산 초과 시 조용히 누락되어 evidence_complete=True가 될 수 있다.
+                        "is_critical": _fn in _crit_funcs or _fn == "unknown",
                         "chars": len(_txt),
                     })
 
@@ -9074,7 +9077,11 @@ def _build_codex_semantic_evidence(
             # IMP-20260712-DAE1 REJECT#6: 실제로 변경된 함수(before != after)만 포함한다.
             # IMP-20260712-DAE1 REJECT#10: CRITICAL 함수만 포함(비CRITICAL 제거 — build_parser 등).
             #   비CRITICAL 함수를 SHA 목록에 포함하면 Codex가 diff 없는 이유를 오해한다.
-            if _b_sha and _a_sha and _b_sha != _a_sha and _fn in _crit_funcs:
+            # REJECT#28 Fix 1: 신규 추가 CRITICAL 함수(before_sha="")와 삭제된 CRITICAL 함수(after_sha="")도
+            #   SHA 항목에 포함하여 필수 커버리지 대상으로 기록한다.
+            #   기존: _b_sha AND _a_sha 둘 다 필요 → 신규/삭제 함수 제외(fail-open 취약).
+            #   수정: _b_sha OR _a_sha 하나만 있어도 CRITICAL이면 포함.
+            if _fn in _crit_funcs and (_b_sha or _a_sha) and _b_sha != _a_sha:
                 _fas[f"pipeline.py::{_fn}"] = {"before": _b_sha, "after": _a_sha}
     except Exception:  # noqa: BLE001
         _fas = {}
@@ -9093,11 +9100,34 @@ def _build_codex_semantic_evidence(
         for _k in _fas:
             # key 형식: "pipeline.py::함수명" → 함수명 부분만 추출
             _fn_name = _k.split("::")[-1] if "::" in _k else _k
+            _fa_entry = _fas[_k]
+            _b_sha_val = str(_fa_entry.get("before", "") or "")
+            _a_sha_val = str(_fa_entry.get("after", "") or "")
+            # REJECT#28 Fix 3a: 신규(after만)/삭제(before만) 함수는 hunk attribution 검사 제외.
+            #   신규 함수 hunk는 @@ 헤더에 함수명이 없어 "unknown"으로 분류될 수 있으므로
+            #   _covered_ids(hunk attribution 기반) 검사를 적용하면 오탐이 발생한다.
+            #   이 경우 content는 unknown hunk로 번들에 포함되므로 Fix 3b에서 통합 처리.
+            #   삭제된 함수는 after content가 없어 hunk 검사 불필요.
+            if not _b_sha_val or not _a_sha_val:
+                continue  # 신규·삭제 함수는 attribution 검사 건너뜀
             if _fn_name not in _covered_ids:
                 _truncated_crit += 1
         for _npf in _nonpy_crit_expected:
             if _npf not in _covered_ids:
                 _truncated_crit += 1
+        # REJECT#28 Fix 3b: unknown-named CRITICAL pipeline.py hunk 누락을 cross-validation에 추가.
+        #   Fix 2에서 pipeline.py의 unknown function hunk를 CRITICAL로 분류했으므로,
+        #   예산 초과로 제외된 unknown hunk도 truncated_critical_hunks에 반영한다.
+        #   _all_hunks의 unknown CRITICAL 수 - _selected의 unknown CRITICAL 수 = 제외된 수.
+        _all_unk_crit = sum(
+            1 for _h in _all_hunks
+            if _h.get("is_critical") and _h.get("function") == "unknown"
+        )
+        _sel_unk_crit = sum(
+            1 for _h in _selected
+            if _h.get("is_critical") and _h.get("function") == "unknown"
+        )
+        _truncated_crit += max(0, _all_unk_crit - _sel_unk_crit)
         # cross-validation 반영 최종값으로 sem을 갱신
         sem["truncated_critical_hunks"] = _truncated_crit
     except Exception:  # noqa: BLE001 — cross-validation 실패 → fail-closed

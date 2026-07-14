@@ -2360,3 +2360,196 @@ def test_tc41g_chatgpt_auth_exact_match_passes() -> None:
     assert r.get("auth_source") == "chatgpt", (
         f"REJECT#27 AC#5: auth_source가 chatgpt가 아님 — got {r.get('auth_source')!r}"
     )
+
+
+# ============================================================
+# TC-42: REJECT#28 — 신규·삭제 CRITICAL 함수 및 unknown hunk fail-open 수정
+# ============================================================
+
+
+def test_tc42a_new_deleted_critical_func_included_in_source() -> None:
+    """REJECT#28 AC#1/AC#2 소스 검증: function_before_after_shas 조건이 신규·삭제 함수를 포함한다.
+
+    Fix 1: 기존 `_b_sha and _a_sha and _b_sha != _a_sha` 조건이
+           `(_b_sha or _a_sha) and _b_sha != _a_sha`로 변경되어
+           신규(after만) / 삭제(before만) CRITICAL 함수도 SHA 항목에 포함된다.
+    """
+    import inspect
+
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+
+    # Fix 1 핵심: `(_b_sha or _a_sha)` 형태의 조건이 있어야 한다.
+    assert "(_b_sha or _a_sha)" in src, (
+        "REJECT#28 Fix 1: (_b_sha or _a_sha) 조건이 소스에 없음 — "
+        "신규/삭제 CRITICAL 함수가 function_before_after_shas에서 누락됨"
+    )
+    # 기존 취약 조건(`_b_sha and _a_sha and`)이 제거됐는지 확인
+    assert "if _b_sha and _a_sha and _b_sha != _a_sha" not in src, (
+        "REJECT#28 Fix 1: 기존 취약 조건 `if _b_sha and _a_sha and _b_sha != _a_sha`가 여전히 존재 — "
+        "신규·삭제 CRITICAL 함수가 여전히 누락될 수 있음"
+    )
+    # REJECT#28 Fix 1 주석이 포함됐는지 확인
+    assert "REJECT#28 Fix 1" in src, (
+        "REJECT#28 Fix 1: 소스에 REJECT#28 Fix 1 주석이 없음 — 수정이 누락됐을 수 있음"
+    )
+
+
+def test_tc42b_unknown_hunk_marked_critical_in_source() -> None:
+    """REJECT#28 AC#3 소스 검증: pipeline.py의 unknown function hunk가 CRITICAL로 분류된다.
+
+    Fix 2: `_flush` 함수에서 is_critical 계산이 `_fn in _crit_funcs or _fn == "unknown"`으로
+           변경되어 hunk 헤더에서 함수명을 찾지 못한 hunks도 CRITICAL로 처리된다.
+    """
+    import inspect
+
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+
+    # Fix 2 핵심: `_fn == "unknown"` 조건이 is_critical 판정에 포함돼야 한다.
+    assert '_fn == "unknown"' in src or "_fn == 'unknown'" in src, (
+        "REJECT#28 Fix 2: `_fn == \"unknown\"` 조건이 소스에 없음 — "
+        "unknown-named pipeline.py hunk가 non-critical로 분류되어 예산 초과 시 조용히 누락됨"
+    )
+    # REJECT#28 Fix 2 주석이 포함됐는지 확인
+    assert "REJECT#28 Fix 2" in src, (
+        "REJECT#28 Fix 2: 소스에 REJECT#28 Fix 2 주석이 없음"
+    )
+
+
+def test_tc42c_unknown_hunk_excluded_cross_validation_in_source() -> None:
+    """REJECT#28 AC#3 소스 검증: cross-validation이 unknown CRITICAL hunk 누락을 감지한다.
+
+    Fix 3: cross-validation 단계에서 unknown-named CRITICAL hunk가 예산에서 제외됐을 때
+           truncated_critical_hunks가 증가하는 코드가 소스에 존재해야 한다.
+    """
+    import inspect
+
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+
+    # Fix 3a/3b 핵심: _all_unk_crit과 _sel_unk_crit 비교 코드가 있어야 한다.
+    assert "_all_unk_crit" in src, (
+        "REJECT#28 Fix 3: _all_unk_crit 변수가 소스에 없음 — "
+        "cross-validation이 unknown CRITICAL hunk 누락을 감지하지 못함"
+    )
+    assert "_sel_unk_crit" in src, (
+        "REJECT#28 Fix 3: _sel_unk_crit 변수가 소스에 없음"
+    )
+    assert "REJECT#28 Fix 3" in src, (
+        "REJECT#28 Fix 3: 소스에 REJECT#28 Fix 3 주석이 없음"
+    )
+
+
+def test_tc42d_new_critical_function_in_sha_dict() -> None:
+    """REJECT#28 AC#1: 신규 CRITICAL 함수(before SHA 없음)가 function_before_after_shas에 포함된다.
+
+    Fix 1 동작 기반 테스트: git show가 before 코드에 함수 없이 반환되면(신규 함수),
+    function_before_after_shas에 before=""로 기록된다.
+    """
+    from unittest.mock import patch, MagicMock
+
+    # 실제 CRITICAL 함수 선택 (현재 파일에 존재해야 함)
+    new_func = "_check_codex_review_operational_trust"
+    assert new_func in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+        f"TC-42d 전제조건: {new_func}이 CODEX_CRITICAL_FUNCTIONS에 없음"
+    )
+
+    # git show origin/main:pipeline.py → 해당 함수가 없는 최소 Python 파일 (신규 함수 시뮬레이션)
+    before_code = "# minimal before state\ndef some_other_function():\n    pass\n"
+
+    diff_output = (
+        "diff --git a/pipeline.py b/pipeline.py\n"
+        "--- a/pipeline.py\n"
+        "+++ b/pipeline.py\n"
+        f"@@ -1,0 +1,3 @@ def {new_func}(result):\n"
+        f"+def {new_func}(result):\n"
+        '+    """New critical function.\"\"\"\n'
+        "+    return {'status': 'PASS'}\n"
+    )
+
+    def _mock_run(cmd, **kwargs):
+        mock_result = MagicMock()
+        cmd_list = [str(c) for c in cmd]
+        if "show" in cmd_list and any("origin/main:pipeline.py" in c for c in cmd_list):
+            mock_result.returncode = 0
+            mock_result.stdout = before_code
+        elif "diff" in cmd_list and "pipeline.py" in cmd_list:
+            mock_result.returncode = 0
+            mock_result.stdout = diff_output
+        else:
+            mock_result.returncode = 0
+            mock_result.stdout = ""
+            mock_result.stderr = ""
+        return mock_result
+
+    with patch("pipeline.subprocess.run", side_effect=_mock_run):
+        result = pipeline._build_codex_semantic_evidence(
+            "IMP-TEST-REJECT28",
+            ["pipeline.py"],
+            list(pipeline.CODEX_CRITICAL_FUNCTIONS),
+        )
+
+    fas = result.get("function_before_after_shas", {})
+    key = f"pipeline.py::{new_func}"
+    assert key in fas, (
+        f"REJECT#28 AC#1: 신규 CRITICAL 함수 {new_func!r}이 function_before_after_shas에 없음\n"
+        f"  Fix 1이 적용됐는지 확인 — before OR after 하나만 있어도 포함돼야 함\n"
+        f"  현재 fas 키: {list(fas.keys())[:5]!r}"
+    )
+    assert fas[key]["before"] == "", (
+        f"REJECT#28 AC#1: 신규 함수의 before SHA가 비어 있지 않음 — got {fas[key]['before']!r}"
+    )
+    assert fas[key]["after"] != "", (
+        f"REJECT#28 AC#1: 신규 함수의 after SHA가 비어 있음 — 현재 파일에 함수가 존재해야 함"
+    )
+
+
+def test_tc42e_unknown_hunk_budget_exceeded_evidence_incomplete() -> None:
+    """REJECT#28 AC#3: unknown-named pipeline.py hunk가 예산 초과로 제외되면
+    truncated_critical_hunks가 증가하고 evidence_complete=False가 된다.
+
+    Fix 2 + Fix 3 동작 기반 테스트: 예산을 초과하는 unknown-named hunk를 시뮬레이션하고,
+    cross-validation이 이를 감지하여 evidence_complete=False를 반환하는지 검증한다.
+    """
+    from unittest.mock import patch, MagicMock
+
+    # 예산을 크게 초과하는 unknown-named hunk (@@에 함수명 없음)
+    big_content = "+" + "x" * 200_000  # 200KB — 실제 예산(165000)을 크게 초과
+    diff_output = (
+        "diff --git a/pipeline.py b/pipeline.py\n"
+        "--- a/pipeline.py\n"
+        "+++ b/pipeline.py\n"
+        "@@ -1,0 +1,1 @@\n"  # 함수명 없는 헤더 → unknown
+        f"{big_content}\n"
+    )
+    before_code = "# minimal\n"
+
+    def _mock_run(cmd, **kwargs):
+        mock_result = MagicMock()
+        cmd_list = [str(c) for c in cmd]
+        if "show" in cmd_list and any("origin/main:pipeline.py" in c for c in cmd_list):
+            mock_result.returncode = 0
+            mock_result.stdout = before_code
+        elif "diff" in cmd_list and "pipeline.py" in cmd_list:
+            mock_result.returncode = 0
+            mock_result.stdout = diff_output
+        else:
+            mock_result.returncode = 0
+            mock_result.stdout = ""
+            mock_result.stderr = ""
+        return mock_result
+
+    with patch("pipeline.subprocess.run", side_effect=_mock_run):
+        result = pipeline._build_codex_semantic_evidence(
+            "IMP-TEST-REJECT28",
+            ["pipeline.py"],
+            [],  # 특정 함수 없음 — unknown hunk만 테스트
+        )
+
+    assert result["truncated_critical_hunks"] > 0, (
+        f"REJECT#28 AC#3: unknown hunk 예산 초과 시 truncated_critical_hunks가 0 — "
+        f"Fix 2(unknown → CRITICAL) 또는 Fix 3(cross-validation) 미적용\n"
+        f"  got truncated_critical_hunks={result['truncated_critical_hunks']}"
+    )
+    assert result["evidence_complete"] is False, (
+        f"REJECT#28 AC#3: unknown hunk 예산 초과 시 evidence_complete가 False가 아님 — "
+        f"got {result['evidence_complete']}"
+    )
