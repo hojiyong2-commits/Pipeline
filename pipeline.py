@@ -8673,7 +8673,17 @@ def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]
             "message": f"codex login status 확인 실패: {type(_exc).__name__}: {_exc}",
         }
     _combined = f"{_res.stdout or ''}\n{_res.stderr or ''}"
-    if _res.returncode == 0 and CODEX_CHATGPT_LOGIN_MARKER in _combined:
+    # REJECT#27 Fix C: 부분 문자열 검사 대신 정확한 라인 일치를 사용한다.
+    #   "Logged in using ChatGPT" in combined → "Not Logged in using ChatGPT"도 True가 되어 잘못 통과.
+    #   공백을 제거한 각 라인이 CODEX_CHATGPT_LOGIN_MARKER와 정확히 일치할 때만 허용한다.
+    _auth_ok = (
+        _res.returncode == 0
+        and any(
+            _ln.strip() == CODEX_CHATGPT_LOGIN_MARKER
+            for _ln in _combined.splitlines()
+        )
+    )
+    if _auth_ok:
         return {"result": "OK", "auth_source": "chatgpt"}
     return {
         "result": "BLOCKED",
@@ -26429,6 +26439,32 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             "codex_review_model_policy_signature_missing",
             "codex_review_result에 model_policy_signature가 없습니다 (fail-closed).",
         )
+    # (3b) REJECT#27 Fix A: risk_level로 현재 정책을 재계산하여 stored 결과와 비교한다.
+    #   selected_model/selected_reasoning_effort/mode/model_policy_signature는 저장된 값만
+    #   신뢰하지 않고 현재 CODEX_MODEL_POLICIES와 정확히 일치해야 한다(위조 방지).
+    _recomputed_policy = _build_codex_model_policy(risk_level)
+    if _recomputed_policy.get("result") == "BLOCKED":
+        return _blocked(
+            "codex_review_policy_recompute_failed",
+            f"risk_level={risk_level}로 정책 재계산 실패 — 알 수 없는 위험 수준입니다 (fail-closed).",
+        )
+    _expected_model = str(_recomputed_policy.get("selected_model", "") or "")
+    _expected_effort = str(_recomputed_policy.get("selected_reasoning_effort", "") or "")
+    _stored_router_ver = str(result.get("router_version", "") or "")
+    if _stored_router_ver != CODEX_MODEL_ROUTER_VERSION:
+        return _blocked(
+            "codex_review_router_version_mismatch",
+            f"router_version={_stored_router_ver!r} != 현재 정책 버전 {CODEX_MODEL_ROUTER_VERSION!r} "
+            "(fail-closed).",
+        )
+    _recomputed_sig = _codex_policy_signature(_recomputed_policy)
+    _stored_sig = str(result.get("model_policy_signature", "") or "")
+    if _stored_sig != _recomputed_sig:
+        return _blocked(
+            "codex_review_policy_signature_mismatch",
+            f"model_policy_signature={_stored_sig!r} != 재계산된 정책 서명 {_recomputed_sig!r} "
+            "(정책 위조 또는 모델 불일치, fail-closed).",
+        )
     # (4) sanitized codex_cli_command 존재 + placeholder 금지.
     cli_command = str(result.get("codex_cli_command", "") or "").strip()
     if verdict_source == "verified_cache":
@@ -26517,6 +26553,23 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             "actual_verified 증거(actual_model=선택값)만 허용합니다. "
             "actual_model=unknown은 CRITICAL에서 차단됩니다 (fail-closed).",
         )
+    # REJECT#27 Fix B: actual_verified를 주장하는 경우 actual_model/actual_effort가 실제로
+    #   알려져 있고 선택 정책과 일치하는지 강제 재검증한다.
+    #   저장된 verification_level=actual_verified만 신뢰하지 않고, actual_model/actual_effort
+    #   값이 존재하고 정책값과 일치하는지 교차 확인한다(위조 방지, fail-closed).
+    if verification_level == CODEX_VERIFICATION_ACTUAL:
+        if not actual_model or actual_model == "unknown":
+            return _blocked(
+                "codex_review_actual_verified_but_unknown_model",
+                "model_verification_level=actual_verified이지만 actual_model=unknown — "
+                "actual_verified는 CLI가 실제 모델명을 보고해야 합니다 (fail-closed).",
+            )
+        if not actual_effort or actual_effort == "unknown":
+            return _blocked(
+                "codex_review_actual_verified_but_unknown_effort",
+                "model_verification_level=actual_verified이지만 actual_effort=unknown — "
+                "actual_verified는 CLI가 실제 effort를 보고해야 합니다 (fail-closed).",
+            )
     # (6) auth_source는 chatgpt여야 한다(요구9: ChatGPT Plus 인증 승계).
     if str(result.get("auth_source", "") or "") != "chatgpt":
         return _blocked(

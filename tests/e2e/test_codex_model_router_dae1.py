@@ -426,12 +426,15 @@ def test_tc12_invoke_usage_limit_nonzero(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 def _trust_base(**over) -> dict:
     # REJECT#21: CRITICAL은 actual_verified만 허용. 기본값을 actual_verified로 갱신.
+    # REJECT#27: model_policy_signature를 실제 정책에서 동적으로 계산한다(위조 방지 테스트 대응).
+    _critical_policy = pipeline._build_codex_model_policy("CRITICAL")
+    _correct_sig = pipeline._codex_policy_signature(_critical_policy)
     base = {
         "verdict_source": "codex_cli",
         "acceptance_eligible": True,
         "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
         "risk_level": "CRITICAL",
-        "model_policy_signature": "sig",
+        "model_policy_signature": _correct_sig,   # "CRITICAL:gpt-5.6-sol:max:enforce"
         "codex_cli_command": (
             "codex exec --model gpt-5.6-sol -c model_reasoning_effort=max "
             "--sandbox read-only --ephemeral --json -C <repo-root> -"
@@ -2045,22 +2048,33 @@ def _make_valid_result_for_operational_trust(
     risk_level: str = "CRITICAL",
     verification_level: str = "actual_verified",
 ) -> dict:
-    """_check_codex_review_operational_trust 테스트용 유효한 기본 result dict."""
+    """_check_codex_review_operational_trust 테스트용 유효한 기본 result dict.
+
+    REJECT#27: model_policy_signature를 실제 정책에서 동적으로 계산한다.
+    selected_model/selected_reasoning_effort도 재계산된 정책값을 사용한다.
+    """
+    _policy = pipeline._build_codex_model_policy(risk_level)
+    _sig = pipeline._codex_policy_signature(_policy)
+    _sel_model = str(_policy.get("selected_model", "gpt-5.6-sol") or "")
+    _sel_effort = str(_policy.get("selected_reasoning_effort", "max") or "")
     cli_cmd = (
         "N/A (cache hit)" if verdict_source == "verified_cache"
-        else "codex exec --model gpt-5.6-sol -c model_reasoning_effort=xhigh --sandbox read-only --ephemeral --json -"
+        else (
+            f"codex exec --model {_sel_model} -c model_reasoning_effort={invoked_effort} "
+            "--sandbox read-only --ephemeral --json -"
+        )
     )
     return {
         "status": "APPROVED",
         "verdict_source": verdict_source,
         "acceptance_eligible": True,
-        "router_version": "2.0.0",
+        "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
         "risk_level": risk_level,
-        "model_policy_signature": f"{risk_level}:gpt-5.6-sol:max:enforce",
+        "model_policy_signature": _sig,
         "codex_cli_command": cli_cmd,
-        "selected_model": "gpt-5.6-sol",
-        "selected_reasoning_effort": "max",
-        "invoked_model": "gpt-5.6-sol",
+        "selected_model": _sel_model,
+        "selected_reasoning_effort": _sel_effort,
+        "invoked_model": _sel_model,
         "invoked_effort": invoked_effort,
         "actual_model": actual_model,
         "actual_effort": actual_effort,
@@ -2159,7 +2173,7 @@ def test_tc40d_canonicalize_effort_in_operational_trust_source() -> None:
     high_result = _make_valid_result_for_operational_trust(
         verdict_source="codex_cli",
         actual_effort="unknown",   # actual 미보고 시
-        invoked_effort="max",
+        invoked_effort="high",     # HIGH 정책 effort = "high" (max 아님)
         actual_model="unknown",
         risk_level="HIGH",
         verification_level=pipeline.CODEX_VERIFICATION_INVOCATION,
@@ -2167,4 +2181,182 @@ def test_tc40d_canonicalize_effort_in_operational_trust_source() -> None:
     r_high = pipeline._check_codex_review_operational_trust(high_result)
     assert r_high["status"] == "PASS", (
         f"REJECT#26 AC#4: HIGH+invocation_verified 결과가 operational_trust PASS가 아님 — {r_high!r}"
+    )
+
+
+# ============================================================
+# TC-41: REJECT#27 운영 신뢰 게이트 강화 + 정확한 인증 검사
+# ============================================================
+
+
+def test_tc41a_critical_wrong_policy_signature_blocked() -> None:
+    """REJECT#27 AC#1: CRITICAL에서 잘못된 policy signature는 codex_review_policy_signature_mismatch로 차단된다.
+
+    luna/terra 모델 또는 임의의 비어 있지 않은 잘못된 model_policy_signature를
+    넣으면 운영 신뢰 검사가 BLOCKED를 반환한다.
+    """
+    # 올바른 CRITICAL 결과를 기반으로 policy signature만 잘못된 값으로 교체
+    result = _make_valid_result_for_operational_trust(
+        verdict_source="codex_cli",
+        actual_effort="xhigh",
+        invoked_effort="xhigh",
+        actual_model="gpt-5.6-sol",
+        risk_level="CRITICAL",
+        verification_level=pipeline.CODEX_VERIFICATION_ACTUAL,
+    )
+    # 잘못된 signature로 교체 (luna 모델 사용 위조)
+    result["model_policy_signature"] = "CRITICAL:gpt-5.6-luna:max:enforce"
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#27 AC#1: 잘못된 policy signature(luna)가 BLOCKED가 아님 — {r!r}"
+    )
+    assert r.get("failure_code") == "codex_review_policy_signature_mismatch", (
+        f"REJECT#27 AC#1: failure_code가 codex_review_policy_signature_mismatch가 아님 — "
+        f"got {r.get('failure_code')!r}"
+    )
+
+
+def test_tc41b_actual_verified_unknown_model_blocked() -> None:
+    """REJECT#27 AC#2a: actual_verified인데 actual_model=unknown이면 BLOCKED된다.
+
+    Fix B: actual_model=unknown이어도 verification_level만 actual_verified로 위조하면
+    통과되던 취약점을 차단한다.
+    """
+    result = _make_valid_result_for_operational_trust(
+        verdict_source="codex_cli",
+        actual_effort="xhigh",
+        invoked_effort="xhigh",
+        actual_model="unknown",   # actual_model 미보고 → 위조 시도
+        risk_level="CRITICAL",
+        verification_level=pipeline.CODEX_VERIFICATION_ACTUAL,
+    )
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#27 AC#2a: actual_verified+actual_model=unknown이 BLOCKED가 아님 — {r!r}"
+    )
+    assert r.get("failure_code") == "codex_review_actual_verified_but_unknown_model", (
+        f"REJECT#27 AC#2a: failure_code가 codex_review_actual_verified_but_unknown_model가 아님 — "
+        f"got {r.get('failure_code')!r}"
+    )
+
+
+def test_tc41c_actual_verified_unknown_effort_blocked() -> None:
+    """REJECT#27 AC#2b: actual_verified인데 actual_effort=unknown이면 BLOCKED된다.
+
+    Fix B: actual_effort=unknown이어도 verification_level만 actual_verified로 위조하면
+    통과되던 취약점을 차단한다.
+    """
+    result = _make_valid_result_for_operational_trust(
+        verdict_source="codex_cli",
+        actual_effort="unknown",   # actual_effort 미보고 → 위조 시도
+        invoked_effort="xhigh",
+        actual_model="gpt-5.6-sol",
+        risk_level="CRITICAL",
+        verification_level=pipeline.CODEX_VERIFICATION_ACTUAL,
+    )
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#27 AC#2b: actual_verified+actual_effort=unknown이 BLOCKED가 아님 — {r!r}"
+    )
+    assert r.get("failure_code") == "codex_review_actual_verified_but_unknown_effort", (
+        f"REJECT#27 AC#2b: failure_code가 codex_review_actual_verified_but_unknown_effort가 아님 — "
+        f"got {r.get('failure_code')!r}"
+    )
+
+
+def test_tc41d_router_version_mismatch_blocked() -> None:
+    """REJECT#27 AC#3: router_version 불일치는 codex_review_router_version_mismatch로 차단된다.
+
+    Fix A: 현재 CODEX_MODEL_ROUTER_VERSION과 다른 router_version을 가진 결과는
+    BLOCKED된다(오래된 캐시 또는 다른 버전 정책으로 생성된 결과 차단).
+    """
+    result = _make_valid_result_for_operational_trust(
+        verdict_source="codex_cli",
+        actual_effort="xhigh",
+        invoked_effort="xhigh",
+        actual_model="gpt-5.6-sol",
+        risk_level="CRITICAL",
+        verification_level=pipeline.CODEX_VERIFICATION_ACTUAL,
+    )
+    # 오래된 버전으로 교체
+    result["router_version"] = "0.9.0"
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"REJECT#27 AC#3: router_version=0.9.0 불일치가 BLOCKED가 아님 — {r!r}"
+    )
+    assert r.get("failure_code") == "codex_review_router_version_mismatch", (
+        f"REJECT#27 AC#3: failure_code가 codex_review_router_version_mismatch가 아님 — "
+        f"got {r.get('failure_code')!r}"
+    )
+
+
+def test_tc41e_chatgpt_auth_not_logged_in_blocked() -> None:
+    """REJECT#27 AC#4a: 'Not Logged in using ChatGPT'는 인증 검사를 BLOCKED한다.
+
+    Fix C 이전: 부분 문자열 검사 → 'Logged in using ChatGPT' 포함 → 잘못 통과.
+    Fix C 이후: 정확한 라인 일치 → 'Not Logged in using ChatGPT' ≠ 마커 → BLOCKED.
+    """
+    from unittest.mock import MagicMock, patch
+
+    fake_proc = MagicMock()
+    fake_proc.returncode = 0
+    fake_proc.stdout = "Not Logged in using ChatGPT\n"
+    fake_proc.stderr = ""
+
+    with patch("pipeline.subprocess.run", return_value=fake_proc):
+        r = pipeline._check_codex_chatgpt_auth(codex_bin="codex")
+    assert r["result"] == "BLOCKED", (
+        f"REJECT#27 AC#4a: 'Not Logged in using ChatGPT'가 BLOCKED가 아님 — {r!r}"
+    )
+    assert r.get("failure_code") == "codex_not_chatgpt_authenticated", (
+        f"REJECT#27 AC#4a: failure_code가 codex_not_chatgpt_authenticated가 아님 — "
+        f"got {r.get('failure_code')!r}"
+    )
+
+
+def test_tc41f_chatgpt_auth_prefix_suffix_blocked() -> None:
+    """REJECT#27 AC#4b: 접두·접미 문구로 인증 마커가 오염된 경우 BLOCKED된다.
+
+    'Warning: Logged in using ChatGPT', 'Logged in using ChatGPT (limited)' 등은
+    정확한 라인 일치 검사에서 탈락해야 한다.
+    """
+    from unittest.mock import MagicMock, patch
+
+    bad_outputs = [
+        "Warning: Logged in using ChatGPT\n",
+        "Logged in using ChatGPT (limited)\n",
+        "[INFO] Logged in using ChatGPT\n",
+    ]
+    for bad_output in bad_outputs:
+        fake_proc = MagicMock()
+        fake_proc.returncode = 0
+        fake_proc.stdout = bad_output
+        fake_proc.stderr = ""
+        with patch("pipeline.subprocess.run", return_value=fake_proc):
+            r = pipeline._check_codex_chatgpt_auth(codex_bin="codex")
+        assert r["result"] == "BLOCKED", (
+            f"REJECT#27 AC#4b: 오염된 마커가 BLOCKED가 아님 — "
+            f"input={bad_output!r}, result={r!r}"
+        )
+
+
+def test_tc41g_chatgpt_auth_exact_match_passes() -> None:
+    """REJECT#27 AC#5: 정확한 'Logged in using ChatGPT' 라인은 인증 검사를 PASS한다.
+
+    Fix C 적용 후에도 정확한 마커 라인이 있으면 OK를 반환하여 정상 사용이 유지된다.
+    """
+    from unittest.mock import MagicMock, patch
+
+    fake_proc = MagicMock()
+    fake_proc.returncode = 0
+    fake_proc.stdout = "Logged in using ChatGPT\n"
+    fake_proc.stderr = ""
+
+    with patch("pipeline.subprocess.run", return_value=fake_proc):
+        r = pipeline._check_codex_chatgpt_auth(codex_bin="codex")
+    assert r["result"] == "OK", (
+        f"REJECT#27 AC#5: 정확한 ChatGPT 로그인 마커가 OK가 아님 — {r!r}"
+    )
+    assert r.get("auth_source") == "chatgpt", (
+        f"REJECT#27 AC#5: auth_source가 chatgpt가 아님 — got {r.get('auth_source')!r}"
     )
