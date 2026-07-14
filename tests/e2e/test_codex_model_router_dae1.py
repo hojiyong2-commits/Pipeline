@@ -5292,3 +5292,198 @@ def test_native_binary_missing_blocks_operational_trust() -> None:
     assert "native_binary" in r.get("failure_code", ""), (
         f"failure_code에 'native_binary'가 없음: {r.get('failure_code')}"
     )
+
+
+# ---------------------------------------------------------------------------
+# TC-16: REJECT#14 — codex --version 조회가 검증된 절대 경로(_codex_bin_now)를 사용하고
+#        조회 후 wrapper/JS/native binary SHA를 최종 재검증한다(fail-closed).
+# ---------------------------------------------------------------------------
+class TestTC16Reject14VersionCheckUsesVerifiedBinaryPath:
+    """REJECT#14: codex_cli_version 수집이 shutil.which("codex") 재조회(TOCTOU 취약점)가 아닌
+    이미 신뢰 검증된 절대 경로(_codex_bin_now)를 사용하고, --version 실행 후 바이너리 SHA를
+    최종 재검증하여 변경 시 BLOCKED + acceptance_eligible=False로 무효화한다.
+    """
+
+    @staticmethod
+    def _version_block(src: str) -> str:
+        """_cmd_gates_codex_review 소스에서 codex_cli_version 수집 블록만 슬라이스한다.
+
+        슬라이스 시작점은 주석이 아닌 실제 대입문(_codex_cli_version_actual = "unknown")이므로,
+        블록 위의 설명 주석(문자열 shutil.which를 포함)은 슬라이스에서 제외된다.
+        """
+        start = src.index('_codex_cli_version_actual = "unknown"')
+        end = src.index("result = {", start)
+        return src[start:end]
+
+    @staticmethod
+    def _make_version_bin(tmp_path: "Path", tag: str, name: str) -> str:
+        """--version 호출에 'codex-cli <tag>'를 출력하는 fake codex 실행 파일을 생성한다."""
+        import os as _os
+        import stat as _stat
+        import sys as _sys
+
+        impl = tmp_path / f"ver_impl_{tag}.py"
+        impl.write_text(
+            "import sys\n"
+            "if sys.argv[1:] == ['--version']:\n"
+            f"    sys.stdout.write('codex-cli {tag}\\n')\n"
+            "    sys.exit(0)\n"
+            "sys.exit(1)\n",
+            encoding="utf-8",
+        )
+        if _os.name == "nt":
+            wrapper = tmp_path / f"{name}.cmd"
+            wrapper.write_text(f'@"{_sys.executable}" "{impl}" %*\r\n', encoding="utf-8")
+            return str(wrapper)
+        wrapper = tmp_path / name
+        wrapper.write_text(
+            f'#!/bin/sh\nexec "{_sys.executable}" "{impl}" "$@"\n', encoding="utf-8"
+        )
+        wrapper.chmod(wrapper.stat().st_mode | _stat.S_IEXEC | _stat.S_IRUSR | _stat.S_IWUSR)
+        return str(wrapper)
+
+    def test_version_check_uses_verified_binary_path(self, tmp_path: "Path") -> None:
+        """REJECT#14 핵심: 버전 조회 블록은 shutil.which("codex") 재조회 없이 _codex_bin_now
+        (검증된 절대 경로)만 사용한다. 추가로 PATH에 악성 codex가 선행 배치되어도, 검증된 절대
+        경로로 --version을 실행하면 악성 PATH 바이너리를 우회함을 subprocess로 확인한다.
+        """
+        import inspect
+        import os as _os
+        import shutil as _shutil
+        import subprocess as _sp
+
+        # (1) 소스 검증: 버전 블록은 _codex_bin_now만 사용, shutil.which 재조회/문자열 폴백 금지.
+        _block = self._version_block(inspect.getsource(pipeline._cmd_gates_codex_review))
+        assert "shutil.which" not in _block, (
+            "REJECT#14: codex_cli_version 수집 블록에 shutil.which 재조회가 남아있음 — "
+            "검증 범위 밖 TOCTOU 취약점"
+        )
+        assert '_fake_codex_bin or shutil.which' not in _block, (
+            "REJECT#14: 구 버전 조회 패턴(_fake_codex_bin or shutil.which(...) or \"codex\")이 남아있음"
+        )
+        assert "_codex_bin_now" in _block, (
+            "REJECT#14: 버전 조회 블록이 검증된 절대 경로 _codex_bin_now를 사용하지 않음"
+        )
+
+        # (2) subprocess E2E: 검증된 절대 경로로 --version 실행 → 검증된 버전 획득.
+        verified = self._make_version_bin(tmp_path, "9.9.9-verified", "codex_verified")
+        _r = _sp.run(
+            [verified, "--version"],
+            capture_output=True, text=True, timeout=20,
+            encoding="utf-8", errors="replace",
+        )
+        assert _r.returncode == 0, f"검증된 바이너리 --version 실패: rc={_r.returncode} err={_r.stderr!r}"
+        # pipeline이 적용하는 파싱 규칙(.stdout.strip().splitlines()[0])과 동일하게 파싱.
+        _got_verified = _r.stdout.strip().splitlines()[0]
+        assert _got_verified == "codex-cli 9.9.9-verified", (
+            f"검증된 절대 경로 --version 출력 불일치: {_got_verified!r}"
+        )
+
+        # (3) PATH에 악성 'codex'를 선행 배치. 검증된 절대 경로로 실행하면 악성 PATH를 무시한다.
+        evil_dir = tmp_path / "evilpath"
+        evil_dir.mkdir()
+        self._make_version_bin(evil_dir, "6.6.6-MALICIOUS", "codex")
+        _env = dict(_os.environ)
+        _env["PATH"] = str(evil_dir) + _os.pathsep + _env.get("PATH", "")
+        # sanity: 이 PATH에서 shutil.which("codex")는 악성 바이너리를 찾는다(TOCTOU 재조회의 위험).
+        assert _shutil.which("codex", path=str(evil_dir)) is not None, (
+            "테스트 셋업 오류: 악성 codex가 PATH에서 발견되지 않음"
+        )
+        # 검증된 절대 경로로 --version 실행 → PATH 오염과 무관하게 검증된 버전만 나온다.
+        _r2 = _sp.run(
+            [verified, "--version"],
+            capture_output=True, text=True, timeout=20,
+            env=_env, encoding="utf-8", errors="replace",
+        )
+        _got2 = _r2.stdout.strip().splitlines()[0] if _r2.stdout.strip() else ""
+        assert _got2 == "codex-cli 9.9.9-verified", (
+            f"REJECT#14: PATH 오염 시 검증된 절대 경로가 악성 바이너리로 대체됨 — got={_got2!r}. "
+            "shutil.which 재조회(구 버그)였다면 'codex-cli 6.6.6-MALICIOUS'가 나온다."
+        )
+
+    def test_version_check_sha_revalidation_in_source(self) -> None:
+        """REJECT#14: 버전 조회 후 바이너리 SHA 재검증 → 변경 시 _post_snap_changed에 추가하고
+        codex_review_snapshot_changed로 BLOCKED 처리한다(fail-closed).
+        """
+        import inspect
+
+        _block = self._version_block(inspect.getsource(pipeline._cmd_gates_codex_review))
+        assert "codex_version_check_binary_sha_changed" in _block, (
+            "REJECT#14: 버전 조회 후 SHA 변경 감지 failure_code가 블록에 없음"
+        )
+        assert "_post_snap_changed" in _block, (
+            "REJECT#14: 버전 조회 SHA 재검증이 post-exec snapshot 차단 로직(_post_snap_changed)과 연결되지 않음"
+        )
+        assert "codex_review_snapshot_changed" in _block and "_die(" in _block, (
+            "REJECT#14: SHA 변경 시 codex_review_snapshot_changed로 _die() 차단이 없음"
+        )
+        assert "_write_codex_review_blocked_invalidation" in _block, (
+            "REJECT#14: SHA 변경 차단 시 승인 무효화(_write_codex_review_blocked_invalidation) 호출 없음"
+        )
+
+    def test_version_check_revalidates_all_three_binary_dimensions(self) -> None:
+        """REJECT#14: 재검증 대상이 wrapper(path/sha256) + JS entrypoint + native binary 3종을 모두
+        포함한다(어느 하나만 검증하면 나머지 교체를 놓친다).
+        """
+        import inspect
+
+        _block = self._version_block(inspect.getsource(pipeline._cmd_gates_codex_review))
+        for _k in (
+            '"path"', '"sha256"',
+            '"js_entrypoint_path"', '"js_entrypoint_sha256"',
+            '"native_binary_path"', '"native_binary_sha256"',
+        ):
+            assert _k in _block, (
+                f"REJECT#14: 버전 조회 SHA 재검증 블록이 {_k} 차원을 검사하지 않음"
+            )
+
+    def test_blocked_invalidation_marks_acceptance_ineligible(self, tmp_path: "Path") -> None:
+        """REJECT#14: SHA 변경 차단 경로가 호출하는 _write_codex_review_blocked_invalidation는
+        codex_review_snapshot_changed 결과를 acceptance_eligible=False로 기록한다.
+
+        PIPELINE_STATE_PATH로 격리된 subprocess에서 실제 파일 효과(codex_review_result.json)를 검증한다
+        (전역 상태를 오염시키지 않는다).
+        """
+        import json as _json
+        import subprocess as _sp
+        import sys as _sys
+
+        _state = tmp_path / "iso_state.json"
+        _state.write_text(_json.dumps({"pipeline_id": "IMP-20260712-DAE1"}), encoding="utf-8")
+        _driver = tmp_path / "driver.py"
+        _driver.write_text(
+            "import os, sys\n"
+            f"sys.path.insert(0, {str(_ROOT)!r})\n"
+            "import pipeline\n"
+            "pipeline._write_codex_review_blocked_invalidation(\n"
+            "    'IMP-20260712-DAE1', 'codex_review_snapshot_changed', 0, 0, 'a'*64, 'HIGH', None)\n"
+            "p = pipeline._codex_review_result_path()\n"
+            "sys.stdout.write(p.read_text(encoding='utf-8'))\n",
+            encoding="utf-8",
+        )
+        _env = dict(os.environ)
+        _env["PIPELINE_STATE_PATH"] = str(_state)
+        _r = _sp.run(
+            [_sys.executable, str(_driver)],
+            capture_output=True, text=True, timeout=60,
+            env=_env, encoding="utf-8", errors="replace",
+        )
+        assert _r.returncode == 0, f"격리 subprocess 실패: rc={_r.returncode} err={_r.stderr!r}"
+        _result = _json.loads(_r.stdout)
+        assert _result.get("acceptance_eligible") is False, (
+            f"REJECT#14: 차단 무효화 결과의 acceptance_eligible이 False가 아님: {_result.get('acceptance_eligible')!r}"
+        )
+        assert _result.get("status") == "BLOCKED", (
+            f"REJECT#14: 차단 무효화 결과의 status가 BLOCKED가 아님: {_result.get('status')!r}"
+        )
+        assert "codex_review_snapshot_changed" in str(_result.get("reason", "")), (
+            f"REJECT#14: reason에 codex_review_snapshot_changed 없음: {_result.get('reason')!r}"
+        )
+        assert _result.get("verdict") is None, (
+            f"REJECT#14: 차단 결과의 verdict가 None이 아님(APPROVE 잔존 위험): {_result.get('verdict')!r}"
+        )
+        # 격리 검증: 결과 파일이 전역 .pipeline이 아닌 격리 state 경로 하위에 기록됐다.
+        _iso_result = _state.parent / ".pipeline" / "codex_review_result.json"
+        assert _iso_result.exists(), (
+            "REJECT#14: PIPELINE_STATE_PATH 격리가 동작하지 않음 — 결과가 격리 경로에 없음"
+        )

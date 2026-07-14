@@ -26523,19 +26523,60 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   단, 이번 실행에서 실제로 codex exec를 호출한 경우(_auto_cli_override)만 감지한다. external
     #   verdict/cache-hit/external-cli-injection 경로는 codex를 실행하지 않았으므로 "unknown"으로
     #   남긴다(codex가 미사용인데 설치 버전을 기록하면 허위 증거가 됨 — fail-safe).
+    # IMP-20260712-DAE1 REJECT#14: 버전 조회는 반드시 신뢰 검증된 절대 경로(_codex_bin_now)만
+    #   사용한다. shutil.which("codex")/문자열 "codex" 재조회는 TOCTOU 취약점(검증 범위 밖에서
+    #   별도 프로세스를 실행)이므로 금지한다. _codex_bin_now가 없으면 "unknown"으로 남긴다(fail-safe).
+    #   (_auto_cli_override is not None ⟹ auto-invoke 분기 실행 ⟹ _codex_bin_now/_post_snap_changed 정의됨.)
     _codex_cli_version_actual = "unknown"
     if _auto_cli_override is not None:
-        try:
-            _ver_bin = _fake_codex_bin or shutil.which("codex") or "codex"
-            _ver_r = subprocess.run(
-                [_ver_bin, "--version"],
-                capture_output=True, text=True, timeout=10,
-                encoding="utf-8", errors="replace",
-            )
-            if _ver_r.returncode == 0 and _ver_r.stdout.strip():
-                _codex_cli_version_actual = _ver_r.stdout.strip().splitlines()[0]
-        except Exception:  # noqa: BLE001 — 버전 확인 실패는 unknown으로 남긴다(fail-safe)
-            _codex_cli_version_actual = "unknown"
+        _ver_bin = _codex_bin_now if _codex_bin_now else ""
+        if _ver_bin:
+            try:
+                _ver_r = subprocess.run(
+                    [_ver_bin, "--version"],
+                    capture_output=True, text=True, timeout=10,
+                    encoding="utf-8", errors="replace",
+                )
+                if _ver_r.returncode == 0 and _ver_r.stdout.strip():
+                    _codex_cli_version_actual = _ver_r.stdout.strip().splitlines()[0]
+            except Exception:  # noqa: BLE001 — 버전 확인 실패는 unknown으로 남긴다(fail-safe)
+                _codex_cli_version_actual = "unknown"
+        # IMP-20260712-DAE1 REJECT#14: 버전 조회(--version 별도 프로세스) 완료 후 wrapper/JS
+        #   entrypoint/native binary SHA를 최종 재검증한다. --version 실행 중 바이너리가 교체됐다면
+        #   승인 결과를 무효화한다(fail-closed). _fake_codex_bin(test seam)은 신뢰 SHA를 수집하지
+        #   않으므로 건너뛴다(기존 post-exec snapshot 블록과 동일한 test 면제 규칙).
+        if not _fake_codex_bin:
+            for _vc_path_key, _vc_sha_key in (
+                ("path", "sha256"),
+                ("js_entrypoint_path", "js_entrypoint_sha256"),
+                ("native_binary_path", "native_binary_sha256"),
+            ):
+                _vc_path = str(_codex_binary_trust.get(_vc_path_key, "") or "")
+                _vc_pre_sha = str(_codex_binary_trust.get(_vc_sha_key, "") or "")
+                if not _vc_path or not _vc_pre_sha:
+                    continue
+                try:
+                    _vc_now_sha = hashlib.sha256(Path(_vc_path).read_bytes()).hexdigest()
+                except Exception:  # noqa: BLE001 — 재계산 실패 → 검증 불가 → fail-closed
+                    _vc_now_sha = ""
+                if (not _vc_now_sha or _vc_now_sha != _vc_pre_sha) and (
+                    "codex_version_check_binary_sha_changed" not in _post_snap_changed
+                ):
+                    _post_snap_changed.append("codex_version_check_binary_sha_changed")
+            if _post_snap_changed:
+                # 버전 조회 후 바이너리 상태 변경 감지 → post-exec snapshot 차단 로직과 동일 처리.
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_review_snapshot_changed",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
+                _die(
+                    "[BLOCKED] failure_code=codex_review_snapshot_changed\n"
+                    "  Codex CLI 버전 조회(--version) 후 바이너리 상태가 변경되었습니다.\n"
+                    f"  차단 차원: {', '.join(_post_snap_changed)}\n"
+                    "  승인 결과와 캐시가 무효화됩니다 — gates codex-review를 재실행하세요.\n"
+                    "  (fail-closed: 검증 불가 상태에서 승인 결과를 저장하지 않습니다.)"
+                )
 
     result = {
         # IMP-20260712-DAE1 REJECT#3(요구8): schema v5 — invoked/verification/auth/environment 증거.
