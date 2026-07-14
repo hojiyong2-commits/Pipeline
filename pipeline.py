@@ -8513,6 +8513,23 @@ def _parse_codex_exec_capability(stdout: str) -> Tuple[str, str]:
 #            _invoke_codex_exec가 CLI --json에서 관측한 값이다.
 # [Vulnerability & Risks]: actual이 unknown이면 HIGH/CRITICAL에서 fail-closed BLOCKED. 허용 오차 없음.
 # [Improvement]: effort 동의어(예: "maximum"=="max") 정규화 테이블을 두면 CLI 표기 편차를 흡수 가능.
+# REJECT#25: CLI는 'max' → 'xhigh' 변환 후 전달하고, CLI가 actual_effort='xhigh'를 보고한다.
+#   정책에서 selected_effort='max'이고 CLI actual_effort='xhigh'이면 동등 값으로 취급해야 한다.
+#   xhigh→max로 정규화하여 actual_effort == selected_effort 비교에서 actual_verified를 반환한다.
+_CODEX_EFFORT_CANONICAL: Dict[str, str] = {"xhigh": "max"}
+
+
+def _canonicalize_effort(effort: str) -> str:
+    """CLI effort 값을 정책 정규형으로 변환한다(max↔xhigh 동의어 처리).
+
+    Args:
+        effort: CLI 또는 정책 effort 값 ("max", "xhigh", "high", "low" 등).
+    Returns:
+        정규화된 effort 값 (canonical policy form).
+    """
+    return _CODEX_EFFORT_CANONICAL.get(str(effort or ""), str(effort or ""))
+
+
 def _compute_model_verification_level(
     selected_model: str,
     selected_effort: str,
@@ -8538,14 +8555,19 @@ def _compute_model_verification_level(
     _sm, _se = str(selected_model or ""), str(selected_effort or "")
     _im, _ie = str(invoked_model or ""), str(invoked_effort or "")
     _am, _ae = str(actual_model or "unknown"), str(actual_effort or "unknown")
-    # CLI가 actual을 명시 보고한 경우: selected와 정확히 일치해야 actual_verified.
-    if _am != "unknown" and _ae != "unknown":
-        if _am == _sm and _ae == _se:
+    # REJECT#25: effort 정규화 — CLI는 'max'→'xhigh'를 전달하고 actual_effort='xhigh'를 보고한다.
+    #   정규형으로 변환 후 selected_effort와 비교한다(max==xhigh 동의어 처리).
+    _se_can = _canonicalize_effort(_se)
+    _ie_can = _canonicalize_effort(_ie)
+    _ae_can = _canonicalize_effort(_ae) if _ae != "unknown" else "unknown"
+    # CLI가 actual을 명시 보고한 경우: selected와 정확히 일치해야 actual_verified(정규형 비교).
+    if _am != "unknown" and _ae_can != "unknown":
+        if _am == _sm and _ae_can == _se_can:
             return CODEX_VERIFICATION_ACTUAL
         # 보고했는데 selected와 불일치 → 증거 모순 → unverified(요구4 BLOCKED 대상).
         return CODEX_VERIFICATION_UNVERIFIED
     # CLI가 actual을 보고하지 않은 경우: 명시 인자 실행 성공 + invoked==selected이면 invocation_verified.
-    if invocation_ok and _im and _im != "unknown" and _im == _sm and _ie == _se:
+    if invocation_ok and _im and _im != "unknown" and _im == _sm and _ie_can == _se_can:
         return CODEX_VERIFICATION_INVOCATION
     return CODEX_VERIFICATION_UNVERIFIED
 
@@ -8579,19 +8601,24 @@ def _check_codex_model_capability_match(
     _sm, _se = str(selected_model or ""), str(selected_effort or "")
     _im, _ie = str(invoked_model or ""), str(invoked_effort or "")
     _am, _ae = str(actual_model or "unknown"), str(actual_effort or "unknown")
+    # REJECT#25: effort 정규화 — CLI는 'max'→'xhigh'를 전달하고 actual_effort='xhigh'를 보고한다.
+    #   정규형(canonical)으로 변환 후 selected_effort와 비교한다(max==xhigh 동의어 처리).
+    _se_can = _canonicalize_effort(_se)
+    _ie_can = _canonicalize_effort(_ie)
+    _ae_can = _canonicalize_effort(_ae) if _ae != "unknown" else "unknown"
 
     # (요구4) invoked_model은 selected_model과 정확히 일치해야 한다(--model에 selected를 전달).
     if _im != _sm:
         return {"result": "BLOCKED", "failure_code": "model_mismatch"}
-    if _ie != _se:
+    if _ie_can != _se_can:
         return {"result": "BLOCKED", "failure_code": "effort_mismatch"}
     # (요구4) invoked_model이 GPT-5.6 허용 목록에 없으면 차단.
     if _im not in CODEX_ALLOWED_MODELS:
         return {"result": "BLOCKED", "failure_code": "disallowed_model"}
-    # (요구4) CLI가 actual을 명시 보고했는데 selected와 불일치하면 차단.
+    # (요구4) CLI가 actual을 명시 보고했는데 selected와 불일치하면 차단(정규형 비교).
     if _am != "unknown" and _am != _sm:
         return {"result": "BLOCKED", "failure_code": "actual_model_mismatch"}
-    if _ae != "unknown" and _ae != _se:
+    if _ae_can != "unknown" and _ae_can != _se_can:
         return {"result": "BLOCKED", "failure_code": "actual_effort_mismatch"}
 
     _level = _compute_model_verification_level(
@@ -8951,6 +8978,35 @@ def _build_codex_semantic_evidence(
                     "chars": len(_nptxt),
                 })
     except Exception:  # noqa: BLE001 — 비Python diff 실패는 cross-validation에서 감지
+        pass
+
+    # 1c) 비CRITICAL changed file diff 추출 (LOW/MEDIUM risk 파일 포함).
+    # REJECT#25 Fix 1: pipeline.py가 없는 LOW 문서·MEDIUM 코드 변경에서도 실제 변경 diff를
+    #   포함하고 evidence_complete=True를 보장한다.
+    #   비CRITICAL 파일도 diff를 수집하여 diff_hunks에 추가(is_critical=False).
+    #   파일 diff 하나라도 성공하면 _diff_ok=True로 갱신하여 evidence_complete 조건을 충족시킨다.
+    try:
+        for _ncf in _cf:
+            _ncf_n = _ncf.replace("\\", "/")
+            if _ncf_n == "pipeline.py":
+                continue  # pipeline.py는 section 1에서 이미 처리
+            if _is_codex_critical_file(_ncf_n):
+                continue  # CRITICAL 파일은 section 1b에서 이미 처리
+            _ncdr = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--unified=3", "--", _ncf_n],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            if _ncdr.returncode == 0 and _ncdr.stdout.strip():
+                _nctxt = _ncdr.stdout.strip()
+                _all_hunks.append({
+                    "function": _ncf_n,
+                    "hunk": _nctxt,
+                    "is_critical": False,
+                    "chars": len(_nctxt),
+                })
+                _diff_ok = True  # 비CRITICAL 파일 diff 성공 → _diff_ok=True
+    except Exception:  # noqa: BLE001 — 비CRITICAL diff 실패는 무시(non-critical이므로 evidence_complete에 무관)
         pass
 
     # 예산 적용: CRITICAL hunk를 먼저 채우고, 예산 초과 시 truncated_critical_hunks 계수.
@@ -26242,8 +26298,14 @@ def _write_codex_review_blocked_invalidation(
     result_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         _write_json(result_path, result)
-    except Exception:  # noqa: BLE001 — write 실패 시 무시 (주 경로가 _die()로 종료)
-        pass
+    except Exception:  # noqa: BLE001
+        # REJECT#25 Fix 3: 쓰기 실패 시 기존 APPROVED 결과를 삭제하여 fail-open을 방지한다.
+        # 쓰기 자체가 실패해도 구 APPROVED 파일이 남으면 안 되므로 삭제를 시도한다.
+        # 삭제에도 실패하면 조용히 무시(주 경로가 _die()로 종료).
+        try:
+            result_path.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001
+            pass  # 삭제도 실패 — main path calls _die()
 
 
 # [Purpose]: BUG-20260702-E69E MT-5 — codex_review_result.json(SSoT)을 읽어 status가 ERROR이거나

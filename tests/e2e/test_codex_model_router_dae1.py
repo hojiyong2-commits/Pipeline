@@ -1882,3 +1882,150 @@ def test_tc38c_pipeline_manager_doc_critical_actual_verified_only() -> None:
     assert high_invocation_line, (
         "REJECT#23 AC#3: HIGH와 invocation_verified가 동일 라인에서 구분돼 있지 않음"
     )
+
+
+# --------------------------------------------------------------------------- #
+# TC-39: REJECT#25 — Fix 1 (비pipeline.py evidence_complete) + Fix 2 (effort 정규화) +
+#         Fix 3 (BLOCKED 무효화 쓰기 실패 시 기존 파일 삭제).
+# --------------------------------------------------------------------------- #
+
+
+def test_tc39a_noncritical_file_diff_included_and_evidence_complete(tmp_path: Path) -> None:
+    """REJECT#25 AC#1: pipeline.py가 없는 LOW 문서·MEDIUM 코드 변경에서도
+    실제 변경 diff가 포함되고 evidence_complete=True가 되는 것을 소스 검증한다.
+
+    AC#1: changed_files에 pipeline.py가 없는 경우 section 1c가 비CRITICAL 파일의 diff를
+          수집하고 _diff_ok=True로 갱신하는 코드 경로가 소스에 존재한다.
+    """
+    import inspect
+
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+
+    # Fix 1: section 1c — 비CRITICAL diff 수집 경로가 소스에 있어야 한다.
+    assert "1c" in src, (
+        "REJECT#25 AC#1: _build_codex_semantic_evidence에 section 1c(비CRITICAL diff) 코드가 없음"
+    )
+    assert "_is_codex_critical_file" in src, (
+        "REJECT#25 AC#1: section 1c에 _is_codex_critical_file 가드가 없음"
+    )
+    # _diff_ok = True 갱신이 section 1c 내에 있어야 한다.
+    assert "_diff_ok = True" in src, (
+        "REJECT#25 AC#1: section 1c에서 _diff_ok=True 갱신이 없음 — 비CRITICAL 파일 diff 성공 시 갱신 필요"
+    )
+
+    # Fix 1: 비CRITICAL 파일도 is_critical=False 로 _all_hunks에 추가되어야 한다.
+    assert '"is_critical": False' in src, (
+        "REJECT#25 AC#1: section 1c에서 is_critical=False hunk 추가 코드가 없음"
+    )
+
+
+def test_tc39b_effort_canonicalize_max_xhigh(tmp_path: Path) -> None:
+    """REJECT#25 AC#2/AC#3: effort 정규화가 max↔xhigh를 동등하게 처리하고
+    비동등 값은 여전히 차단한다.
+
+    AC#2: CRITICAL max→xhigh 변환 후 CLI actual_effort=xhigh → actual_verified.
+    AC#3: 비동등 effort 값은 actual_effort_mismatch로 차단된다.
+    """
+    # _canonicalize_effort 함수 존재 확인.
+    assert hasattr(pipeline, "_canonicalize_effort"), (
+        "REJECT#25 AC#2: _canonicalize_effort 함수가 없음"
+    )
+    canon = pipeline._canonicalize_effort
+
+    # AC#2: xhigh → max 정규화.
+    assert canon("xhigh") == "max", (
+        f"REJECT#25 AC#2: _canonicalize_effort('xhigh')가 'max'가 아님 — got {canon('xhigh')!r}"
+    )
+    # max는 그대로.
+    assert canon("max") == "max", (
+        f"REJECT#25 AC#2: _canonicalize_effort('max')가 'max'가 아님 — got {canon('max')!r}"
+    )
+    # high/low/medium은 그대로.
+    assert canon("high") == "high", (
+        f"REJECT#25 AC#2: _canonicalize_effort('high')가 'high'가 아님 — got {canon('high')!r}"
+    )
+    assert canon("low") == "low", (
+        f"REJECT#25 AC#2: _canonicalize_effort('low')가 'low'가 아님 — got {canon('low')!r}"
+    )
+
+    # AC#2: CRITICAL 정책(selected_effort=max)에서 actual_effort=xhigh → actual_verified.
+    level = pipeline._compute_model_verification_level(
+        selected_model="gpt-5.6-sol",
+        selected_effort="max",
+        invoked_model="gpt-5.6-sol",
+        invoked_effort="xhigh",      # CLI에는 xhigh 전달
+        actual_model="gpt-5.6-sol",
+        actual_effort="xhigh",       # CLI가 actual_effort=xhigh 보고
+        invocation_ok=True,
+    )
+    assert level == pipeline.CODEX_VERIFICATION_ACTUAL, (
+        f"REJECT#25 AC#2: selected=max, actual=xhigh → actual_verified가 되어야 하는데 {level!r}"
+    )
+
+    # AC#3: 비동등 effort → _check_codex_model_capability_match가 actual_effort_mismatch.
+    result = pipeline._check_codex_model_capability_match(
+        selected_model="gpt-5.6-sol",
+        selected_effort="max",
+        invoked_model="gpt-5.6-sol",
+        invoked_effort="xhigh",      # 정규화 후 max와 동등
+        actual_model="gpt-5.6-sol",
+        actual_effort="high",        # high ≠ max → 차단
+        invocation_ok=True,
+        risk_level="CRITICAL",
+    )
+    assert result.get("failure_code") == "actual_effort_mismatch", (
+        f"REJECT#25 AC#3: actual_effort='high' vs selected='max' → actual_effort_mismatch 아님 — {result!r}"
+    )
+
+
+def test_tc39c_write_blocked_invalidation_write_failure_deletes_old_file(
+    tmp_path: Path,
+) -> None:
+    """REJECT#25 AC#4: BLOCKED 무효화 쓰기 실패를 강제 발생시킨 뒤
+    기존 APPROVED 결과가 사용 불가능함을 검증한다.
+
+    AC#4: _write_codex_review_blocked_invalidation 쓰기 실패 시 기존 APPROVED 파일을 삭제.
+    """
+    import json
+    import unittest.mock as mock
+
+    result_path = tmp_path / "codex_review_result.json"
+
+    # 기존 APPROVED 결과를 파일에 기록한다(이전 effective 결과 시뮬레이션).
+    fake_approved = {
+        "schema_version": 5,
+        "pipeline_id": "IMP-TEST-39C",
+        "verdict": "APPROVE_TO_USER",
+        "acceptance_eligible": True,
+        "effective": True,
+        "status": "APPROVED",
+    }
+    result_path.write_text(json.dumps(fake_approved), encoding="utf-8")
+    assert result_path.exists(), "TC-39c: APPROVED 파일이 없어 테스트 전제 불충족"
+
+    # _codex_review_result_path를 격리된 경로로 monkeypatch.
+    original_fn = pipeline._codex_review_result_path
+    pipeline._codex_review_result_path = lambda: result_path  # type: ignore[assignment]
+    try:
+        # _write_json이 OSError를 내도록 강제 — 쓰기 실패 시뮬레이션.
+        with mock.patch("pipeline._write_json", side_effect=OSError("forced write failure")):
+            pipeline._write_codex_review_blocked_invalidation(
+                "IMP-TEST-39C", "model_mismatch",
+                prev_reject_count=0,
+                prev_cli_error_count=0,
+                review_bundle_sha256="bundle_sha_39c",
+                risk_level="CRITICAL",
+                model_policy={
+                    "selected_model": "gpt-5.6-sol",
+                    "selected_reasoning_effort": "max",
+                    "mode": "enforce",
+                },
+            )
+    finally:
+        pipeline._codex_review_result_path = original_fn  # type: ignore[assignment]
+
+    # AC#4: 쓰기 실패 후 기존 APPROVED 파일이 삭제되어야 한다.
+    assert not result_path.exists(), (
+        "REJECT#25 AC#4: _write_json 실패 후 기존 APPROVED 파일이 남아 있음 — "
+        "이전 APPROVED 결과가 재사용될 수 있어 trust-chain 위반"
+    )
