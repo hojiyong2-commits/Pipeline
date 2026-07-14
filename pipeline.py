@@ -2384,6 +2384,19 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_check_codex_model_capability_match",
     "_build_codex_semantic_evidence",
     "_build_codex_prompt_for_review",
+    # IMP-20260712-DAE1 REJECT#30: 추가 신뢰 경계 helper — 단독 변경으로 위험 분류·검증을 우회 가능.
+    #   - _canonicalize_effort: effort 정합성 검증 (우회 시 invoked/selected effort 불일치 허용)
+    #   - _extract_python_function_bodies: 함수 본문 SHA 추출 (우회 시 SHA 검증 무력화)
+    #   - _is_codex_test_path: 테스트 경로 판정 (False 반환 시 test/ 변경이 risk 상속 불가)
+    #   - _is_codex_critical_file: CRITICAL 파일 판정 (False 반환 시 trust-root 파일이 HIGH로 저하)
+    #   - _check_codex_capability_gate: capability 게이트 (우회 시 low-tier 모델로 통과)
+    #   - _codex_review_error_blocker: 오류 시 차단 (우회 시 CLI 오류 결과가 소리없이 통과)
+    "_canonicalize_effort",
+    "_extract_python_function_bodies",
+    "_is_codex_test_path",
+    "_is_codex_critical_file",
+    "_check_codex_capability_gate",
+    "_codex_review_error_blocker",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -9102,48 +9115,20 @@ def _build_codex_semantic_evidence(
         _fas = {}
     sem["function_before_after_shas"] = _fas
 
-    # IMP-20260712-DAE1 REJECT#10: cross-validation — CRITICAL 함수·파일 커버리지 완전성 검증.
-    # function_before_after_shas에 포함된 각 CRITICAL 함수와 비Python CRITICAL 파일이
-    # _selected(예산 내 선택된 hunks)에 실제로 포함됐는지 대조한다.
-    # 하나라도 누락 → _truncated_crit 증가 → evidence_complete=False (fail-closed).
-    # REJECT#15: cross-validation은 budget 단계의 누적값을 덮어쓴다(이중 계산 방지).
-    #   budget 단계에서 잘린 hunk는 _selected에 없으므로 cross-validation이 자동으로 검출한다.
-    #   _truncated_crit을 0으로 리셋하고 _covered_ids 기준으로 단일 계산한다.
+    # REJECT#30 Fix 2: hunk 단위 CRITICAL 누락 감지 — 기존 함수명 set 방식 대체.
+    # 이전 방식(REJECT#10, REJECT#15, REJECT#28 Fix 3a/3b)의 3가지 취약점:
+    #   (a) 같은 CRITICAL 함수에 여러 hunk가 있고 일부만 선택 → 함수명이 _covered_ids에 있어
+    #       나머지 hunk 누락이 검출되지 않음 (REJECT#30 AC#2).
+    #   (b) Fix 3a(신규·삭제 함수 skip) → before/after SHA 한쪽이 빈 경우 hunk 포함 강제 불가
+    #       (REJECT#30 AC#3: "신규·삭제 함수도 해당 diff hunk 포함을 강제해야 함").
+    #   (c) `_truncated_crit = 0` 초기화로 budget 단계 누락 수(line 9053)가 지워짐.
+    # 수정: is_critical=True hunk 총 수 vs _selected 내 수를 직접 비교.
+    #   신규·삭제 함수 hunk, 멀티-hunk, unknown-named hunk, 비Python CRITICAL 파일 hunk가
+    #   모두 동일한 단일 계산에 포함된다. 별도 루프(_fas loop, _nonpy loop, Fix 3b)가 불필요.
     try:
-        _covered_ids = {h["function"] for h in _selected}
-        _truncated_crit = 0  # REJECT#15: budget 이중 계산 방지 — cross-validation만 단일 기준
-        for _k in _fas:
-            # key 형식: "pipeline.py::함수명" → 함수명 부분만 추출
-            _fn_name = _k.split("::")[-1] if "::" in _k else _k
-            _fa_entry = _fas[_k]
-            _b_sha_val = str(_fa_entry.get("before", "") or "")
-            _a_sha_val = str(_fa_entry.get("after", "") or "")
-            # REJECT#28 Fix 3a: 신규(after만)/삭제(before만) 함수는 hunk attribution 검사 제외.
-            #   신규 함수 hunk는 @@ 헤더에 함수명이 없어 "unknown"으로 분류될 수 있으므로
-            #   _covered_ids(hunk attribution 기반) 검사를 적용하면 오탐이 발생한다.
-            #   이 경우 content는 unknown hunk로 번들에 포함되므로 Fix 3b에서 통합 처리.
-            #   삭제된 함수는 after content가 없어 hunk 검사 불필요.
-            if not _b_sha_val or not _a_sha_val:
-                continue  # 신규·삭제 함수는 attribution 검사 건너뜀
-            if _fn_name not in _covered_ids:
-                _truncated_crit += 1
-        for _npf in _nonpy_crit_expected:
-            if _npf not in _covered_ids:
-                _truncated_crit += 1
-        # REJECT#28 Fix 3b: unknown-named CRITICAL pipeline.py hunk 누락을 cross-validation에 추가.
-        #   Fix 2에서 pipeline.py의 unknown function hunk를 CRITICAL로 분류했으므로,
-        #   예산 초과로 제외된 unknown hunk도 truncated_critical_hunks에 반영한다.
-        #   _all_hunks의 unknown CRITICAL 수 - _selected의 unknown CRITICAL 수 = 제외된 수.
-        _all_unk_crit = sum(
-            1 for _h in _all_hunks
-            if _h.get("is_critical") and _h.get("function") == "unknown"
-        )
-        _sel_unk_crit = sum(
-            1 for _h in _selected
-            if _h.get("is_critical") and _h.get("function") == "unknown"
-        )
-        _truncated_crit += max(0, _all_unk_crit - _sel_unk_crit)
-        # cross-validation 반영 최종값으로 sem을 갱신
+        _all_crit_count = sum(1 for _h in _all_hunks if _h.get("is_critical"))
+        _sel_crit_count = sum(1 for _h in _selected if _h.get("is_critical"))
+        _truncated_crit = max(0, _all_crit_count - _sel_crit_count)
         sem["truncated_critical_hunks"] = _truncated_crit
     except Exception:  # noqa: BLE001 — cross-validation 실패 → fail-closed
         _truncated_crit += 1

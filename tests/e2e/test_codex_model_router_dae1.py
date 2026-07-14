@@ -1034,13 +1034,23 @@ def test_tc30a_bundle_budget_sufficient_for_tc11_oracles() -> None:
 
 
 def test_tc30b_cross_validation_resets_truncated_crit() -> None:
-    """REJECT#15: _build_codex_semantic_evidence의 cross-validation이 budget 단계의
-    누적값을 덮어쓰지 않도록 _truncated_crit=0 리셋 코드가 있어야 한다."""
+    """REJECT#15→REJECT#30: cross-validation이 hunk 단위 카운트 방식을 사용한다.
+    REJECT#30 Fix 2에서 _truncated_crit=0 리셋(REJECT#15)이 제거되고
+    _all_crit_count vs _sel_crit_count 비교로 대체됐음을 검증한다."""
     import inspect
     src = inspect.getsource(pipeline._build_codex_semantic_evidence)
-    assert "_truncated_crit = 0  # REJECT#15" in src, (
-        "REJECT#15: cross-validation 직전 _truncated_crit=0 리셋 코드가 없습니다 "
-        "(budget 단계 이중 계산 방지 미적용)"
+    # REJECT#30: 새 방식 - hunk 단위 카운트
+    assert "_all_crit_count" in src, (
+        "REJECT#30 Fix 2: cross-validation에 '_all_crit_count'가 없음 — "
+        "hunk 단위 카운트 방식이 적용되지 않음"
+    )
+    assert "_sel_crit_count" in src, (
+        "REJECT#30 Fix 2: cross-validation에 '_sel_crit_count'가 없음"
+    )
+    # REJECT#15의 리셋은 제거됐어야 함
+    assert "_truncated_crit = 0  # REJECT#15" not in src, (
+        "REJECT#30: '_truncated_crit = 0  # REJECT#15' 리셋이 아직 남아있음 — "
+        "REJECT#30 Fix 2로 대체됐어야 함"
     )
 
 
@@ -2416,25 +2426,23 @@ def test_tc42b_unknown_hunk_marked_critical_in_source() -> None:
 
 
 def test_tc42c_unknown_hunk_excluded_cross_validation_in_source() -> None:
-    """REJECT#28 AC#3 소스 검증: cross-validation이 unknown CRITICAL hunk 누락을 감지한다.
+    """REJECT#28/30 AC#3 소스 검증: cross-validation이 unknown CRITICAL hunk 누락을 감지한다.
 
-    Fix 3: cross-validation 단계에서 unknown-named CRITICAL hunk가 예산에서 제외됐을 때
-           truncated_critical_hunks가 증가하는 코드가 소스에 존재해야 한다.
+    REJECT#28 Fix 3b에서 _all_unk_crit/_sel_unk_crit 방식이 도입됐으나,
+    REJECT#30 Fix 2에서 더 포괄적인 hunk 단위 카운트(_all_crit_count/_sel_crit_count)로
+    통합됐다. 새 방식은 unknown-named hunk, 멀티-hunk, 신규·삭제 함수를 모두 처리한다.
     """
     import inspect
 
     src = inspect.getsource(pipeline._build_codex_semantic_evidence)
 
-    # Fix 3a/3b 핵심: _all_unk_crit과 _sel_unk_crit 비교 코드가 있어야 한다.
-    assert "_all_unk_crit" in src, (
-        "REJECT#28 Fix 3: _all_unk_crit 변수가 소스에 없음 — "
-        "cross-validation이 unknown CRITICAL hunk 누락을 감지하지 못함"
+    # REJECT#30 Fix 2: _all_crit_count/_sel_crit_count가 unknown hunk를 포함한 모든 경우를 처리
+    assert "_all_crit_count" in src, (
+        "REJECT#28/30 Fix: _all_crit_count 변수가 소스에 없음 — "
+        "cross-validation이 CRITICAL hunk 누락(unknown 포함)을 감지하지 못함"
     )
-    assert "_sel_unk_crit" in src, (
-        "REJECT#28 Fix 3: _sel_unk_crit 변수가 소스에 없음"
-    )
-    assert "REJECT#28 Fix 3" in src, (
-        "REJECT#28 Fix 3: 소스에 REJECT#28 Fix 3 주석이 없음"
+    assert "_sel_crit_count" in src, (
+        "REJECT#28/30 Fix: _sel_crit_count 변수가 소스에 없음"
     )
 
 
@@ -2559,15 +2567,23 @@ def test_tc42e_unknown_hunk_budget_exceeded_evidence_incomplete() -> None:
 # TC-43: REJECT#29 — 신뢰 경계 함수 등록 완전성 + 보고서 SSoT 일치
 # =========================================================================== #
 
-# REJECT#29 AC#1/2: 신뢰 경계 함수 집합 (CODEX_CRITICAL_FUNCTIONS에 모두 포함돼야 함).
+# REJECT#29/30 AC#1/2: 신뢰 경계 함수 집합 (CODEX_CRITICAL_FUNCTIONS에 모두 포함돼야 함).
 # 이 목록에 새 함수를 추가하지 않으면 TC-43b 완전성 테스트가 실패하여 누락을 자동 감지한다.
 _TRUST_BOUNDARY_FUNCS_REJECT29 = [
+    # REJECT#29 추가 (실행·인증·모델 검증·증거·운영 신뢰)
     "_invoke_codex_exec",
     "_parse_codex_exec_capability",
     "_compute_model_verification_level",
     "_check_codex_model_capability_match",
     "_build_codex_semantic_evidence",
     "_build_codex_prompt_for_review",
+    # REJECT#30 추가 (위험 분류·effort 검증·함수 SHA 추출·파일 판정·capability 게이트·오류 차단)
+    "_canonicalize_effort",
+    "_extract_python_function_bodies",
+    "_is_codex_test_path",
+    "_is_codex_critical_file",
+    "_check_codex_capability_gate",
+    "_codex_review_error_blocker",
 ]
 
 
@@ -2737,3 +2753,174 @@ def test_tc43k_report_high_unknown_not_blocked() -> None:
             + "\n".join(f"  {row}" for row in high_rows)
             + "\nHIGH는 invocation_verified로 통과 — BLOCKED는 CRITICAL만 적용합니다."
         )
+
+
+# =========================================================================== #
+# TC-44: REJECT#30 — 멀티-hunk 누락 감지 + 신규·삭제 함수 hunk 강제 + 추가 함수 CRITICAL
+# =========================================================================== #
+
+def test_tc44a_canonicalize_effort_is_critical() -> None:
+    """REJECT#30 AC#1: _canonicalize_effort만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], ["_canonicalize_effort"])
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#30 AC#1: _canonicalize_effort 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}"
+    )
+
+
+def test_tc44b_extract_python_function_bodies_is_critical() -> None:
+    """REJECT#30 AC#1: _extract_python_function_bodies만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_extract_python_function_bodies"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#30 AC#1: _extract_python_function_bodies 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}"
+    )
+
+
+def test_tc44c_is_codex_test_path_is_critical() -> None:
+    """REJECT#30 AC#1: _is_codex_test_path만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], ["_is_codex_test_path"])
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#30 AC#1: _is_codex_test_path 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}"
+    )
+
+
+def test_tc44d_multihunk_same_critical_function_detected(tmp_path: Path) -> None:
+    """REJECT#30 AC#2: 같은 CRITICAL 함수에 여러 hunk가 있고 하나만 선택되면
+    truncated_critical_hunks>0 이고 evidence_complete=False가 된다.
+
+    Fix 2(hunk 단위 카운트)로 함수명 set dedup 문제를 해결한다.
+    """
+    from unittest.mock import patch, MagicMock
+
+    crit_func = "_cmd_gates_accept"  # CODEX_CRITICAL_FUNCTIONS에 있는 함수
+    # 동일 함수명, 예산 초과 크기의 두 번째 hunk
+    hunk1_content = f"@@ -100,5 +100,5 @@ def {crit_func}():\n+    pass1\n"
+    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 200_000  # 예산 초과
+
+    # 두 hunk 모두 동일 CRITICAL 함수에 귀속
+    diff_output = (
+        "diff --git a/pipeline.py b/pipeline.py\n"
+        "--- a/pipeline.py\n"
+        "+++ b/pipeline.py\n"
+        f"{hunk1_content}\n"
+        f"{hunk2_content}\n"
+    )
+
+    def _mock_run(cmd, **kwargs):
+        mock_result = MagicMock()
+        cmd_list = [str(c) for c in cmd]
+        if "show" in cmd_list and any("origin/main:pipeline.py" in c for c in cmd_list):
+            mock_result.returncode = 0
+            mock_result.stdout = f"def {crit_func}():\n    pass\n"
+        elif "diff" in cmd_list and "pipeline.py" in cmd_list:
+            mock_result.returncode = 0
+            mock_result.stdout = diff_output
+        else:
+            mock_result.returncode = 0
+            mock_result.stdout = ""
+            mock_result.stderr = ""
+        return mock_result
+
+    with patch("pipeline.subprocess.run", side_effect=_mock_run):
+        result = pipeline._build_codex_semantic_evidence(
+            "IMP-TEST-REJECT30",
+            ["pipeline.py"],
+            [crit_func],
+        )
+
+    assert result["truncated_critical_hunks"] > 0, (
+        f"REJECT#30 AC#2: 동일 CRITICAL 함수의 두 번째 hunk가 예산 초과로 제외됐는데 "
+        f"truncated_critical_hunks={result['truncated_critical_hunks']} — "
+        f"Fix 2(hunk 단위 카운트) 미적용. 함수명 set 방식은 함수명이 covered에 있으면 누락 미감지."
+    )
+    assert result["evidence_complete"] is False, (
+        f"REJECT#30 AC#2: 멀티-hunk 누락인데 evidence_complete가 False가 아님"
+    )
+
+
+def test_tc44e_new_critical_function_hunk_required(tmp_path: Path) -> None:
+    """REJECT#30 AC#3: 신규 CRITICAL 함수의 diff hunk가 예산 초과로 제외되면
+    evidence_complete=False가 된다 (Fix 3a의 skip 제거로 강제 포함).
+
+    Fix 2(hunk 단위)는 신규 함수 hunk도 is_critical=True인 경우 감지한다.
+    """
+    from unittest.mock import patch, MagicMock
+
+    new_func = "_canonicalize_effort"  # REJECT#30에서 추가된 CRITICAL 함수
+    # 예산을 크게 초과하는 신규 함수 hunk
+    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 200_000
+    diff_output = (
+        "diff --git a/pipeline.py b/pipeline.py\n"
+        "--- a/pipeline.py\n"
+        "+++ b/pipeline.py\n"
+        f"{big_hunk}\n"
+    )
+
+    def _mock_run(cmd, **kwargs):
+        mock_result = MagicMock()
+        cmd_list = [str(c) for c in cmd]
+        if "show" in cmd_list and any("origin/main:pipeline.py" in c for c in cmd_list):
+            mock_result.returncode = 0
+            mock_result.stdout = ""  # before 없음 (신규 함수)
+        elif "diff" in cmd_list and "pipeline.py" in cmd_list:
+            mock_result.returncode = 0
+            mock_result.stdout = diff_output
+        else:
+            mock_result.returncode = 0
+            mock_result.stdout = ""
+            mock_result.stderr = ""
+        return mock_result
+
+    with patch("pipeline.subprocess.run", side_effect=_mock_run):
+        result = pipeline._build_codex_semantic_evidence(
+            "IMP-TEST-REJECT30",
+            ["pipeline.py"],
+            [new_func],
+        )
+
+    assert result["truncated_critical_hunks"] > 0, (
+        f"REJECT#30 AC#3: 신규 CRITICAL 함수 hunk 예산 초과 시 truncated_critical_hunks=0 — "
+        f"Fix 3a의 skip이 제거됐는지 확인 (신규 함수 hunk도 is_critical이면 감지해야 함)"
+    )
+    assert result["evidence_complete"] is False, (
+        f"REJECT#30 AC#3: 신규 CRITICAL 함수 hunk 누락인데 evidence_complete=True"
+    )
+
+
+def test_tc44f_trust_boundary_completeness_reject30() -> None:
+    """REJECT#30 AC#4: REJECT#30에서 추가된 6개 함수가 CODEX_CRITICAL_FUNCTIONS에 있다."""
+    reject30_funcs = [
+        "_canonicalize_effort",
+        "_extract_python_function_bodies",
+        "_is_codex_test_path",
+        "_is_codex_critical_file",
+        "_check_codex_capability_gate",
+        "_codex_review_error_blocker",
+    ]
+    missing = [fn for fn in reject30_funcs if fn not in pipeline.CODEX_CRITICAL_FUNCTIONS]
+    assert not missing, (
+        f"REJECT#30 AC#4: 아래 함수가 CODEX_CRITICAL_FUNCTIONS에 없음:\n"
+        + "\n".join(f"  - {fn}" for fn in missing)
+    )
+
+
+def test_tc44g_hunk_count_approach_in_source() -> None:
+    """REJECT#30 AC#4: _build_codex_semantic_evidence 소스코드에 hunk 단위 카운트가 적용됐다.
+    함수명 set 기반(`_covered_ids`) 초기화(`_truncated_crit = 0`)가 제거됐는지 검증한다.
+    """
+    import inspect
+
+    src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+    # 새 방식의 핵심 패턴 검증
+    assert "_all_crit_count" in src, (
+        "REJECT#30 AC#4: _build_codex_semantic_evidence에 '_all_crit_count' 없음 — "
+        "hunk 단위 카운트(Fix 2) 미적용"
+    )
+    assert "_sel_crit_count" in src, (
+        "REJECT#30 AC#4: _build_codex_semantic_evidence에 '_sel_crit_count' 없음 — "
+        "hunk 단위 카운트(Fix 2) 미적용"
+    )
