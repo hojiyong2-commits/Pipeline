@@ -61,8 +61,8 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
 
 ### 계층형 observe/enforce 동작
 
-- **observe 모드** (LOW/MEDIUM): 정책 위반 시 WARN만 출력하고 진행. cache 허용. 전역 전환 없음.
-- **enforce 모드** (HIGH/CRITICAL): 정책 위반 시 BLOCKED. HIGH는 critical 파일 변경 없으면 limited cache 허용. CRITICAL은 항상 cache 금지.
+- **observe 모드** (LOW/MEDIUM): `model_verification_level`이 낮아도 차단 없이 통과. cache 허용. 전역 전환 없음. 단, 모델/effort 불일치(invoked ≠ selected)는 observe 모드에서도 항상 BLOCKED.
+- **enforce 모드** (HIGH/CRITICAL): `model_verification_level`이 `unverified`이면 BLOCKED. HIGH는 critical 파일 변경 없으면 limited cache 허용. CRITICAL은 항상 cache 금지.
 
 ### verdict 스키마 (REJECT#3)
 

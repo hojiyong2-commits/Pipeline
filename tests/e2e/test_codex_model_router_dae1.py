@@ -2605,6 +2605,12 @@ _TRUST_BOUNDARY_FUNCS_REJECT29 = [
     "_is_codex_critical_file",
     "_check_codex_capability_gate",
     "_codex_review_error_blocker",
+    # IMP-20260712-DAE1 REJECT#15 추가 (binary 신뢰 검증·JS 진입점·BLOCKED 플래그 helper)
+    "_verify_codex_binary_path_trust",
+    "_get_npm_global_bin",
+    "_verify_npm_wrapper_content",
+    "_find_codex_js_entrypoint",
+    "_codex_review_blocked_flag_path",
 ]
 
 
@@ -2753,8 +2759,9 @@ def test_tc43j_report_tests_not_high_risk_path() -> None:
 
 
 def test_tc43k_report_high_unknown_not_blocked() -> None:
-    """REJECT#29 AC#4: codex_model_router_report.md의 unknown 처리 표에서
-    HIGH+unknown이 BLOCKED가 아님을 명시한다(CRITICAL만 BLOCKED).
+    """REJECT#29 AC#4 + REJECT#15: codex_model_router_report.md의 unknown 처리 표에서
+    HIGH+unknown과 CRITICAL+unknown 모두 BLOCKED가 아님을 명시한다
+    (REJECT#12 fix: CRITICAL도 invocation_verified로 허용).
     """
     import re
 
@@ -2767,13 +2774,118 @@ def test_tc43k_report_high_unknown_not_blocked() -> None:
     )
     if unknown_section_match:
         section = unknown_section_match.group(0)
-        # HIGH 행에 BLOCKED가 없어야 함 (CRITICAL 행에는 있어야 함)
+        # HIGH 행에 BLOCKED가 없어야 함
         high_rows = re.findall(r"^\|[^|]*unknown[^|]*\|[^|]*HIGH[^|]*\|[^|]*BLOCK[^|]*\|", section, re.MULTILINE)
         assert not high_rows, (
             "REJECT#29 AC#4: unknown 처리 표에서 HIGH+BLOCKED 조합이 남아있음:\n"
             + "\n".join(f"  {row}" for row in high_rows)
-            + "\nHIGH는 invocation_verified로 통과 — BLOCKED는 CRITICAL만 적용합니다."
+            + "\nHIGH는 invocation_verified로 통과합니다."
         )
+        # REJECT#15: CRITICAL 행에도 BLOCKED가 없어야 함 (REJECT#12 fix: 코드와 보고서 일치)
+        crit_rows = re.findall(r"^\|[^|]*unknown[^|]*\|[^|]*CRITICAL[^|]*\|[^|]*BLOCK[^|]*\|", section, re.MULTILINE)
+        assert not crit_rows, (
+            "REJECT#15: unknown 처리 표에서 CRITICAL+BLOCKED 조합이 남아있음:\n"
+            + "\n".join(f"  {row}" for row in crit_rows)
+            + "\nREJECT#12 fix: CRITICAL도 invocation_verified로 허용합니다 (HIGH와 동일).\n"
+            + "unknown_model_critical_blocked 항목을 제거하고 invocation_verified 설명으로 대체하세요."
+        )
+
+
+# =========================================================================== #
+# TC-43l ~ TC-43p: REJECT#15 — binary 신뢰·JS 진입점·BLOCKED 플래그 helper CRITICAL 검증
+# =========================================================================== #
+
+def test_tc43l_verify_codex_binary_path_trust_is_critical() -> None:
+    """REJECT#15 AC#1: _verify_codex_binary_path_trust만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_verify_codex_binary_path_trust"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#15 AC#1: _verify_codex_binary_path_trust 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}. CODEX_CRITICAL_FUNCTIONS에 추가 필요."
+    )
+
+
+def test_tc43m_get_npm_global_bin_is_critical() -> None:
+    """REJECT#15 AC#1: _get_npm_global_bin만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], ["_get_npm_global_bin"])
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#15 AC#1: _get_npm_global_bin 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43n_verify_npm_wrapper_content_is_critical() -> None:
+    """REJECT#15 AC#1: _verify_npm_wrapper_content만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_verify_npm_wrapper_content"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#15 AC#1: _verify_npm_wrapper_content 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43o_find_codex_js_entrypoint_is_critical() -> None:
+    """REJECT#15 AC#1: _find_codex_js_entrypoint만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_find_codex_js_entrypoint"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#15 AC#1: _find_codex_js_entrypoint 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43p_codex_review_blocked_flag_path_is_critical() -> None:
+    """REJECT#15 AC#1: _codex_review_blocked_flag_path만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_codex_review_blocked_flag_path"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#15 AC#1: _codex_review_blocked_flag_path 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43q_noncrit_diff_failure_sets_evidence_incomplete(tmp_path: Path) -> None:
+    """REJECT#15 AC#2: 비-CRITICAL 파일의 git diff가 실패하면 evidence_complete=False가 된다.
+
+    changed_files 목록에 있는 비-CRITICAL 파일의 diff를 얻지 못하면
+    missing_noncrit_files에 기록되고 evidence_complete=False로 처리된다.
+    """
+    from unittest.mock import patch, MagicMock
+
+    noncrit_file = "some_module.py"  # CRITICAL 아닌 일반 Python 파일
+
+    def _mock_run(cmd, **kwargs):
+        mock_result = MagicMock()
+        cmd_list = [str(c) for c in cmd]
+        if "diff" in cmd_list and noncrit_file in cmd_list:
+            # 비-CRITICAL 파일 diff 실패 시뮬레이션
+            mock_result.returncode = 128
+            mock_result.stdout = ""
+            mock_result.stderr = "fatal: bad object"
+        else:
+            mock_result.returncode = 0
+            mock_result.stdout = ""
+            mock_result.stderr = ""
+        return mock_result
+
+    with patch("pipeline.subprocess.run", side_effect=_mock_run):
+        sem = pipeline._build_codex_semantic_evidence(
+            pipeline_id="IMP-20260712-DAE1",
+            changed_files=[noncrit_file],
+            included_functions=[],
+        )
+
+    assert not sem["evidence_complete"], (
+        "REJECT#15 AC#2: 비-CRITICAL diff 실패 시 evidence_complete=True가 반환됨 — "
+        "False여야 합니다."
+    )
+    assert noncrit_file in sem["missing_noncrit_files"], (
+        f"REJECT#15 AC#2: diff 실패한 {noncrit_file!r}가 missing_noncrit_files에 없음."
+    )
 
 
 # =========================================================================== #

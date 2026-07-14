@@ -119,8 +119,13 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
 | `_check_codex_model_capability_match` | actual vs selected 모델 검증 |
 | `_build_codex_semantic_evidence` | semantic evidence 구성 |
 | `_build_codex_prompt_for_review` | 검토 prompt 구성 |
+| `_verify_codex_binary_path_trust` | Codex binary 경로 신뢰 검증 |
+| `_get_npm_global_bin` | npm global bin 디렉터리 확인 |
+| `_verify_npm_wrapper_content` | npm wrapper 파일 내용 검증 |
+| `_find_codex_js_entrypoint` | codex JS 진입점 추출 |
+| `_codex_review_blocked_flag_path` | BLOCKED 플래그 파일 경로 |
 
-> **완전성 검사**: `tests/e2e/test_codex_model_router_dae1.py`의 TC-43 테스트는 위 함수들이 모두 `CODEX_CRITICAL_FUNCTIONS`에 등록되어 있는지, 그리고 각 함수를 단독으로 변경하면 CRITICAL이 반환되는지 자동으로 검증합니다. 신규 신뢰 경계 함수를 추가할 때는 이 목록과 TC-43에도 반드시 등록하십시오.
+> **완전성 검사**: `tests/e2e/test_codex_model_router_dae1.py`의 TC-43 테스트(TC-43a~TC-43q)는 위 함수들이 모두 `CODEX_CRITICAL_FUNCTIONS`에 등록되어 있는지, 그리고 각 함수를 단독으로 변경하면 CRITICAL이 반환되는지 자동으로 검증합니다. 신규 신뢰 경계 함수를 추가할 때는 이 목록, `CODEX_CRITICAL_FUNCTIONS`, `_TRUST_BOUNDARY_FUNCS_REJECT29`, TC-43에도 반드시 등록하십시오.
 
 ### HIGH — trust-chain 파일 경로 (`CODEX_HIGH_RISK_PATHS`)
 
@@ -154,8 +159,9 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
 
 ## 4. 계층형 observe/enforce 동작
 
-- **observe 모드** (LOW/MEDIUM): 정책 위반 시 WARN만 출력하고 진행합니다. 캐시를 허용하여 사용량을 절약합니다. 전역 전환 스위치가 아니라 risk level에서 자동 파생됩니다.
-- **enforce 모드** (HIGH/CRITICAL): 정책 위반 시 BLOCKED 처리합니다.
+- **observe 모드** (LOW/MEDIUM): `model_verification_level`이 `invocation_verified` 미만이어도 차단하지 않습니다. 캐시를 허용하여 사용량을 절약합니다. 전역 전환 스위치가 아니라 risk level에서 자동 파생됩니다.
+  - **단, 모델/effort 불일치(invoked ≠ selected)는 observe 모드에서도 항상 BLOCKED입니다.** observe 모드가 완화하는 것은 verification level 검사뿐이며, 잘못된 모델로 실행되는 것을 허용하지 않습니다.
+- **enforce 모드** (HIGH/CRITICAL): `model_verification_level`이 `invocation_verified` 미만(`unverified`)이면 BLOCKED 처리합니다.
   - HIGH: critical 파일 변경이 없으면 `limited` 캐시를 허용합니다.
   - CRITICAL: 캐시를 항상 금지합니다 (`cache_allowed=False`). 매번 새 검토를 강제합니다.
 
@@ -173,14 +179,14 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
 
 | actual_model | risk_level | 결과 |
 |---|---|---|
-| unknown | CRITICAL | **BLOCKED** (`unknown_model_critical_blocked`) |
+| unknown | CRITICAL | `invocation_verified`로 허용 (REJECT#12 fix: HIGH와 동일; CLI 명시 인자 실행 + exit 0이면 통과) |
 | unknown | HIGH | `invocation_verified`로 허용 (CLI가 명시 인자로 실행되고 exit 0이면 통과) |
-| unknown | LOW/MEDIUM | observe 모드: WARN 후 진행 |
+| unknown | LOW/MEDIUM | observe 모드: 통과 (LOW/MEDIUM은 verification level 미검증) |
 | known (예: gpt-5.6-sol) | any | OK |
 
-또한 `_check_codex_cache`는 actual_model=unknown + CRITICAL 조건에서 캐시 사용도 금지합니다 (fail-closed).
+또한 `_check_codex_cache`는 CRITICAL risk에서 캐시 사용을 금지합니다 (fail-closed). actual_model=unknown 여부와 무관하게 CRITICAL은 항상 새 검토를 실행합니다.
 
-> **주의**: 실제 CLI가 gpt-5.6-* 모델명을 `--json` 출력에 포함하지 않으면 `actual_model=unknown`이 됩니다. CRITICAL에서는 `acceptance_eligible=false`가 강제되어 최종 승인 자격을 잃습니다. HIGH/MEDIUM/LOW에서는 `invocation_verified`로 통과 가능합니다.
+> **주의**: 실제 CLI가 gpt-5.6-* 모델명을 `--json` 출력에 포함하지 않으면 `actual_model=unknown`이 됩니다. CRITICAL/HIGH 모두 `invocation_verified`(CLI 명시 인자 실행 + exit 0)이면 통과합니다 (REJECT#12 fix). `unverified`(exit 0 실패 또는 인자 미전달)이면 HIGH/CRITICAL에서 BLOCKED입니다. LOW/MEDIUM은 verification level을 검사하지 않습니다.
 
 ## 7. 다운그레이드 차단
 

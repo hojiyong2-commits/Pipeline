@@ -2404,6 +2404,14 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   감지하지 못해 위험 분류를 HIGH로 낮출 수 있다 (fail-closed 우회 가능).
     "_extract_python_constant_bodies",
     "_detect_changed_critical_constants",
+    # IMP-20260712-DAE1 REJECT#15: binary 신뢰 검증·JS 진입점·BLOCKED 플래그 helper 등록.
+    #   이 함수들을 단독으로 변경하면 Codex binary 경로 신뢰 검증, npm wrapper 내용 검증,
+    #   JS 진입점 추출, BLOCKED 플래그 관리 로직을 우회할 수 있으므로 CRITICAL 분류 필수이다.
+    "_verify_codex_binary_path_trust",
+    "_get_npm_global_bin",
+    "_verify_npm_wrapper_content",
+    "_find_codex_js_entrypoint",
+    "_codex_review_blocked_flag_path",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -9607,6 +9615,10 @@ def _build_codex_semantic_evidence(
     #   포함하고 evidence_complete=True를 보장한다.
     #   비CRITICAL 파일도 diff를 수집하여 diff_hunks에 추가(is_critical=False).
     #   파일 diff 하나라도 성공하면 _diff_ok=True로 갱신하여 evidence_complete 조건을 충족시킨다.
+    # IMP-20260712-DAE1 REJECT#15 Fix3: diff 실패·빈 출력도 _diff_failed_noncrit에 기록하여
+    #   evidence_complete=False로 처리한다. 조용히 무시하면 changed_files 목록 전체가 diff로
+    #   커버됐는지 보장할 수 없으므로 fail-closed로 추적한다.
+    _diff_failed_noncrit: List[str] = []
     try:
         for _ncf in _cf:
             _ncf_n = _ncf.replace("\\", "/")
@@ -9628,7 +9640,10 @@ def _build_codex_semantic_evidence(
                     "chars": len(_nctxt),
                 })
                 _diff_ok = True  # 비CRITICAL 파일 diff 성공 → _diff_ok=True
-    except Exception:  # noqa: BLE001 — 비CRITICAL diff 실패는 무시(non-critical이므로 evidence_complete에 무관)
+            else:
+                # diff 실패 또는 빈 출력: 파일이 changed_files에 있는데 diff를 얻지 못한 경우.
+                _diff_failed_noncrit.append(_ncf_n)
+    except Exception:  # noqa: BLE001 — loop 자체 예외는 무시하되 이미 수집된 실패 목록은 보존
         pass
 
     # 예산 적용: CRITICAL hunk를 먼저 채우고, 예산 초과 시 truncated_critical_hunks 계수.
@@ -9661,6 +9676,9 @@ def _build_codex_semantic_evidence(
     sem["diff_hunks"] = _selected
     sem["truncated_critical_hunks"] = _truncated_crit
     sem["truncated_noncrit_hunks"] = _truncated_noncrit
+    # IMP-20260712-DAE1 REJECT#15 Fix3: diff 실패 파일도 missing_noncrit_files에 포함.
+    #   예산 초과로 잘린 파일과 diff 자체에 실패한 파일을 모두 누락으로 처리한다.
+    _missing_noncrit_files.extend(_diff_failed_noncrit)
     sem["missing_noncrit_files"] = _missing_noncrit_files
     sem["bundle_budget_chars"] = _used
 
@@ -9819,6 +9837,7 @@ def _build_codex_semantic_evidence(
             and _truncated_noncrit == 0
             and len(sem["missing_critical_files"]) == 0
             and len(sem["diff_hunks"]) > 0  # REJECT#11: file_sha_attestations만으로는 불충분
+            and len(_diff_failed_noncrit) == 0  # REJECT#15: diff 실패 파일 없어야 완전 증거
         )
 
     # 6) semantic_evidence_sha256: 원문 포함 semantic 섹션의 결정적 integrity digest.
@@ -25413,6 +25432,14 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         if _prod_bin_found:
             _codex_binary_trust = _verify_codex_binary_path_trust(_prod_bin_found)
             if not _codex_binary_trust["trusted"]:
+                # IMP-20260712-DAE1 REJECT#15 Fix2: 조기 종료 전 기존 승인 상태를 원자 무효화한다.
+                #   _die()가 실행되면 이후 코드가 돌지 않으므로, 그 직전에 BLOCKED invalidation을
+                #   기록해야 기존 APPROVED 결과가 살아남는 창을 없앨 수 있다 (fail-closed).
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_binary_untrusted_path",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
                 _die(
                     "[BLOCKED] failure_code=codex_binary_untrusted_path\n"
                     f"  Codex 실행 파일이 신뢰되지 않은 위치에 있습니다.\n"
