@@ -8862,42 +8862,50 @@ def _get_npm_global_bin() -> Optional[str]:
     """REJECT#10: npm global bin 디렉토리를 쿼리한다.
 
     npm global bin은 공식 npm install로 설치된 CLI 도구가 위치하는 신뢰된 경로다.
+    Windows에서는 npm이 npm.cmd 형태로 설치되어 subprocess 직접 호출 시 'npm'만으로
+    실패할 수 있으므로 npm.cmd를 우선 시도한다.
     Returns:
         npm global bin 디렉토리 경로 문자열, 조회 실패 시 None.
     """
     import subprocess as _subp
 
-    # 1) npm bin -g: npm < 9 에서 직접 bin 경로 반환
-    try:
-        _res = _subp.run(
-            ["npm", "bin", "-g"],
-            capture_output=True, text=True, timeout=10,
-            encoding="utf-8", errors="replace",
-        )
-        if _res.returncode == 0:
-            _out = _res.stdout.strip()
-            if _out and _out != "undefined":
-                return _out
-    except Exception:  # noqa: BLE001
-        pass
+    # Windows: npm.cmd, npm; Linux/macOS: npm 순으로 시도
+    _npm_cmds: List[str] = (
+        ["npm.cmd", "npm"] if sys.platform == "win32" else ["npm"]
+    )
 
-    # 2) npm config get prefix: npm >= 9 에서 bin -g deprecated 대안
-    try:
-        _res = _subp.run(
-            ["npm", "config", "get", "prefix"],
-            capture_output=True, text=True, timeout=10,
-            encoding="utf-8", errors="replace",
-        )
-        if _res.returncode == 0:
-            _prefix = _res.stdout.strip()
-            if _prefix and _prefix != "undefined":
-                # Windows: prefix 자체에 .cmd 파일 존재 (e.g. %APPDATA%\npm)
-                # Linux/macOS: prefix/bin
-                if sys.platform == "win32":
-                    return _prefix
-                return str(Path(_prefix) / "bin")
-    except Exception:  # noqa: BLE001
-        pass
+    for _npm_exe in _npm_cmds:
+        # 1) npm bin -g: npm < 9 에서 직접 bin 경로 반환
+        try:
+            _res = _subp.run(
+                [_npm_exe, "bin", "-g"],
+                capture_output=True, text=True, timeout=10,
+                encoding="utf-8", errors="replace",
+            )
+            if _res.returncode == 0:
+                _out = _res.stdout.strip()
+                if _out and _out != "undefined":
+                    return _out
+        except Exception:  # noqa: BLE001
+            pass
+
+        # 2) npm config get prefix: npm >= 9 에서 bin -g 지원 종료 대안
+        try:
+            _res = _subp.run(
+                [_npm_exe, "config", "get", "prefix"],
+                capture_output=True, text=True, timeout=10,
+                encoding="utf-8", errors="replace",
+            )
+            if _res.returncode == 0:
+                _prefix = _res.stdout.strip()
+                if _prefix and _prefix != "undefined":
+                    # Windows: prefix 자체에 .cmd 파일 존재 (e.g. %APPDATA%\npm)
+                    # Linux/macOS: prefix/bin
+                    if sys.platform == "win32":
+                        return _prefix
+                    return str(Path(_prefix) / "bin")
+        except Exception:  # noqa: BLE001
+            pass
 
     return None
 
