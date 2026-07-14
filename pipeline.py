@@ -2408,6 +2408,7 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   이 함수들을 단독으로 변경하면 Codex binary 경로 신뢰 검증, npm wrapper 내용 검증,
     #   JS 진입점 추출, BLOCKED 플래그 관리 로직을 우회할 수 있으므로 CRITICAL 분류 필수이다.
     "_verify_codex_binary_path_trust",
+    "_find_codex_native_binary",
     "_get_npm_global_bin",
     "_verify_npm_wrapper_content",
     "_find_codex_js_entrypoint",
@@ -9028,6 +9029,82 @@ def _find_codex_js_entrypoint(wrapper_path: "Path") -> "Optional[Path]":
     return None
 
 
+# [Purpose]: REJECT#LATEST — codex.js가 실제로 spawn하는 native/vendor 실행 파일을 결정적으로 찾는다.
+#            npm 래퍼(.cmd) + JS 진입점 SHA만 검증하면 vendor native binary만 교체해도 신뢰 통과하는
+#            공격(래퍼+JS SHA 불변)을 막기 위해, 최종 실행 체인의 native binary까지 경로+SHA로 고정한다.
+# [Assumptions]: @openai/codex 패키지 구조가 platform-specific 서브패키지(@openai/codex-<suffix>)의
+#            vendor/<triple>/bin/codex[.exe] 를 spawn한다. js_entrypoint = <pkg_root>/bin/codex.js.
+# [Vulnerability & Risks]: 패키지 레이아웃이 미래 버전에서 바뀌면 None 반환 → 상위에서 fail-closed 차단.
+#            잘못된 triple 매핑 시 native 미발견 → fail-closed(안전측). 실행 경로 오탐은 신뢰 상승 없음.
+# [Improvement]: package.json의 optionalDependencies/require.resolve 결과를 직접 파싱하여 triple 추론을
+#            제거하고, 서명된 baseline digest 목록과 대조하는 방식으로 강화할 수 있다.
+def _find_codex_native_binary(js_entrypoint_path: "Path") -> "Optional[Path]":
+    """codex.js가 실제로 spawn하는 native/vendor binary 경로를 결정적으로 추출한다.
+
+    codex.js는 platform-specific package(@openai/codex-{suffix})의 vendor 디렉토리에서
+    native binary를 spawn한다. 이 함수는 JS 진입점 위치로부터 package 구조를 파악하여
+    native binary 절대 경로를 반환한다.
+
+    Args:
+        js_entrypoint_path: codex.js 진입점 파일 경로.
+    Returns:
+        Path: native binary 절대 경로. 결정할 수 없으면 None.
+    """
+    try:
+        if not isinstance(js_entrypoint_path, Path):
+            return None
+        import platform as _platform
+
+        _machine = _platform.machine().lower()
+        _arch = "x64" if _machine in ("x86_64", "amd64") else (
+            "arm64" if _machine in ("arm64", "aarch64") else None
+        )
+        if not _arch:
+            return None
+
+        _plt = sys.platform
+        if _plt.startswith("linux"):
+            _plt = "linux"
+
+        # (플랫폼, 아키텍처) → (npm suffix, vendor triple)
+        _PLT_MAP: Dict[tuple, tuple] = {
+            ("win32", "x64"): ("win32-x64", "x86_64-pc-windows-msvc"),
+            ("win32", "arm64"): ("win32-arm64", "aarch64-pc-windows-msvc"),
+            ("linux", "x64"): ("linux-x64", "x86_64-unknown-linux-musl"),
+            ("linux", "arm64"): ("linux-arm64", "aarch64-unknown-linux-musl"),
+            ("darwin", "x64"): ("darwin-x64", "x86_64-apple-darwin"),
+            ("darwin", "arm64"): ("darwin-arm64", "aarch64-apple-darwin"),
+        }
+        _info = _PLT_MAP.get((_plt, _arch))
+        if not _info:
+            return None
+
+        _pkg_suffix, _triple = _info
+        _native_name = "codex.exe" if sys.platform == "win32" else "codex"
+        _pkg_name = f"codex-{_pkg_suffix}"
+
+        # @openai/codex 패키지 루트: js_entrypoint_path = <pkg_root>/bin/codex.js
+        _pkg_root = js_entrypoint_path.parent.parent
+
+        # 탐색 순서:
+        # 1) <pkg_root>/node_modules/@openai/<pkg_name>/vendor/<triple>/bin/codex[.exe]
+        #    (npm nested: @openai/codex/node_modules/@openai/codex-win32-x64/...)
+        # 2) <pkg_root>.parent/<pkg_name>/vendor/<triple>/bin/codex[.exe]
+        #    (sibling: @openai/codex-win32-x64/ alongside @openai/codex/)
+        _candidates = [
+            _pkg_root / "node_modules" / "@openai" / _pkg_name
+            / "vendor" / _triple / "bin" / _native_name,
+            _pkg_root.parent / _pkg_name / "vendor" / _triple / "bin" / _native_name,
+        ]
+        for _c in _candidates:
+            if _c.exists():
+                return _c.resolve()
+
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
     """REJECT#10: 공식 npm 설치 또는 시스템 경로만 신뢰; 임의 사용자 경로는 fail-closed.
 
@@ -9057,6 +9134,9 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         # REJECT#12 AC#3: JS 진입점 경로/SHA (npm 래퍼용; native .exe는 빈 값)
         "js_entrypoint_path": "",
         "js_entrypoint_sha256": "",
+        # REJECT#LATEST AC#3: 최종 실행 native/vendor binary 경로/SHA (npm 래퍼용).
+        "native_binary_path": "",
+        "native_binary_sha256": "",
     }
     try:
         _bin_p = Path(bin_path).resolve()
@@ -9132,15 +9212,40 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
             return _r
 
         _r.update({"trusted": True, "path": str(_bin_p), "sha256": _sha})
-        # REJECT#12 AC#3: npm 래퍼인 경우 JS 진입점을 추가로 해시한다.
-        try:
-            _js_ep = _find_codex_js_entrypoint(_bin_p)
-            if _js_ep is not None:
+        # REJECT#LATEST AC#1/#3/#4: JS 진입점 + native/vendor binary까지 검증 (fail-closed).
+        #   npm 래퍼(.cmd)에서는 JS 진입점과 native binary가 모두 필수이다.
+        #   JS 미발견이나 native binary 미발견은 신뢰 실패로 처리한다 (fail-closed).
+        _js_ep = _find_codex_js_entrypoint(_bin_p)
+        if _js_ep is not None:
+            # JS 진입점 발견 → SHA 해시 (fail-closed)
+            try:
                 _js_sha = hashlib.sha256(_js_ep.read_bytes()).hexdigest()
                 _r["js_entrypoint_path"] = str(_js_ep)
                 _r["js_entrypoint_sha256"] = _js_sha
-        except Exception:  # noqa: BLE001 — JS 진입점 해시 실패는 non-fatal(best-effort)
-            pass
+            except (OSError, PermissionError) as _exc:
+                _r["trusted"] = False
+                _r["untrusted_reason"] = f"js_entrypoint_sha_error:{type(_exc).__name__}"
+                return _r
+            # native/vendor binary 탐색 및 해시 (fail-closed, AC#3/#4)
+            _native_bin = _find_codex_native_binary(_js_ep)
+            if _native_bin is None:
+                _r["trusted"] = False
+                _r["untrusted_reason"] = f"native_binary_not_found_for:{_js_ep}"
+                return _r
+            try:
+                _native_sha = hashlib.sha256(_native_bin.read_bytes()).hexdigest()
+                _r["native_binary_path"] = str(_native_bin)
+                _r["native_binary_sha256"] = _native_sha
+            except (OSError, PermissionError) as _exc:
+                _r["trusted"] = False
+                _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
+                return _r
+        elif _trusted_by_npm:
+            # npm 래퍼이지만 JS 진입점을 찾을 수 없음 → fail-closed (AC#1/#4)
+            _r["trusted"] = False
+            _r["untrusted_reason"] = f"js_entrypoint_not_found_for_npm_wrapper:{_bin_p}"
+            return _r
+        # else: 시스템 경로 direct native install (Linux 등) → JS 체인 불필요, 신뢰 유지
         return _r
     except Exception as _exc:  # noqa: BLE001
         _r["untrusted_reason"] = f"path_verification_error:{type(_exc).__name__}:{_exc}"
@@ -10588,6 +10693,9 @@ def _check_codex_cache(
     _cached_bin_sha = str(cached.get("codex_binary_sha256", "") or "")
     _cached_js_path = str(cached.get("codex_js_entrypoint_path", "") or "")
     _cached_js_sha = str(cached.get("codex_js_entrypoint_sha256", "") or "")
+    # REJECT#LATEST AC#2: native/vendor binary SHA도 캐시 hit 전 재검증한다 (cache 우회 차단).
+    _cached_native_path = str(cached.get("codex_native_binary_path", "") or "")
+    _cached_native_sha = str(cached.get("codex_native_binary_sha256", "") or "")
     if _cached_bin_path:
         try:
             _cur_bin_sha = _sha256_file(Path(_cached_bin_path)) if Path(_cached_bin_path).exists() else ""
@@ -10609,6 +10717,21 @@ def _check_codex_cache(
                 miss["reason"] = (
                     "codex JS 진입점 SHA 불일치 또는 파일 부재 — cache miss (fail-closed). "
                     f"js_path={_cached_js_path!r}"
+                )
+                return miss
+        # REJECT#LATEST AC#2: native/vendor binary가 저장돼 있으면 SHA 재검증 (vendor 교체 탐지)
+        if _cached_native_path and _cached_native_sha:
+            try:
+                _cur_native_sha = (
+                    _sha256_file(Path(_cached_native_path))
+                    if Path(_cached_native_path).exists() else ""
+                )
+            except Exception:  # noqa: BLE001
+                _cur_native_sha = ""
+            if not _cur_native_sha or _cur_native_sha != _cached_native_sha:
+                miss["reason"] = (
+                    "codex native binary SHA 불일치 또는 파일 부재 — cache miss (fail-closed). "
+                    f"native_path={_cached_native_path!r}"
                 )
                 return miss
 
@@ -10637,6 +10760,9 @@ def _check_codex_cache(
         "cached_codex_binary_sha256": _cached_bin_sha,
         "cached_js_entrypoint_path": _cached_js_path,
         "cached_js_entrypoint_sha256": _cached_js_sha,
+        # REJECT#LATEST AC#2/#3: native binary 신뢰 증거를 hit 결과로 전달 (복원 후 재검증·기록용).
+        "cached_codex_native_binary_path": _cached_native_path,
+        "cached_codex_native_binary_sha256": _cached_native_sha,
     }
 
 
@@ -25661,12 +25787,17 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _cached_bin_sha_restore = str(_cache_probe.get("cached_codex_binary_sha256") or "")
             _cached_js_path_restore = str(_cache_probe.get("cached_js_entrypoint_path") or "")
             _cached_js_sha_restore = str(_cache_probe.get("cached_js_entrypoint_sha256") or "")
+            # REJECT#LATEST AC#2/#3: native binary 신뢰 증거 복원 (cache reuse 경로에서도 기록).
+            _cached_native_path_restore = str(_cache_probe.get("cached_codex_native_binary_path") or "")
+            _cached_native_sha_restore = str(_cache_probe.get("cached_codex_native_binary_sha256") or "")
             _codex_binary_trust = {
                 "trusted": bool(_cached_bin_path_restore and _cached_bin_sha_restore),
                 "path": _cached_bin_path_restore,
                 "sha256": _cached_bin_sha_restore,
                 "js_entrypoint_path": _cached_js_path_restore,
                 "js_entrypoint_sha256": _cached_js_sha_restore,
+                "native_binary_path": _cached_native_path_restore,
+                "native_binary_sha256": _cached_native_sha_restore,
                 "install_source": "cached",
             }
             print("  [CACHE REUSE] Codex CLI 호출 없이 캐시된 APPROVE verdict를 재사용합니다.")
@@ -25928,6 +26059,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     _post_snap_changed.append("codex_js_entrypoint_sha_unverifiable")
                 elif _post_js_sha_now_v != _pre_js_sha_v:
                     _post_snap_changed.append("codex_js_entrypoint_sha_changed")
+            # REJECT#LATEST AC#2: exec 후 native/vendor binary SHA 재계산 — TOCTOU 차단 (fail-closed).
+            _post_native_path_v = str(_codex_binary_trust.get("native_binary_path", "") or "")
+            _pre_native_sha_v = str(_codex_binary_trust.get("native_binary_sha256", "") or "")
+            if _post_native_path_v and _pre_native_sha_v and not _fake_codex_bin:
+                try:
+                    import hashlib as _hashlib_nat_v
+                    _post_native_bytes_v = Path(_post_native_path_v).read_bytes()
+                    _post_native_sha_now_v = _hashlib_nat_v.sha256(_post_native_bytes_v).hexdigest()
+                except Exception:  # noqa: BLE001
+                    _post_native_sha_now_v = ""
+                if not _post_native_sha_now_v:
+                    _post_snap_changed.append("codex_native_binary_sha_unverifiable")
+                elif _post_native_sha_now_v != _pre_native_sha_v:
+                    _post_snap_changed.append("codex_native_binary_sha_changed")
             if _post_snap_changed:
                 # REJECT#23: post-CLI snapshot 변경 → codex_review_snapshot_changed로 effective 결과 저장 후 종료.
                 _write_codex_review_blocked_invalidation(
@@ -26512,6 +26657,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # REJECT#12 AC#3: JS 진입점 경로/SHA를 결과에 추가 기록 (npm 래퍼용; 없으면 빈 문자열)
     result["codex_js_entrypoint_path"] = str(_codex_binary_trust.get("js_entrypoint_path", "") or "")
     result["codex_js_entrypoint_sha256"] = str(_codex_binary_trust.get("js_entrypoint_sha256", "") or "")
+    # REJECT#LATEST AC#3: native binary 경로/SHA를 결과에 추가 기록
+    result["codex_native_binary_path"] = str(_codex_binary_trust.get("native_binary_path", "") or "")
+    result["codex_native_binary_sha256"] = str(_codex_binary_trust.get("native_binary_sha256", "") or "")
 
     # MT-33: --approve-pending 경로에서 acceptance_request의 snapshot 필드를 result에 복사한다.
     # github_canonical_pr_body_sha256 필드는 acceptance_request에서 가져온다 (fail-closed).
@@ -26676,6 +26824,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "codex_binary_sha256": str(_codex_binary_trust.get("sha256", "") or ""),
             "codex_js_entrypoint_path": str(_codex_binary_trust.get("js_entrypoint_path", "") or ""),
             "codex_js_entrypoint_sha256": str(_codex_binary_trust.get("js_entrypoint_sha256", "") or ""),
+            # REJECT#LATEST AC#2/#3: native binary 신뢰 증거도 캐시에 저장 (cache 우회 차단).
+            "codex_native_binary_path": str(_codex_binary_trust.get("native_binary_path", "") or ""),
+            "codex_native_binary_sha256": str(_codex_binary_trust.get("native_binary_sha256", "") or ""),
             "cached_at": _now(),
         }
         _cache_path = _codex_review_cache_path()
@@ -27150,6 +27301,9 @@ def _write_codex_review_blocked_invalidation(
         # REJECT#12 AC#3: JS 진입점 경로/SHA (BLOCKED 시 빈 값)
         "codex_js_entrypoint_path": "",
         "codex_js_entrypoint_sha256": "",
+        # REJECT#LATEST AC#3: native binary (BLOCKED 시 빈 값)
+        "codex_native_binary_path": "",
+        "codex_native_binary_sha256": "",
     }
     result_path = _codex_review_result_path()
     result_path.parent.mkdir(parents=True, exist_ok=True)
@@ -27484,6 +27638,19 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             f"codex_binary_path={_bin_path_rec!r} 가 기록됐으나 "
             "codex_binary_sha256이 비어 있습니다 (fail-closed).",
         )
+    # (6b) REJECT#LATEST AC#2/#3: native binary chain 재검증 (fail-closed).
+    #   verdict_source=codex_cli/verified_cache에서 native_binary_path/sha256이 비어있으면
+    #   native binary 신뢰 보장 불가 → 운영 승인 자격 없음 (fail-closed).
+    _native_path_rec = str(result.get("codex_native_binary_path", "") or "")
+    _native_sha_rec = str(result.get("codex_native_binary_sha256", "") or "")
+    if verdict_source in ("codex_cli", "verified_cache"):
+        if not _native_path_rec or not _native_sha_rec:
+            return _blocked(
+                "codex_review_native_binary_chain_missing",
+                f"verdict_source={verdict_source}에서 codex_native_binary_path 또는 "
+                "codex_native_binary_sha256이 비어 있습니다 — "
+                "native binary 신뢰 미보장으로 운영 승인 자격 부여 불가 (fail-closed).",
+            )
     # (7) auth_source는 chatgpt여야 한다(요구9: ChatGPT Plus 인증 승계).
     if str(result.get("auth_source", "") or "") != "chatgpt":
         return _blocked(
@@ -28329,6 +28496,26 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                             f"  현재 SHA: {_cur_js_sha[:16]}...\n"
                             "  gates codex-review를 재실행하여 최신 JS 파일로 검토를 갱신하세요."
                         )
+                # REJECT#LATEST AC#2: native binary SHA 재검증 (fail-closed)
+                _stored_native_sha = str(_cx_res.get("codex_native_binary_sha256", "") or "")
+                if _stored_native_sha:
+                    _stored_native_path = str(_cx_res.get("codex_native_binary_path", "") or "")
+                    if not _stored_native_path or not Path(_stored_native_path).exists():
+                        _die(
+                            "[BLOCKED] failure_code=codex_native_binary_missing\n"
+                            "  저장된 native binary 경로가 없거나 파일이 존재하지 않습니다.\n"
+                            "  gates codex-review를 재실행하세요."
+                        )
+                    else:
+                        _cur_native_sha = hashlib.sha256(Path(_stored_native_path).read_bytes()).hexdigest()
+                        if _cur_native_sha != _stored_native_sha:
+                            _die(
+                                "[BLOCKED] failure_code=codex_native_binary_sha_changed\n"
+                                f"  Codex native binary SHA가 변경됐습니다.\n"
+                                f"  저장 시점 SHA: {_stored_native_sha[:16]}...\n"
+                                f"  현재 SHA: {_cur_native_sha[:16]}...\n"
+                                "  gates codex-review를 재실행하세요."
+                            )
             # REJECT#12 AC#3: 바이너리 경로는 있는데 SHA가 없으면 차단 (fail-closed).
             elif _stored_bin_path and not _stored_bin_sha:
                 _die(

@@ -451,6 +451,9 @@ def _trust_base(**over) -> dict:
         #   테스트용 dummy 값 (운영 신뢰 검사 단위 테스트 전용).
         "codex_binary_path": "/usr/local/bin/codex",
         "codex_binary_sha256": "b" * 64,
+        # REJECT#LATEST: native/vendor binary 신뢰 증거 필수 (test-only dummy).
+        "codex_native_binary_path": "/usr/local/lib/codex/vendor/codex",
+        "codex_native_binary_sha256": "e" * 64,
     }
     base.update(over)
     return base
@@ -1490,6 +1493,9 @@ def test_tc35b_critical_invocation_verified_passes_operational_trust() -> None:
         # IMP-20260712-DAE1 REJECT#16: binary 신뢰 증거 필수
         "codex_binary_path": "/usr/local/bin/codex",
         "codex_binary_sha256": "c" * 64,
+        # REJECT#LATEST: native/vendor binary 신뢰 증거 필수 (test-only dummy).
+        "codex_native_binary_path": "/usr/local/lib/codex/vendor/codex",
+        "codex_native_binary_sha256": "e" * 64,
     }
     r = pipeline._check_codex_review_operational_trust(_fake_result)
     assert r["status"] == "PASS", (
@@ -2122,6 +2128,9 @@ def _make_valid_result_for_operational_trust(
         #   테스트용 dummy 값 (실제 경로가 아님 — 운영 신뢰 검사 단위 테스트 전용).
         "codex_binary_path": "/usr/local/bin/codex",
         "codex_binary_sha256": "a" * 64,  # dummy SHA-256 (test-only placeholder)
+        # REJECT#LATEST: native/vendor binary 신뢰 증거 필수 (test-only dummy).
+        "codex_native_binary_path": "/usr/local/lib/codex/vendor/codex",
+        "codex_native_binary_sha256": "e" * 64,
     }
 
 
@@ -3109,6 +3118,9 @@ def _make_trust_base_for_risk(risk_level: str) -> dict:
         # IMP-20260712-DAE1 REJECT#16: binary 신뢰 증거 필수 (테스트용 dummy 값)
         "codex_binary_path": "/usr/local/bin/codex",
         "codex_binary_sha256": "d" * 64,
+        # REJECT#LATEST: native/vendor binary 신뢰 증거 필수 (test-only dummy).
+        "codex_native_binary_path": "/usr/local/lib/codex/vendor/codex",
+        "codex_native_binary_sha256": "e" * 64,
     }
 
 
@@ -5210,3 +5222,73 @@ class TestTC60Reject20WindowsExeBlocked:
         assert "@openai/codex" in src, (
             "REJECT#20: _verify_npm_wrapper_content 소스에 @openai/codex 패턴 확인 없음"
         )
+
+
+# ---------------------------------------------------------------------------
+# TC-14 / TC-15: REJECT#LATEST — native/vendor binary 실행 체인 검증 (fail-closed)
+# ---------------------------------------------------------------------------
+def test_fake_npm_wrapper_no_valid_js_chain_detected(tmp_path: Path) -> None:
+    """TC-14 (AC#1): node+@openai/codex 문자열만 있는 가짜 .cmd는 JS entrypoint 없음 →
+    native binary chain 끊김 → 신뢰 체인 성립 불가.
+
+    AC#1: npm global bin에 node+@openai/codex 문자열만 있는 가짜 래퍼는
+    _find_codex_js_entrypoint가 None을 반환하며 체인이 끊긴다. 체인이 끊기면
+    _find_codex_native_binary도 native binary를 산출하지 못한다.
+    """
+    # 가짜 .cmd: "node @openai/codex" 문자열 포함이지만 유효한 JS 경로 패턴 없음
+    fake_cmd = tmp_path / "codex.cmd"
+    fake_cmd.write_text("node @openai/codex\r\n", encoding="utf-8")
+
+    js = pipeline._find_codex_js_entrypoint(fake_cmd)
+    native = pipeline._find_codex_native_binary(js) if js is not None else None
+
+    # 가짜 래퍼는 JS 진입점 패턴이 없으므로 None → 체인 끊김
+    assert js is None, (
+        f"가짜 래퍼에서 JS 진입점이 추출되면 AC#1 위반: js={js!r}"
+    )
+    # native도 None (체인 끊김)
+    assert native is None, (
+        f"가짜 래퍼 chain에서 native binary가 발견되면 안 됩니다: native={native!r}"
+    )
+
+
+def test_native_binary_missing_blocks_operational_trust() -> None:
+    """TC-15 (AC#2/#4): codex_review_result에 native binary path/sha256이 없으면
+    _check_codex_review_operational_trust가 BLOCKED를 반환한다.
+
+    AC#2: 정상 래퍼+JS 유지하되 vendor/native binary만 교체하면 exec 이후에서 차단.
+    AC#4: 실행 체인 구성 요소 누락 → acceptance_eligible=true 결과여도 운영 승인 자격 없음.
+    """
+    pol = pipeline._build_codex_model_policy("CRITICAL")
+    sig = pipeline._codex_policy_signature(pol)
+    _model = pol["selected_model"]
+    _effort = pol["selected_reasoning_effort"]
+    result = {
+        "verdict_source": "codex_cli",
+        "acceptance_eligible": True,
+        "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
+        "risk_level": "CRITICAL",
+        "model_policy_signature": sig,
+        "selected_model": _model,
+        "selected_reasoning_effort": _effort,
+        "review_mode": pol["mode"],
+        "invoked_model": _model,
+        "invoked_effort": _effort,
+        "actual_model": "unknown",
+        "actual_effort": "unknown",
+        "model_verification_level": "invocation_verified",
+        "codex_cli_command": f"codex exec --model {_model} -c model_reasoning_effort=xhigh",
+        "codex_binary_path": "some_path",
+        "codex_binary_sha256": "abc123",
+        # native binary 필드 비어있음 → BLOCKED 기대
+        "codex_native_binary_path": "",
+        "codex_native_binary_sha256": "",
+        "auth_source": "chatgpt",
+    }
+    r = pipeline._check_codex_review_operational_trust(result)
+    assert r["status"] == "BLOCKED", (
+        f"native binary 필드 없는데 BLOCKED가 아님: {r}"
+    )
+    assert "native_binary" in r.get("failure_code", ""), (
+        f"failure_code에 'native_binary'가 없음: {r.get('failure_code')}"
+    )
