@@ -3065,3 +3065,121 @@ def test_tc45e_normal_low_medium_pass() -> None:
             f"REJECT#31 AC#4: 정상 {risk} 결과가 BLOCKED됨 — "
             f"got status={r['status']!r}, failure_code={r.get('failure_code')!r}"
         )
+
+
+# =========================================================================== #
+# TC-46: REJECT#32 — CODEX_CRITICAL_CONSTANTS 단독 변경도 CRITICAL 분류
+# =========================================================================== #
+
+def test_tc46a_codex_model_policies_alone_is_critical() -> None:
+    """REJECT#32 AC#1: CODEX_MODEL_POLICIES만 변경한 경우 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"],
+        [],  # 함수 변경 없음
+        ["CODEX_MODEL_POLICIES"],
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#32 AC#1: CODEX_MODEL_POLICIES 단독 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+    assert r["matched_rule"] == "critical_constant", (
+        f"REJECT#32 AC#1: matched_rule이 'critical_constant' 아님 — got {r['matched_rule']!r}"
+    )
+
+
+def test_tc46b_codex_allowed_models_alone_is_critical() -> None:
+    """REJECT#32 AC#2a: CODEX_ALLOWED_MODELS 단독 변경도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"],
+        [],
+        ["CODEX_ALLOWED_MODELS"],
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#32 AC#2a: CODEX_ALLOWED_MODELS 단독 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc46c_codex_critical_functions_alone_is_critical() -> None:
+    """REJECT#32 AC#2b: CODEX_CRITICAL_FUNCTIONS 단독 변경도 CRITICAL로 분류된다.
+    (신뢰 경계 함수 이름을 제거·변조하는 것도 자기 보호 대상)
+    """
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"],
+        [],
+        ["CODEX_CRITICAL_FUNCTIONS"],
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#32 AC#2b: CODEX_CRITICAL_FUNCTIONS 단독 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc46d_codex_high_risk_paths_alone_is_critical() -> None:
+    """REJECT#32 AC#2c: CODEX_HIGH_RISK_PATHS 단독 변경도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"],
+        [],
+        ["CODEX_HIGH_RISK_PATHS"],
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#32 AC#2c: CODEX_HIGH_RISK_PATHS 단독 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc46e_codex_router_version_alone_is_critical() -> None:
+    """REJECT#32 AC#2d: CODEX_MODEL_ROUTER_VERSION 단독 변경도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"],
+        [],
+        ["CODEX_MODEL_ROUTER_VERSION"],
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#32 AC#2d: CODEX_MODEL_ROUTER_VERSION 단독 변경이 CRITICAL 아님 — got {r['risk_level']!r}"
+    )
+
+
+def test_tc46f_critical_constants_set_contains_expected() -> None:
+    """REJECT#32 AC#3: CODEX_CRITICAL_CONSTANTS 등록부에 5개 핵심 상수가 모두 포함된다."""
+    required = {
+        "CODEX_MODEL_POLICIES",
+        "CODEX_ALLOWED_MODELS",
+        "CODEX_CRITICAL_FUNCTIONS",
+        "CODEX_HIGH_RISK_PATHS",
+        "CODEX_MODEL_ROUTER_VERSION",
+    }
+    actual = set(pipeline.CODEX_CRITICAL_CONSTANTS)
+    missing = required - actual
+    assert not missing, (
+        f"REJECT#32 AC#3: CODEX_CRITICAL_CONSTANTS에 필수 상수 누락: {sorted(missing)}"
+    )
+
+
+def test_tc46g_critical_constant_triggers_force_review_and_no_cache() -> None:
+    """REJECT#32 AC#4: 상수 변경으로 CRITICAL 분류 시 force_review_required=True, cache_allowed=False.
+    (CRITICAL 정책 SSoT 검증)
+    """
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"],
+        [],
+        ["CODEX_MODEL_POLICIES"],
+    )
+    assert r["risk_level"] == "CRITICAL", "REJECT#32 AC#4: 전제 조건 — CRITICAL 분류 실패"
+    policy = pipeline._build_codex_model_policy("CRITICAL")
+    assert policy.get("force_review_required") is True, (
+        "REJECT#32 AC#4: CRITICAL 정책의 force_review_required가 True 아님"
+    )
+    assert policy.get("cache_allowed") is False, (
+        "REJECT#32 AC#4: CRITICAL 정책의 cache_allowed가 False 아님"
+    )
+
+
+def test_tc46h_no_functions_no_constants_pipeline_py_is_high() -> None:
+    """REJECT#32 회귀 방지: 함수/상수 변경 없이 pipeline.py만 변경하면 HIGH (CRITICAL 아님).
+    상수 스캔 추가 후 기존 HIGH 분류가 변경되지 않아야 한다.
+    """
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"],
+        [],   # 함수 없음
+        [],   # 상수 없음
+    )
+    assert r["risk_level"] == "HIGH", (
+        f"REJECT#32 회귀: 함수/상수 없이 pipeline.py만 변경하면 HIGH여야 함 — got {r['risk_level']!r}"
+    )

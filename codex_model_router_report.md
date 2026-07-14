@@ -61,6 +61,23 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
 
 우선순위: **CRITICAL > HIGH > MEDIUM > LOW**. 위쪽 규칙에 먼저 매칭되면 그 risk level로 확정됩니다.
 
+### CRITICAL — 신뢰 경계 모듈 상수 (`CODEX_CRITICAL_CONSTANTS`) — REJECT#32
+
+아래 모듈 상수 중 하나라도 변경되면 CRITICAL로 분류됩니다 (함수 변경이 없어도 적용됩니다).
+
+| 상수명 | 역할 |
+|---|---|
+| `CODEX_MODEL_POLICIES` | risk level별 모델/effort/모드 정책 SSoT |
+| `CODEX_ALLOWED_MODELS` | GPT-5.6 허용 모델 집합 |
+| `CODEX_CRITICAL_FUNCTIONS` | 신뢰 경계 함수 등록부 |
+| `CODEX_CRITICAL_CONSTANTS` | 신뢰 경계 상수 등록부 (자기 보호) |
+| `CODEX_HIGH_RISK_PATHS` | HIGH risk 파일 경로 패턴 |
+| `CODEX_MODEL_ROUTER_VERSION` | 라우터 버전 (캐시 무효화 키 포함) |
+
+> **자기 보호**: `CODEX_CRITICAL_FUNCTIONS` 목록에서 함수를 제거하거나, `CODEX_MODEL_POLICIES`에서 정책을 변조해도 CRITICAL로 분류되어 최고 수준의 검토를 강제합니다.
+
+> **완전성 검사**: `tests/e2e/test_codex_model_router_dae1.py`의 TC-46 테스트는 각 상수를 단독으로 변경했을 때 CRITICAL이 반환되는지 자동으로 검증합니다.
+
 ### CRITICAL — 신뢰 경계 함수 (`CODEX_CRITICAL_FUNCTIONS`)
 
 아래 함수 중 하나라도 변경되면 CRITICAL로 분류됩니다. 승인 코드/nonce/SHA를 다루거나 Codex 실행·인증·모델 검증·증거 생성·운영 신뢰에 직접 관여하는 신뢰 루트 코드입니다.
@@ -178,7 +195,7 @@ HIGH/CRITICAL risk에서는 `downgrade_blocked=True`이므로, 더 낮은 모델
 
 | 항목 | 위치 |
 |---|---|
-| SSoT 상수 | `pipeline.py` — `CODEX_MODEL_ROUTER_VERSION`, `CODEX_CRITICAL_FUNCTIONS`, `CODEX_HIGH_RISK_PATHS`, `CODEX_MODEL_POLICIES` |
+| SSoT 상수 | `pipeline.py` — `CODEX_MODEL_ROUTER_VERSION`, `CODEX_CRITICAL_FUNCTIONS`, `CODEX_CRITICAL_CONSTANTS`, `CODEX_HIGH_RISK_PATHS`, `CODEX_MODEL_POLICIES`, `CODEX_ALLOWED_MODELS` |
 | risk 분류 | `pipeline.py::_classify_codex_review_risk` |
 | 모델 정책 | `pipeline.py::_build_codex_model_policy` |
 | capability 감지/게이트 | `pipeline.py::_detect_codex_cli_capability`, `_check_codex_capability_gate` |
@@ -191,4 +208,4 @@ HIGH/CRITICAL risk에서는 `downgrade_blocked=True`이므로, 더 낮은 모델
 | 캐시 정책 통합 | `pipeline.py::_check_codex_cache` |
 | 실행 통합 | `pipeline.py::_cmd_gates_codex_review` |
 | bundle 정책 섹션 | `pipeline.py::_build_codex_review_bundle` (model_policy + raw ACCEPT/nonce 금지 가드) |
-| E2E 테스트 | `tests/e2e/test_codex_model_router_dae1.py` (TC-1~TC-43) |
+| E2E 테스트 | `tests/e2e/test_codex_model_router_dae1.py` (TC-1~TC-46) |

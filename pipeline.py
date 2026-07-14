@@ -2419,6 +2419,19 @@ CODEX_ALLOWED_MODELS: frozenset = frozenset({
     "gpt-5.6-sol",
 })
 
+# REJECT#32 Fix: trust-chain 모듈 상수 — 단독 변경도 CRITICAL로 분류한다.
+# 이 상수들이 변경되면 라우터 동작·모델 정책·신뢰 경계 자체가 바뀔 수 있으므로
+# 함수 변경이 없어도 _classify_codex_review_risk가 CRITICAL을 반환한다.
+# 이 목록 자체(CODEX_CRITICAL_CONSTANTS)도 자기 보호 대상에 포함한다.
+CODEX_CRITICAL_CONSTANTS: List[str] = [
+    "CODEX_MODEL_POLICIES",
+    "CODEX_ALLOWED_MODELS",
+    "CODEX_CRITICAL_FUNCTIONS",
+    "CODEX_CRITICAL_CONSTANTS",
+    "CODEX_HIGH_RISK_PATHS",
+    "CODEX_MODEL_ROUTER_VERSION",
+]
+
 # risk level별 모델 정책 SSoT.
 # IMP-20260712-DAE1 REJECT#3 rework(요구10): Codex Review는 GPT-5.6 계열 모델을 사용한다.
 #   LOW=gpt-5.6-luna/low, MEDIUM=gpt-5.6-terra/high, HIGH=gpt-5.6-sol/high, CRITICAL=gpt-5.6-sol/max.
@@ -8189,12 +8202,15 @@ def _is_codex_critical_file(path: str) -> bool:
 def _classify_codex_review_risk(
     changed_files: List[str],
     changed_functions: List[str],
+    changed_constants: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """변경 파일/함수를 trust-chain risk level로 분류한다.
+    """변경 파일/함수/상수를 trust-chain risk level로 분류한다.
 
     Args:
         changed_files: 변경된 파일 경로 목록 (None 허용 → 빈 목록으로 처리).
         changed_functions: 변경된 함수명 목록 (None 허용 → 빈 목록으로 처리).
+        changed_constants: 변경된 모듈 상수명 목록 (None 허용 → 빈 목록으로 처리).
+            CODEX_CRITICAL_CONSTANTS에 포함된 상수가 있으면 CRITICAL로 분류된다.
     Returns:
         {"risk_level": "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"|"BLOCKED", "matched_rule": str,
          "matched_items": list, "blocked": bool}.
@@ -8211,6 +8227,19 @@ def _classify_codex_review_risk(
         }
     _files = changed_files
     _funcs = changed_functions if isinstance(changed_functions, list) else []
+    _consts = changed_constants if isinstance(changed_constants, list) else []
+
+    # REJECT#32 Fix: CODEX_CRITICAL_CONSTANTS에 있는 모듈 상수가 변경된 경우 CRITICAL.
+    #   함수 변경이 없어도 라우터·정책·신뢰 경계 상수 자체를 변조하면 자기 보호가 무력화됨.
+    _crit_const_set = set(CODEX_CRITICAL_CONSTANTS)
+    for const in _consts:
+        if str(const) in _crit_const_set:
+            return {
+                "risk_level": "CRITICAL",
+                "matched_rule": "critical_constant",
+                "matched_items": [const],
+                "blocked": False,
+            }
 
     # CRITICAL: CODEX_CRITICAL_FUNCTIONS에 있는 함수가 변경된 경우 (최우선, test 파일 제외 무관).
     for func in _funcs:
@@ -8939,6 +8968,7 @@ def _build_codex_semantic_evidence(
         "truncated_critical_hunks": 0,
         "bundle_budget_chars": 0,
         "semantic_evidence_sha256": "",
+        "changed_constants": [],  # REJECT#32: CODEX_CRITICAL_CONSTANTS 소속 변경 상수 목록
     }
 
     _crit_funcs = set(CODEX_CRITICAL_FUNCTIONS)
@@ -8989,6 +9019,24 @@ def _build_codex_semantic_evidence(
                         if _cur_lines:
                             _cur_lines.append(_ln)
                 _flush(_cur_fn, _cur_lines)
+
+            # REJECT#32 Fix: pipeline.py diff에서 CODEX_CRITICAL_CONSTANTS 소속 상수 변경 감지.
+            #   `+CONST_NAME` / `-CONST_NAME` 줄(모듈 상단 상수 정의)을 스캔한다.
+            _changed_const_set: set = set()
+            _crit_const_names = set(CODEX_CRITICAL_CONSTANTS)
+            for _diff_scan_ln in _dr.stdout.splitlines():
+                # 추가/삭제 줄만 검사. diff 헤더/메타 줄 제외.
+                if not (_diff_scan_ln.startswith("+") or _diff_scan_ln.startswith("-")):
+                    continue
+                if _diff_scan_ln.startswith(("---", "+++")):
+                    continue
+                _scan_stripped = _diff_scan_ln[1:].strip()
+                for _cc in _crit_const_names:
+                    # 상수 이름으로 시작하는 정의 줄: "CODEX_MODEL_POLICIES: Dict = {" 등.
+                    if _scan_stripped.startswith(_cc):
+                        _changed_const_set.add(_cc)
+                        break
+            sem["changed_constants"] = sorted(_changed_const_set)
     except Exception:  # noqa: BLE001 — diff 실패는 fail-closed(evidence_complete=False)
         _diff_ok = False
 
@@ -9483,6 +9531,8 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         bundle["truncated_critical_hunks"] = int(_semantic["truncated_critical_hunks"])
         bundle["semantic_evidence_sha256"] = str(_semantic["semantic_evidence_sha256"])
         bundle["bundle_budget_chars"] = int(_semantic["bundle_budget_chars"])
+        # REJECT#32: 모듈 상수 변경 목록 — risk 분류 및 Codex 검토 번들에 포함한다.
+        bundle["changed_constants"] = list(_semantic.get("changed_constants", []) or [])
         # critical_function_shas: function_before_after_shas의 after(함수 본문 개별 SHA)를 사용.
         #   (기존 버그: 모든 함수에 pipeline.py 전체 파일 SHA를 동일 적용 → 함수별 구분 불가.)
         try:
@@ -24704,7 +24754,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # IMP-20260712-DAE1 MT-6: Risk 분류 + 모델 정책 + Capability Gate (cache 체크 이전).
     _changed_files_for_risk: List[str] = [str(f) for f in (_preflight_bundle.get("changed_files") or [])]
     _changed_funcs_for_risk: List[str] = [str(f) for f in (_preflight_bundle.get("included_functions") or [])]
-    _risk_info = _classify_codex_review_risk(_changed_files_for_risk, _changed_funcs_for_risk)
+    # REJECT#32 Fix: bundle에서 changed_constants를 추출하여 risk 분류에 전달한다.
+    #   CODEX_CRITICAL_CONSTANTS 소속 상수 변경은 함수 변경 없이도 CRITICAL로 분류된다.
+    _changed_consts_for_risk: List[str] = [str(c) for c in (_preflight_bundle.get("changed_constants") or [])]
+    _risk_info = _classify_codex_review_risk(
+        _changed_files_for_risk, _changed_funcs_for_risk, _changed_consts_for_risk
+    )
     _risk_level_str = str(_risk_info.get("risk_level", "MEDIUM") or "MEDIUM")
     _model_policy = _build_codex_model_policy(_risk_level_str)
     if _model_policy.get("result") == "BLOCKED":
