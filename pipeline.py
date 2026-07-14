@@ -8408,10 +8408,14 @@ def _classify_codex_review_risk(
 def _is_codex_test_path(path: str) -> bool:
     """주어진 경로가 테스트 파일인지 판정한다 (risk 상속용, tests 자체는 risk 상승 안 함).
 
+    REJECT#6: 파일명 패턴(test_*.py / *_test.py) 기반 제외를 삭제한다.
+    .github/workflows/test_release.py 같은 HIGH/CRITICAL 경로의 test-like 파일이
+    LOW로 오분류되는 버그를 수정. tests/ 하위 파일만 테스트로 분류한다.
+
     Args:
         path: 저장소 상대 경로 (슬래시/역슬래시 혼용 허용).
     Returns:
-        tests/ 하위이거나 test_*.py / *_test.py 파일명이면 True.
+        tests/ 하위이면 True. 파일명 패턴은 경로 판정에 사용하지 않는다.
     Raises:
         TypeError: path가 None이거나 str이 아닌 경우 (외부 입력 타입 가드).
     """
@@ -8424,10 +8428,10 @@ def _is_codex_test_path(path: str) -> bool:
         norm = norm[2:]
     if not norm:
         return False
-    if norm.startswith("tests/"):
-        return True
-    base = norm.rsplit("/", 1)[-1]
-    return base.startswith("test_") and base.endswith(".py") or base.endswith("_test.py")
+    # REJECT#6: HIGH/CRITICAL 경로(예: .github/workflows/test_release.py)의 test-like 파일을
+    #   제품 파일에서 제외하지 않는다. tests/ 하위 파일만 테스트로 분류하여 risk 상속 제외.
+    #   파일명 패턴 기반 제외는 tests/ 외부에서 HIGH → LOW 오분류를 유발하므로 삭제한다.
+    return norm.startswith("tests/")
 
 
 # IMP-20260712-DAE1 MT-3: risk level → 모델 정책 매핑 + 다운그레이드 차단.
@@ -8944,6 +8948,24 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
             _a = str(_shas.get("after", "") or "")
             lines.append(f"  {_fn_id}: {_b[:16]}...→{_a[:16]}...")
 
+    # REJECT#6: CRITICAL Python 파일의 file-level SHA attestation을 프롬프트에 포함한다.
+    # diff 대신 SHA로 변경 증거가 제공되는 CRITICAL 파일의 내용 변경 여부를 Codex에 전달한다.
+    _file_shas = bundle.get("file_sha_attestations") or {}
+    if _file_shas:
+        lines += [
+            "",
+            "## CRITICAL Python 파일 SHA 증거 (file-level before → after)",
+            "# 이 파일들은 diff 대신 file-level SHA로 변경 증거를 제공합니다.",
+            "# [CHANGED] = before_sha != after_sha (파일 내용 변경됨).",
+            "# [UNCHANGED] = before_sha == after_sha (파일 내용 동일).",
+        ]
+        for _fp, _shas in sorted(_file_shas.items()):
+            _b = str(_shas.get("before_sha", "") or "")
+            _a = str(_shas.get("after_sha", "") or "")
+            _chg = bool(_shas.get("changed", False))
+            _tag = "[CHANGED]  " if _chg else "[UNCHANGED]"
+            lines.append(f"  {_tag} {_fp}: {_b[:16]}...→{_a[:16]}...")
+
     _tassert = bundle.get("test_assertions") or {}
     if _tassert:
         lines += ["", "## 테스트 검증 근거 (핵심 assert)"]
@@ -9437,10 +9459,14 @@ def _build_codex_semantic_evidence(
         )
 
     # 6) semantic_evidence_sha256: 원문 포함 semantic 섹션의 결정적 integrity digest.
+    # REJECT#6: file_sha_attestations와 missing_critical_files를 digest에 포함하여
+    #   CRITICAL Python 파일 내용 변경 시 SHA가 바뀌도록 한다.
     try:
         _sec = json.dumps({
             "diff_hunks": sem["diff_hunks"],
             "function_before_after_shas": sem["function_before_after_shas"],
+            "file_sha_attestations": sem["file_sha_attestations"],
+            "missing_critical_files": sem["missing_critical_files"],
             "test_assertions": sem["test_assertions"],
         }, sort_keys=True, ensure_ascii=False)
         sem["semantic_evidence_sha256"] = hashlib.sha256(

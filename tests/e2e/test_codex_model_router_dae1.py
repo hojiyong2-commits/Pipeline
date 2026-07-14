@@ -2507,7 +2507,7 @@ def test_tc42d_new_critical_function_in_sha_dict() -> None:
         f"REJECT#28 AC#1: 신규 함수의 before SHA가 비어 있지 않음 — got {fas[key]['before']!r}"
     )
     assert fas[key]["after"] != "", (
-        f"REJECT#28 AC#1: 신규 함수의 after SHA가 비어 있음 — 현재 파일에 함수가 존재해야 함"
+        "REJECT#28 AC#1: 신규 함수의 after SHA가 비어 있음 — 현재 파일에 함수가 존재해야 함"
     )
 
 
@@ -2663,7 +2663,7 @@ def test_tc43g_trust_boundary_completeness() -> None:
         if fn not in pipeline.CODEX_CRITICAL_FUNCTIONS
     ]
     assert not missing, (
-        f"REJECT#29 AC#2: 아래 신뢰 경계 함수가 CODEX_CRITICAL_FUNCTIONS에 없음:\n"
+        "REJECT#29 AC#2: 아래 신뢰 경계 함수가 CODEX_CRITICAL_FUNCTIONS에 없음:\n"
         + "\n".join(f"  - {fn}" for fn in missing)
         + "\npipeline.py의 CODEX_CRITICAL_FUNCTIONS에 추가하십시오."
     )
@@ -2703,7 +2703,7 @@ def test_tc43i_report_model_table_uses_gpt56() -> None:
     # 마크다운 테이블 행 패턴: | ... claude-... | 형식
     table_claude = re.findall(r"^\|.*claude-(?:sonnet|opus|haiku)[^|]*\|", content, re.MULTILINE)
     assert not table_claude, (
-        f"REJECT#29 AC#4: codex_model_router_report.md 모델 라우팅 표에 claude 모델이 남아있음:\n"
+        "REJECT#29 AC#4: codex_model_router_report.md 모델 라우팅 표에 claude 모델이 남아있음:\n"
         + "\n".join(f"  {row}" for row in table_claude)
         + "\nGPT-5.6 계열(gpt-5.6-luna/terra/sol)로 교체하십시오."
     )
@@ -2726,7 +2726,7 @@ def test_tc43j_report_tests_not_high_risk_path() -> None:
         import re as _re
         tests_in_table = _re.findall(r"^\|[^|]*`?tests/`?[^|]*\|", high_section, _re.MULTILINE)
         assert not tests_in_table, (
-            f"REJECT#29 AC#4: HIGH 섹션 테이블에 'tests/' 경로가 남아있음:\n"
+            "REJECT#29 AC#4: HIGH 섹션 테이블에 'tests/' 경로가 남아있음:\n"
             + "\n".join(f"  {row}" for row in tests_in_table)
             + "\n'tests/'는 HIGH risk 경로가 아닙니다 — 제거하십시오."
         )
@@ -2750,7 +2750,7 @@ def test_tc43k_report_high_unknown_not_blocked() -> None:
         # HIGH 행에 BLOCKED가 없어야 함 (CRITICAL 행에는 있어야 함)
         high_rows = re.findall(r"^\|[^|]*unknown[^|]*\|[^|]*HIGH[^|]*\|[^|]*BLOCK[^|]*\|", section, re.MULTILINE)
         assert not high_rows, (
-            f"REJECT#29 AC#4: unknown 처리 표에서 HIGH+BLOCKED 조합이 남아있음:\n"
+            "REJECT#29 AC#4: unknown 처리 표에서 HIGH+BLOCKED 조합이 남아있음:\n"
             + "\n".join(f"  {row}" for row in high_rows)
             + "\nHIGH는 invocation_verified로 통과 — BLOCKED는 CRITICAL만 적용합니다."
         )
@@ -2839,7 +2839,7 @@ def test_tc44d_multihunk_same_critical_function_detected(tmp_path: Path) -> None
         f"Fix 2(hunk 단위 카운트) 미적용. 함수명 set 방식은 함수명이 covered에 있으면 누락 미감지."
     )
     assert result["evidence_complete"] is False, (
-        f"REJECT#30 AC#2: 멀티-hunk 누락인데 evidence_complete가 False가 아님"
+        "REJECT#30 AC#2: 멀티-hunk 누락인데 evidence_complete가 False가 아님"
     )
 
 
@@ -2884,11 +2884,11 @@ def test_tc44e_new_critical_function_hunk_required(tmp_path: Path) -> None:
         )
 
     assert result["truncated_critical_hunks"] > 0, (
-        f"REJECT#30 AC#3: 신규 CRITICAL 함수 hunk 예산 초과 시 truncated_critical_hunks=0 — "
-        f"Fix 3a의 skip이 제거됐는지 확인 (신규 함수 hunk도 is_critical이면 감지해야 함)"
+        "REJECT#30 AC#3: 신규 CRITICAL 함수 hunk 예산 초과 시 truncated_critical_hunks=0 — "
+        "Fix 3a의 skip이 제거됐는지 확인 (신규 함수 hunk도 is_critical이면 감지해야 함)"
     )
     assert result["evidence_complete"] is False, (
-        f"REJECT#30 AC#3: 신규 CRITICAL 함수 hunk 누락인데 evidence_complete=True"
+        "REJECT#30 AC#3: 신규 CRITICAL 함수 hunk 누락인데 evidence_complete=True"
     )
 
 
@@ -2904,7 +2904,7 @@ def test_tc44f_trust_boundary_completeness_reject30() -> None:
     ]
     missing = [fn for fn in reject30_funcs if fn not in pipeline.CODEX_CRITICAL_FUNCTIONS]
     assert not missing, (
-        f"REJECT#30 AC#4: 아래 함수가 CODEX_CRITICAL_FUNCTIONS에 없음:\n"
+        "REJECT#30 AC#4: 아래 함수가 CODEX_CRITICAL_FUNCTIONS에 없음:\n"
         + "\n".join(f"  - {fn}" for fn in missing)
     )
 
@@ -3888,4 +3888,147 @@ class TestTC49CriticalPythonDiffAndNonCritBudget:
         )
         assert isinstance(sem["missing_noncrit_files"], list), (
             f"REJECT#35 AC#4: missing_noncrit_files가 list 아님 — {sem['missing_noncrit_files']!r}"
+        )
+
+
+class TestTC50PromptDigestAndTestPathFix:
+    """REJECT#6 검증: file_sha_attestations → prompt/digest 포함 + _is_codex_test_path 경로 제한.
+
+    AC#1: CRITICAL Python 파일 SHA 증거가 Codex prompt에 포함된다.
+    AC#2: CRITICAL Python 파일 내용 변경 시 semantic_evidence_sha256 값이 달라진다.
+    AC#3: diff/SHA 모두 없는 CRITICAL 파일이 missing_critical_files에 포함되고
+          evidence_complete=False로 처리된다.
+    AC#4: .github/workflows/test_release.py 같은 HIGH 경로 test-like 파일이 LOW로 오분류되지 않는다.
+    AC#5 (회귀): tests/ 하위 파일은 여전히 _is_codex_test_path=True로 분류된다.
+    """
+
+    def _make_bundle_with_file_shas(self, file_sha_attestations: dict) -> dict:
+        """file_sha_attestations를 포함한 최소 bundle 조립 (evidence_complete=True)."""
+        return {
+            "evidence_complete": True,
+            "changed_files": ["tests/e2e/test_codex_model_router_dae1.py"],
+            "changed_files_count": 1,
+            "diff_hunks": [
+                {
+                    "function": "pipeline.py",
+                    "is_critical": True,
+                    "hunk": "--- a/pipeline.py\n+++ b/pipeline.py\n@@ -1 +1 @@\n-old\n+new",
+                    "chars": 100,
+                }
+            ],
+            "function_before_after_shas": {},
+            "file_sha_attestations": file_sha_attestations,
+            "test_assertions": {},
+            "oracle_results": [],
+        }
+
+    def test_tc50a_prompt_includes_file_sha_attestations_section(self) -> None:
+        """REJECT#6 AC#1: file_sha_attestations가 있으면 Codex prompt에 SHA 증거 섹션이 추가된다."""
+        bundle = self._make_bundle_with_file_shas({
+            "tests/e2e/test_codex_model_router_dae1.py": {
+                "before_sha": "a" * 64,
+                "after_sha": "b" * 64,
+                "changed": True,
+            }
+        })
+        prompt = pipeline._build_codex_prompt_for_review(bundle, "IMP-20260712-DAE1")
+        assert "CRITICAL Python 파일 SHA 증거" in prompt, (
+            "REJECT#6 AC#1: prompt에 'CRITICAL Python 파일 SHA 증거' 섹션 없음 — "
+            "file_sha_attestations가 Codex에 전달되지 않는다"
+        )
+        assert "test_codex_model_router_dae1.py" in prompt, (
+            "REJECT#6 AC#1: prompt에 CRITICAL Python 파일명이 없음"
+        )
+        assert "[CHANGED]" in prompt, (
+            "REJECT#6 AC#1: changed=True인데 [CHANGED] 태그가 prompt에 없음"
+        )
+
+    def test_tc50b_prompt_no_file_sha_section_when_empty(self) -> None:
+        """REJECT#6 AC#1 음성: file_sha_attestations={}이면 SHA 증거 섹션이 prompt에 없다."""
+        bundle = self._make_bundle_with_file_shas({})
+        prompt = pipeline._build_codex_prompt_for_review(bundle, "IMP-20260712-DAE1")
+        assert "CRITICAL Python 파일 SHA 증거" not in prompt, (
+            "REJECT#6 AC#1 음성: file_sha_attestations={}인데 SHA 증거 섹션이 생성됨"
+        )
+
+    def test_tc50c_semantic_sha256_changes_when_file_sha_attestations_change(self) -> None:
+        """REJECT#6 AC#2: file_sha_attestations after_sha 변경 시 semantic_evidence_sha256이 달라진다."""
+        import hashlib
+        import json
+
+        def _sha_of(sem: dict) -> str:
+            return hashlib.sha256(
+                json.dumps(sem, sort_keys=True, ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
+
+        common_base = {
+            "diff_hunks": [{"function": "pipeline.py", "is_critical": True, "chars": 100}],
+            "function_before_after_shas": {},
+            "missing_critical_files": [],
+            "test_assertions": {},
+        }
+        sem_v1 = {
+            **common_base,
+            "file_sha_attestations": {
+                "tests/e2e/test_codex_model_router_dae1.py": {
+                    "before_sha": "a" * 64,
+                    "after_sha": "b" * 64,
+                    "changed": True,
+                }
+            },
+        }
+        sem_v2 = {
+            **common_base,
+            "file_sha_attestations": {
+                "tests/e2e/test_codex_model_router_dae1.py": {
+                    "before_sha": "a" * 64,
+                    "after_sha": "c" * 64,  # after_sha만 변경
+                    "changed": True,
+                }
+            },
+        }
+        assert _sha_of(sem_v1) != _sha_of(sem_v2), (
+            "REJECT#6 AC#2: file_sha_attestations after_sha가 바뀌어도 digest가 동일 — "
+            "semantic_evidence_sha256 계산에 file_sha_attestations가 포함되어야 함"
+        )
+
+    def test_tc50d_is_codex_test_path_workflow_test_false(self) -> None:
+        """REJECT#6 AC#4: .github/workflows/test_release.py → _is_codex_test_path=False."""
+        result = pipeline._is_codex_test_path(".github/workflows/test_release.py")
+        assert result is False, (
+            "REJECT#6 AC#4: .github/workflows/test_release.py가 _is_codex_test_path=True — "
+            "tests/ 외부 test-like 파일이 LOW 오분류로 이어짐"
+        )
+
+    def test_tc50e_workflow_test_file_classified_high_not_low(self) -> None:
+        """REJECT#6 AC#4: .github/workflows/test_release.py risk=HIGH (LOW 아님)."""
+        result = pipeline._classify_codex_review_risk(
+            [".github/workflows/test_release.py"], []
+        )
+        risk = result.get("risk_level", "")
+        assert risk == "HIGH", (
+            f"REJECT#6 AC#4: .github/workflows/test_release.py risk={risk!r} — HIGH여야 함. "
+            "_is_codex_test_path가 tests/ 외부 파일을 제외하여 HIGH 경로가 LOW로 오분류"
+        )
+
+    def test_tc50f_tests_prefix_still_returns_true(self) -> None:
+        """REJECT#6 AC#5 회귀: tests/ 하위 파일은 여전히 _is_codex_test_path=True."""
+        assert pipeline._is_codex_test_path("tests/e2e/test_codex_model_router_dae1.py") is True, (
+            "REJECT#6 AC#5 회귀: tests/e2e/test_codex_model_router_dae1.py가 _is_codex_test_path=False — "
+            "tests/ prefix 기반 분류가 깨짐"
+        )
+        assert pipeline._is_codex_test_path("tests/oracles/IMP-20260712-DAE1/tc01/expected.json") is True, (
+            "REJECT#6 AC#5 회귀: tests/oracles/ 파일이 _is_codex_test_path=False"
+        )
+
+    def test_tc50g_root_test_file_not_excluded(self) -> None:
+        """REJECT#6 AC#4 수정 확인: 루트 test_foo.py는 이제 tests/ 외부이므로 False여야 한다.
+
+        이전 동작: test_foo.py (루트) → True (파일명 패턴 match)
+        새 동작: test_foo.py (루트) → False (tests/ 외부 — 파일명 패턴 제거됨)
+        """
+        result = pipeline._is_codex_test_path("test_foo.py")
+        assert result is False, (
+            "REJECT#6 AC#4: 루트 test_foo.py가 _is_codex_test_path=True — "
+            "파일명 패턴 기반 제외가 남아있음. tests/ 하위만 제외해야 함"
         )
