@@ -8542,7 +8542,10 @@ def _build_codex_model_policy(
 # [Assumptions]: `codex --version` 호출이 CLI 존재를 나타낸다. 모델명은 확정 불가 → unknown.
 # [Vulnerability & Risks]: subprocess 호출 실패는 모두 unavailable/unknown으로 흡수한다.
 # [Improvement]: CLI가 모델명을 노출하면 model_source를 version_check→cli_reported로 승격 가능.
-def _detect_codex_cli_capability() -> Dict[str, Any]:
+def _detect_codex_cli_capability(
+    verified_bin_path: str = "",
+    env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     """Codex CLI 가용성을 감지. actual_model은 실제 exec 결과가 없으면 항상 unknown.
 
     IMP-20260712-DAE1 rework(문제4): `CODEX_CLI_MODEL` 환경변수는 더 이상 actual_model 증거로
@@ -8550,16 +8553,33 @@ def _detect_codex_cli_capability() -> Dict[str, Any]:
     실제로 보고한 모델이며(_invoke_codex_exec), version-check 단계에서는 확정할 수 없으므로
     unknown으로 남긴다(허위 기록 금지). 환경변수는 진단용 env_hint 필드로만 노출한다.
 
+    IMP-20260712-DAE1 REJECT#16 결함A(TOCTOU + OPENAI_API_KEY 노출 방어):
+      - verified_bin_path가 주어지면 그 신뢰 검증된 절대경로로 `--version`을 실행한다
+        (PATH 재해석 차단 → TOCTOU/PATH 주입 공격 벡터 제거). 빈 값이면 "codex" PATH
+        fallback(레거시 호환).
+      - env가 주어지면(보통 OPENAI_API_KEY가 제거된 환경) subprocess에 그대로 전달한다.
+        None이면 현재 프로세스 환경을 상속한다(레거시 경로).
+
+    Args:
+        verified_bin_path: 신뢰 검증된 codex 절대경로. 빈 문자열이면 "codex" PATH fallback.
+        env: subprocess에 전달할 환경 dict(예: OPENAI_API_KEY 제거 env). None이면 현재 환경 상속.
     Returns:
         {"available": bool, "actual_model": str, "model_source": str, "env_hint": str}.
         model_source: "version_check"(가용하나 모델 미확인) | "unknown"(미가용).
     """
+    # None 입력 방어: verified_bin_path가 None이면 "" 로 강등하여 codex PATH fallback을 탄다
+    #   (레거시 호환 — 호출자가 명시적으로 None을 넘겨도 안전하게 동작).
+    if verified_bin_path is None:
+        verified_bin_path = ""  # allowed: None → "" fallback (레거시 호환, 빈 경로는 codex PATH fallback)
     # 운영자 명시 모델(선택). actual_model 증거로 인정하지 않고 진단용 힌트로만 보관한다.
     _env_hint = str(os.environ.get("CODEX_CLI_MODEL", "") or "").strip()
+    # REJECT#16 결함A: 신뢰 검증된 절대경로가 있으면 우선 사용(PATH 재해석 차단). 없으면 codex fallback.
+    _cap_bin = verified_bin_path if verified_bin_path else "codex"
     try:
         result = subprocess.run(
-            ["codex", "--version"],
+            [_cap_bin, "--version"],
             capture_output=True, text=True, timeout=5,
+            env=env,  # None이면 현재 환경 상속(레거시), 주어지면 OPENAI_API_KEY 제거 env 전달
         )
         if result.returncode == 0:
             # CLI는 있으나 모델명을 결정적으로 확인할 수 없으므로 unknown으로 남긴다(허위 기록 금지).
@@ -9713,6 +9733,15 @@ def _build_codex_semantic_evidence(
     except Exception:  # noqa: BLE001 — diff 실패는 fail-closed(evidence_complete=False)
         _diff_ok = False
 
+    # IMP-20260712-DAE1 REJECT#16 결함B: 이 시점의 _all_hunks는 section 1의 pipeline.py
+    #   function-level hunk만 담고 있다(1b/1c는 아직 실행 전). pipeline.py hunk는 파일 경로가 아니라
+    #   함수명(또는 "unknown")을 "function" 키로 갖는다. 이 함수명 집합을 캡처하여, 아래 coverage
+    #   판정에서 pipeline.py 유래 hunk(CRITICAL/비CRITICAL 무관)가 selected diff_hunks에 남아 있는지
+    #   정확히 확인한다(기존 `any(is_critical)` 전역 검사가 비CRITICAL-only 변경을 놓치던 문제 해결).
+    _pipeline_py_hunk_funcs: set = {
+        (_h.get("function", "") or "") for _h in _all_hunks
+    }
+
     # 1b) pipeline.py 이외의 CRITICAL 파일 diff 추출 또는 file-level SHA 증거 생성.
     # IMP-20260712-DAE1 REJECT#10: pipeline.py 이외의 CRITICAL 파일도 diff hunk로 포함.
     # REJECT#35: Python CRITICAL 파일(test_codex*.py 등)은 diff 예산 절약을 위해 file-level SHA
@@ -10029,8 +10058,20 @@ def _build_codex_semantic_evidence(
         # PART suffix 제거 (예: "tests/e2e/foo.py [PART 2/4]" → "tests/e2e/foo.py")
         _fn_base = _fn_str.split(" [PART ")[0]
         _hunk_covered_files.add(_fn_base)
-    # pipeline.py: CRITICAL hunk가 하나라도 있으면 pipeline.py 자체를 커버됨으로 처리
-    if "pipeline.py" in _cf and any(h.get("is_critical") for h in sem["diff_hunks"]):
+    # pipeline.py: pipeline.py에서 유래한 hunk(CRITICAL/비CRITICAL 무관)가 selected diff_hunks에
+    #   하나라도 남아 있으면 pipeline.py 자체를 커버됨으로 처리한다.
+    #   IMP-20260712-DAE1 REJECT#16 결함B: 기존 `any(is_critical)` 조건은 두 가지 결함이 있었다.
+    #     (1) pipeline.py의 비CRITICAL 함수(build_parser 등)만 변경된 경우, pipeline.py hunk가
+    #         selected에 있어도 is_critical=False라 pipeline.py를 covered로 인정하지 못해
+    #         missing_critical_files에 남고 evidence_complete=False로 불필요하게 차단됐다.
+    #     (2) 다른 파일의 CRITICAL hunk에도 True가 되는 부정확한 전역 검사였다.
+    #   → pipeline.py 유래 hunk(function이 _pipeline_py_hunk_funcs에 속함)를 직접 확인한다.
+    #   CRITICAL hunk가 예산 초과로 절단되면 아래 _truncated_crit 검사가 evidence_complete=False를
+    #   그대로 강제하므로, 이 완화는 CRITICAL 완전성 검사를 약화하지 않는다.
+    if "pipeline.py" in _cf and any(
+        (_h.get("function", "") or "") in _pipeline_py_hunk_funcs
+        for _h in sem["diff_hunks"]
+    ):
         _hunk_covered_files.add("pipeline.py")
     _sha_covered = set(sem["file_sha_attestations"].keys())
     _crit_changed = [
@@ -25728,7 +25769,18 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   과거에는 _detect_codex_cli_capability()가 항상 unknown을 반환하므로 HIGH/CRITICAL을
     #   CLI 실행 전에 무조건 차단하는 구조였다. 이제는 실제 codex exec 실행 후 관측된 actual_model로만
     #   capability를 검증한다(_check_codex_model_capability_match). 여기서 미리 차단하지 않는다.
-    _cap_info = _detect_codex_cli_capability()
+    # IMP-20260712-DAE1 REJECT#16 결함A: version-check subprocess도 신뢰 검증된 절대경로 +
+    #   OPENAI_API_KEY 제거 env로 실행한다(TOCTOU/PATH 주입 + API key 노출 차단).
+    #   _codex_bin_now는 아래에서 정의되므로, 여기서는 동일한 신뢰 소스로 verified path를 재구성한다:
+    #     - 테스트: _fake_codex_bin
+    #     - 프로덕션: _codex_binary_trust["path"](이미 _verify_codex_binary_path_trust 통과)
+    _cap_verified_bin = _fake_codex_bin or str(_codex_binary_trust.get("path", "") or "")
+    _cap_clean_env = os.environ.copy()
+    _cap_clean_env.pop("OPENAI_API_KEY", None)  # ChatGPT 인증만 사용, API key 차단
+    _cap_info = _detect_codex_cli_capability(
+        verified_bin_path=_cap_verified_bin,
+        env=_cap_clean_env,
+    )
     _actual_model_str = str(_cap_info.get("actual_model", "unknown") or "unknown")
     _model_source_str = str(_cap_info.get("model_source", "unknown") or "unknown")
 

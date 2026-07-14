@@ -5647,3 +5647,232 @@ class TestTC17PosixNpmSymlink:
         assert "install_type" in r, (
             "REJECT#15 문제 B: _verify_codex_binary_path_trust 반환에 install_type 키 없음"
         )
+
+
+# =========================================================================== #
+# TC-18: REJECT#16 — capability TOCTOU/API-key 방어 + pipeline.py 비CRITICAL 커버리지
+# =========================================================================== #
+class TestTC18CapabilityTOCTOUAndCoverage:
+    """REJECT#16 두 결함 회귀 검증.
+
+    결함A: _detect_codex_cli_capability가 verified_bin_path(신뢰 검증 절대경로)와 env
+      (OPENAI_API_KEY 제거)를 받아 subprocess에 전달한다(TOCTOU/PATH 주입 + API key 노출 차단).
+    결함B: pipeline.py의 비CRITICAL 함수(build_parser 등)만 변경돼도 evidence_complete=True가
+      되고, CRITICAL hunk 절단 시에는 여전히 evidence_complete=False가 유지된다.
+    """
+
+    # --- 결함A --------------------------------------------------------------- #
+    def test_detect_capability_uses_verified_bin_path_param(self) -> None:
+        """verified_bin_path가 주어지면 subprocess가 그 절대경로로 --version을 실행하고
+        env(OPENAI_API_KEY 제거)를 그대로 전달한다."""
+        from unittest.mock import patch, MagicMock
+
+        captured: dict = {}
+
+        def _mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            captured["cmd"] = [str(c) for c in cmd]
+            captured["env"] = kwargs.get("env")
+            m = MagicMock()
+            m.returncode = 0
+            m.stdout = "codex 1.2.3"
+            m.stderr = ""
+            return m
+
+        _clean_env = {"PATH": "/usr/bin", "HOME": "/home/user"}  # OPENAI_API_KEY 없음
+        with patch("pipeline.subprocess.run", side_effect=_mock_run):
+            result = pipeline._detect_codex_cli_capability(
+                verified_bin_path="/custom/codex", env=_clean_env
+            )
+
+        assert captured["cmd"][0] == "/custom/codex", (
+            f"REJECT#16 결함A: subprocess가 verified_bin_path를 사용하지 않음 — "
+            f"got {captured['cmd']!r} (PATH 재해석/ TOCTOU 취약)"
+        )
+        assert captured["cmd"][1] == "--version"
+        # env(OPENAI_API_KEY 제거)가 그대로 전달되어야 한다.
+        assert captured["env"] == _clean_env, (
+            f"REJECT#16 결함A: subprocess에 clean env가 전달되지 않음 — got {captured['env']!r}"
+        )
+        assert "OPENAI_API_KEY" not in (captured["env"] or {}), (
+            "REJECT#16 결함A: 전달된 env에 OPENAI_API_KEY가 남아 있음"
+        )
+        assert result["available"] is True
+
+    def test_call_site_wires_verified_bin_and_clean_env(self) -> None:
+        """_cmd_gates_codex_review가 capability 감지에 verified path + OPENAI_API_KEY 제거
+        env를 배선하는지 소스로 확인한다(프로덕션 실제 결함 수정 배선 검증)."""
+        import inspect
+
+        src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        assert "_detect_codex_cli_capability(" in src
+        assert "verified_bin_path=_cap_verified_bin" in src, (
+            "REJECT#16 결함A: call site가 verified_bin_path를 배선하지 않음"
+        )
+        assert 'pop("OPENAI_API_KEY"' in src, (
+            "REJECT#16 결함A: call site가 OPENAI_API_KEY 제거 env를 구성하지 않음"
+        )
+        assert "env=_cap_clean_env" in src, (
+            "REJECT#16 결함A: call site가 clean env를 capability 감지에 전달하지 않음"
+        )
+
+    def test_detect_capability_without_param_falls_back_to_codex(self) -> None:
+        """verified_bin_path가 빈 문자열이면 'codex' PATH fallback을 사용하고, env=None이면
+        현재 환경을 상속한다(레거시 호환)."""
+        from unittest.mock import patch, MagicMock
+
+        captured: dict = {}
+
+        def _mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            captured["cmd"] = [str(c) for c in cmd]
+            captured["env"] = kwargs.get("env")
+            m = MagicMock()
+            m.returncode = 0
+            m.stdout = "codex 1.2.3"
+            m.stderr = ""
+            return m
+
+        with patch("pipeline.subprocess.run", side_effect=_mock_run):
+            # 파라미터 없이 호출(레거시 호환 경로) — verified_bin_path="" , env=None.
+            result = pipeline._detect_codex_cli_capability()
+
+        assert captured["cmd"][0] == "codex", (
+            f"REJECT#16 결함A: 빈 verified_bin_path에서 'codex' fallback 미적용 — "
+            f"got {captured['cmd']!r}"
+        )
+        assert captured["cmd"][1] == "--version"
+        assert captured["env"] is None, (
+            f"REJECT#16 결함A: env 미지정 시 None(현재 환경 상속)이어야 함 — got {captured['env']!r}"
+        )
+        assert result["available"] is True
+
+    def test_detect_capability_none_verified_bin_defended(self) -> None:
+        """verified_bin_path=None을 넘겨도 'codex' fallback으로 안전 동작한다(None 입력 방어)."""
+        from unittest.mock import patch, MagicMock
+
+        captured: dict = {}
+
+        def _mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            captured["cmd"] = [str(c) for c in cmd]
+            m = MagicMock()
+            m.returncode = 0
+            m.stdout = "codex 1.2.3"
+            m.stderr = ""
+            return m
+
+        with patch("pipeline.subprocess.run", side_effect=_mock_run):
+            result = pipeline._detect_codex_cli_capability(
+                verified_bin_path=None, env=None  # type: ignore[arg-type]
+            )
+        assert captured["cmd"][0] == "codex"
+        assert result["available"] is True
+
+    # --- 결함B --------------------------------------------------------------- #
+    def test_pipeline_py_noncritical_hunk_covered(self) -> None:
+        """pipeline.py의 비CRITICAL 함수(build_parser)만 변경돼도 pipeline.py가 covered로
+        처리되어 evidence_complete=True가 된다(불필요한 HIGH/CRITICAL 차단 제거)."""
+        from unittest.mock import patch, MagicMock
+
+        assert "build_parser" not in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+            "TC-18 전제조건: build_parser는 비CRITICAL 함수여야 함"
+        )
+
+        before_code = (
+            "def build_parser():\n"
+            "    parser = argparse.ArgumentParser()\n"
+            "    return parser\n"
+        )
+        diff_output = (
+            "diff --git a/pipeline.py b/pipeline.py\n"
+            "--- a/pipeline.py\n"
+            "+++ b/pipeline.py\n"
+            "@@ -1,3 +1,4 @@ def build_parser() -> argparse.ArgumentParser:\n"
+            " def build_parser():\n"
+            "     parser = argparse.ArgumentParser()\n"
+            "+    parser.add_argument('--new-flag')\n"
+            "     return parser\n"
+        )
+
+        def _mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            m = MagicMock()
+            cmd_list = [str(c) for c in cmd]
+            if "show" in cmd_list and any("origin/main:pipeline.py" in c for c in cmd_list):
+                m.returncode = 0
+                m.stdout = before_code
+            elif "diff" in cmd_list and "pipeline.py" in cmd_list:
+                m.returncode = 0
+                m.stdout = diff_output
+            else:
+                m.returncode = 0
+                m.stdout = ""
+            m.stderr = ""
+            return m
+
+        with patch("pipeline.subprocess.run", side_effect=_mock_run):
+            sem = pipeline._build_codex_semantic_evidence(
+                "IMP-TEST-REJECT16",
+                ["pipeline.py"],
+                ["build_parser"],
+            )
+
+        funcs_in = [h.get("function") for h in sem["diff_hunks"]]
+        assert "build_parser" in funcs_in, (
+            f"TC-18 전제: build_parser hunk가 diff_hunks에 없음 — got {funcs_in!r}"
+        )
+        assert "pipeline.py" not in sem["missing_critical_files"], (
+            f"REJECT#16 결함B: 비CRITICAL 함수만 변경됐는데 pipeline.py가 "
+            f"missing_critical_files에 남음 — got {sem['missing_critical_files']!r}"
+        )
+        assert sem["evidence_complete"] is True, (
+            f"REJECT#16 결함B: 비CRITICAL pipeline.py hunk가 evidence_complete=False로 차단됨 — "
+            f"missing={sem['missing_critical_files']!r} truncated_crit={sem['truncated_critical_hunks']}"
+        )
+
+    def test_pipeline_py_missing_critical_hunk_stays_incomplete(self) -> None:
+        """CRITICAL 함수 hunk가 예산 초과로 절단되면 evidence_complete=False가 유지된다
+        (결함B 완화가 CRITICAL 완전성 검사를 약화하지 않음)."""
+        from unittest.mock import patch, MagicMock
+
+        assert "_cmd_gates_accept" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+            "TC-18 전제조건: _cmd_gates_accept는 CRITICAL 함수여야 함"
+        )
+
+        big = "x" * (pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS + 50_000)  # 예산 초과 강제
+        diff_output = (
+            "diff --git a/pipeline.py b/pipeline.py\n"
+            "--- a/pipeline.py\n"
+            "+++ b/pipeline.py\n"
+            "@@ -1,0 +1,1 @@ def _cmd_gates_accept(args):\n"
+            f"+{big}\n"
+        )
+        before_code = "# minimal before\n"
+
+        def _mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            m = MagicMock()
+            cmd_list = [str(c) for c in cmd]
+            if "show" in cmd_list and any("origin/main:pipeline.py" in c for c in cmd_list):
+                m.returncode = 0
+                m.stdout = before_code
+            elif "diff" in cmd_list and "pipeline.py" in cmd_list:
+                m.returncode = 0
+                m.stdout = diff_output
+            else:
+                m.returncode = 0
+                m.stdout = ""
+            m.stderr = ""
+            return m
+
+        with patch("pipeline.subprocess.run", side_effect=_mock_run):
+            sem = pipeline._build_codex_semantic_evidence(
+                "IMP-TEST-REJECT16",
+                ["pipeline.py"],
+                ["_cmd_gates_accept"],
+            )
+
+        assert sem["truncated_critical_hunks"] > 0, (
+            f"REJECT#16 결함B 회귀: CRITICAL hunk 절단인데 truncated_critical_hunks=0 — "
+            f"got {sem['truncated_critical_hunks']}"
+        )
+        assert sem["evidence_complete"] is False, (
+            f"REJECT#16 결함B 회귀: CRITICAL hunk 절단인데 evidence_complete=True — "
+            f"결함B 완화가 CRITICAL 완전성 검사를 약화시켰음"
+        )
