@@ -4158,13 +4158,16 @@ class TestTC50PromptDigestAndTestPathFix:
         )
 
     def test_tc50f_tests_prefix_still_returns_true(self) -> None:
-        """REJECT#6 AC#5 회귀: tests/ 하위 파일은 여전히 _is_codex_test_path=True."""
+        """REJECT#6 AC#5 회귀: tests/ 하위 일반 테스트 파일은 여전히 _is_codex_test_path=True.
+        REJECT#17 수정: tests/oracles/ 는 oracle 답안 파일이므로 예외 처리 — False를 반환한다."""
         assert pipeline._is_codex_test_path("tests/e2e/test_codex_model_router_dae1.py") is True, (
             "REJECT#6 AC#5 회귀: tests/e2e/test_codex_model_router_dae1.py가 _is_codex_test_path=False — "
             "tests/ prefix 기반 분류가 깨짐"
         )
-        assert pipeline._is_codex_test_path("tests/oracles/IMP-20260712-DAE1/tc01/expected.json") is True, (
-            "REJECT#6 AC#5 회귀: tests/oracles/ 파일이 _is_codex_test_path=False"
+        # REJECT#17: tests/oracles/ 는 oracle 답안 파일 — tests/ 제외 예외이므로 False여야 한다.
+        assert pipeline._is_codex_test_path("tests/oracles/IMP-20260712-DAE1/tc01/expected.json") is False, (
+            "REJECT#17: tests/oracles/ 파일은 oracle 답안이므로 _is_codex_test_path=False여야 한다 "
+            "(이전 REJECT#6 동작은 REJECT#17에서 수정됨)."
         )
 
     def test_tc50g_root_test_file_not_excluded(self) -> None:
@@ -4966,4 +4969,69 @@ class TestTC56Reject12CriticalPolicyAndBinarySha:
         )
         assert r.get("failure_code") == "model_mismatch", (
             f"REJECT#12 AC#1: failure_code={r.get('failure_code')!r} — model_mismatch여야 한다."
+        )
+
+
+class TestTC57Reject17TrustRootPathCoverage:
+    """REJECT#17: CODEOWNERS/.gitignore/.gitattributes/AGENTS.md/.codex/skills/tests/oracles 경로 HIGH 분류."""
+
+    def test_tc57a_codeowners_single_change_is_high(self) -> None:
+        """REJECT#17 AC#1: .github/CODEOWNERS 단독 변경은 HIGH 이상으로 분류된다."""
+        r = pipeline._classify_codex_review_risk([".github/CODEOWNERS"], [])
+        assert r["risk_level"] in ("HIGH", "CRITICAL"), (
+            f"REJECT#17 AC#1: CODEOWNERS 변경이 HIGH 이상이어야 한다. got={r['risk_level']!r}"
+        )
+
+    def test_tc57b_codex_skills_single_change_is_high(self) -> None:
+        """REJECT#17 AC#2: .codex/skills/** 단독 변경은 HIGH 이상으로 분류된다."""
+        r = pipeline._classify_codex_review_risk([".codex/skills/pipeline-task/SKILL.md"], [])
+        assert r["risk_level"] in ("HIGH", "CRITICAL"), (
+            f"REJECT#17 AC#2: .codex/skills 변경이 HIGH 이상이어야 한다. got={r['risk_level']!r}"
+        )
+
+    def test_tc57c_agents_md_single_change_is_high(self) -> None:
+        """REJECT#17 AC#2: AGENTS.md 단독 변경은 HIGH 이상으로 분류된다."""
+        r = pipeline._classify_codex_review_risk(["AGENTS.md"], [])
+        assert r["risk_level"] in ("HIGH", "CRITICAL"), (
+            f"REJECT#17 AC#2: AGENTS.md 변경이 HIGH 이상이어야 한다. got={r['risk_level']!r}"
+        )
+
+    def test_tc57d_oracle_expected_file_is_not_low(self) -> None:
+        """REJECT#17 AC#3: tests/oracles/**/expected.json 단독 변경은 LOW가 아닌 HIGH 이상이다."""
+        r = pipeline._classify_codex_review_risk(["tests/oracles/IMP-20260712-DAE1/tc01/expected.json"], [])
+        assert r["risk_level"] in ("HIGH", "CRITICAL"), (
+            f"REJECT#17 AC#3: oracle expected 파일이 LOW로 분류됨 — HIGH 이상이어야 한다. got={r['risk_level']!r}"
+        )
+
+    def test_tc57e_gitignore_single_change_is_high(self) -> None:
+        """REJECT#17 AC#4: .gitignore 단독 변경은 HIGH 이상으로 분류된다."""
+        r = pipeline._classify_codex_review_risk([".gitignore"], [])
+        assert r["risk_level"] in ("HIGH", "CRITICAL"), (
+            f"REJECT#17 AC#4: .gitignore 변경이 HIGH 이상이어야 한다. got={r['risk_level']!r}"
+        )
+
+    def test_tc57f_gitattributes_single_change_is_high(self) -> None:
+        """REJECT#17 AC#4: .gitattributes 단독 변경은 HIGH 이상으로 분류된다."""
+        r = pipeline._classify_codex_review_risk([".gitattributes"], [])
+        assert r["risk_level"] in ("HIGH", "CRITICAL"), (
+            f"REJECT#17 AC#4: .gitattributes 변경이 HIGH 이상이어야 한다. got={r['risk_level']!r}"
+        )
+
+    def test_tc57g_general_tests_e2e_file_remains_low(self) -> None:
+        """REJECT#17 AC#5: 일반 tests/e2e 파일만 변경한 경우 LOW를 유지한다 (oracle·trust-root 예외 우선 적용 확인)."""
+        r = pipeline._classify_codex_review_risk(["tests/e2e/test_some_feature.py"], [])
+        assert r["risk_level"] == "LOW", (
+            f"REJECT#17 AC#5: 일반 tests/e2e 파일이 LOW 유지되지 않음. got={r['risk_level']!r}"
+        )
+
+    def test_tc57h_is_codex_test_path_excludes_oracle(self) -> None:
+        """REJECT#17: _is_codex_test_path가 tests/oracles/ 를 False로 반환한다 (제외 예외)."""
+        assert not pipeline._is_codex_test_path("tests/oracles/IMP-20260712-DAE1/tc01/expected.json"), (
+            "REJECT#17: tests/oracles/ 파일은 테스트 제외 경로가 아니어야 한다."
+        )
+
+    def test_tc57i_is_codex_test_path_includes_e2e(self) -> None:
+        """REJECT#17: _is_codex_test_path가 tests/e2e/ 를 True로 반환한다 (tests/ 내 일반 파일은 제외)."""
+        assert pipeline._is_codex_test_path("tests/e2e/test_foo.py"), (
+            "REJECT#17: tests/e2e/ 파일은 테스트 제외 경로여야 한다."
         )

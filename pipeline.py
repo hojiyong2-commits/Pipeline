@@ -2422,6 +2422,13 @@ CODEX_HIGH_RISK_PATHS: List[str] = [
     ".github/workflows/",
     "CLAUDE.md",
     ".claude/agents/",
+    # REJECT#17: trust-chain 보호 경로 추가 — 이 파일들의 단독 변경도 HIGH로 분류한다.
+    ".github/CODEOWNERS",  # 코드 소유자 정책 — PR merge 권한 제어
+    "AGENTS.md",           # 에이전트 정의 파일
+    ".gitignore",          # 버전 추적 정책 — oracle 파일 은닉 가능
+    ".gitattributes",      # git 속성 정책 — SHA 계산에 영향
+    ".codex/skills/",      # Codex 스킬 정의
+    "tests/oracles/",      # oracle 답안 파일 — _is_codex_test_path 예외 처리 후 HIGH로 분류
 ]
 
 # IMP-20260712-DAE1 REJECT#3 rework(요구1/4/10): Codex Review에 라우팅 허용된 모델 ID 목록(SSoT).
@@ -8451,6 +8458,11 @@ def _is_codex_test_path(path: str) -> bool:
     while norm.startswith("./"):
         norm = norm[2:]
     if not norm:
+        return False
+    # REJECT#17: tests/oracles/ 는 사용자 답안(oracle) 파일 — tests/ 제외 대상에서 예외 처리한다.
+    #   oracle 파일이 LOW·observe 캐시 경로로 내려가면 보호 없이 처리될 수 있으므로 예외 처리.
+    #   예외 처리 후 _product_files에 포함되어 CODEX_HIGH_RISK_PATHS("tests/oracles/")로 HIGH 분류.
+    if norm.startswith("tests/oracles/"):
         return False
     # REJECT#6: HIGH/CRITICAL 경로(예: .github/workflows/test_release.py)의 test-like 파일을
     #   제품 파일에서 제외하지 않는다. tests/ 하위 파일만 테스트로 분류하여 risk 상속 제외.
