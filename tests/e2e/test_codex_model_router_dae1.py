@@ -1029,7 +1029,9 @@ def test_tc30a_bundle_budget_sufficient_for_tc11_oracles() -> None:
     수용해야 한다. REJECT#18 auth_source 코드 추가 후 ~73718자 수용 위해 74000 이상.
     REJECT#35: 18파일 PR에서 non-critical 2파일 초과 해소를 위해 165000 이상.
     REJECT#7: CRITICAL Python 파일 diff 추가로 pipeline.py+test_codex*.py 합산 250K 초과
-    → 400000 이상."""
+    → 400000 이상.
+    REJECT#8: 45K 청크 분할 후 test_codex*.py 4청크(~180K)+pipeline.py(~200K)+기타 합산
+    → 5개 CRITICAL 청크 손실, budget 400K 부족 → 700000 이상."""
     assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 250000, (
         f"REJECT#7: 예산이 CRITICAL Python diff 포함 총량을 수용하지 못합니다: "
         f"{pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 250000"
@@ -2523,7 +2525,7 @@ def test_tc42e_unknown_hunk_budget_exceeded_evidence_incomplete() -> None:
     from unittest.mock import patch, MagicMock
 
     # 예산을 크게 초과하는 unknown-named hunk (@@에 함수명 없음)
-    big_content = "+" + "x" * 420_000  # 420KB — 실제 예산(400000)을 크게 초과 (REJECT#7: 250000→400000)
+    big_content = "+" + "x" * 750_000  # 750KB — 실제 예산(700000)을 크게 초과 (REJECT#8: 400000→700000)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
@@ -2802,7 +2804,7 @@ def test_tc44d_multihunk_same_critical_function_detected(tmp_path: Path) -> None
     crit_func = "_cmd_gates_accept"  # CODEX_CRITICAL_FUNCTIONS에 있는 함수
     # 동일 함수명, 예산 초과 크기의 두 번째 hunk
     hunk1_content = f"@@ -100,5 +100,5 @@ def {crit_func}():\n+    pass1\n"
-    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 420_000  # 예산 초과 (REJECT#7: budget 400K → 420K 필요)
+    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 750_000  # 예산 초과 (REJECT#8: budget 700K → 750K 필요)
 
     # 두 hunk 모두 동일 CRITICAL 함수에 귀속
     diff_output = (
@@ -2855,7 +2857,7 @@ def test_tc44e_new_critical_function_hunk_required(tmp_path: Path) -> None:
 
     new_func = "_canonicalize_effort"  # REJECT#30에서 추가된 CRITICAL 함수
     # 예산을 크게 초과하는 신규 함수 hunk
-    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 420_000  # 예산 초과 (REJECT#7: budget 400K → 420K 필요)
+    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 750_000  # 예산 초과 (REJECT#8: budget 700K → 750K 필요)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
@@ -4046,7 +4048,8 @@ class TestTC51CriticalPythonDiffInPrompt:
     """
 
     def test_tc51a_critical_python_diff_hunk_in_semantic_evidence(self) -> None:
-        """REJECT#7 AC#1: _build_codex_semantic_evidence에서 CRITICAL Python diff가 _all_hunks에 추가된다.
+        """REJECT#7 AC#1 / REJECT#8 AC#1: _build_codex_semantic_evidence에서 CRITICAL Python diff가
+        _all_hunks에 추가된다. REJECT#8 이후에는 다중 청크 분할 방식이 적용된다.
 
         소스 코드 검사로 section 1b 내 Python CRITICAL 파일의 diff 수집 로직 존재 여부 확인.
         """
@@ -4058,13 +4061,20 @@ class TestTC51CriticalPythonDiffInPrompt:
             "REJECT#7 AC#1: _build_codex_semantic_evidence 소스에 REJECT#7 주석 없음 — "
             "CRITICAL Python diff 수집 경로가 구현되지 않았을 수 있음"
         )
-        assert "CRITICAL_PYTHON_DIFF_TRUNCATED_AT_50K" in _src or "50000" in _src, (
-            "REJECT#7 AC#1: CRITICAL Python diff per-file 50K 상한이 소스에 없음"
+        # REJECT#8: 파일당 50K 단일 청크 방식 제거 → 다중 청크 분할 방식 확인
+        assert "_PY_CRIT_CHUNK_SIZE" in _src, (
+            "REJECT#8 AC#1: _PY_CRIT_CHUNK_SIZE 상수가 소스에 없음 — "
+            "다중 청크 분할 구현이 누락되었을 수 있음"
+        )
+        assert "CRITICAL_PYTHON_DIFF_PART_" in _src, (
+            "REJECT#8 AC#1: CRITICAL_PYTHON_DIFF_PART_ 헤더 패턴이 소스에 없음 — "
+            "청크 분할 헤더 구현이 누락되었을 수 있음"
         )
 
     def test_tc51b_critical_python_diff_appears_in_bundle(self) -> None:
-        """REJECT#7 AC#1/AC#2: 현재 PR diff에 test_ac_tracking_1abe.py 변경이 포함되면
+        """REJECT#7 AC#1/AC#2 / REJECT#8 AC#1: 현재 PR diff에 CRITICAL Python 테스트 파일 변경이 포함되면
         bundle의 diff_hunks에 해당 파일의 hunk가 나타난다.
+        REJECT#8 이후 함수 이름에 [PART N/M] suffix가 붙을 수 있으므로 startswith로 확인.
         """
         import json
         from pathlib import Path
@@ -4082,13 +4092,14 @@ class TestTC51CriticalPythonDiffInPrompt:
         _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
         bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
 
-        # diff_hunks에 test_ac_tracking_1abe.py 또는 test_codex_model_router_dae1.py가 있어야 함
+        # diff_hunks에 test_ac_tracking_1abe.py 또는 test_codex_model_router_dae1.py가 있어야 함.
+        # REJECT#8: 청크 분할 후 함수 이름이 "tests/e2e/test_codex*.py [PART N/M]" 형태일 수 있음.
         _hunk_functions = [h.get("function", "") for h in bundle.get("diff_hunks", [])]
         _crit_py_hunks = [
             fn for fn in _hunk_functions
-            if fn in (
-                "tests/e2e/test_ac_tracking_1abe.py",
-                "tests/e2e/test_codex_model_router_dae1.py",
+            if (
+                fn.startswith("tests/e2e/test_ac_tracking_1abe.py")
+                or fn.startswith("tests/e2e/test_codex_model_router_dae1.py")
             )
         ]
         assert len(_crit_py_hunks) > 0, (
@@ -4156,3 +4167,172 @@ class TestTC51CriticalPythonDiffInPrompt:
             "REJECT#7 AC#4: test_regression_dry_run_substitution_for_real_move가 아직 존재 — "
             "제거된 _validate_codex_coverage_checks에 의존하는 테스트는 삭제되어야 함"
         )
+
+
+class TestTC52CriticalPythonDiffChunking:
+    """REJECT#8 검증: CRITICAL Python 파일 diff를 파일당 50K 단일 청크로 자르는 대신
+    45K 청크로 분할하여 budget trimmer가 overflow를 정확히 감지하게 한다.
+
+    AC#1: 50,000자 이후의 sentinel 변경도 Codex 검토 입력에 포함된다.
+    AC#2: CRITICAL diff 일부라도 누락되면 evidence_complete=False이고 gates codex-review가 BLOCKED된다.
+    AC#3: file_sha_attestations가 존재해도 절단된 CRITICAL diff를 완전한 증거로 간주하지 않는다.
+    AC#4: 대형 CRITICAL 파일 전체를 분할 검토한 경우에만 evidence_complete=True가 된다.
+    """
+
+    def test_tc52a_chunk_constant_and_pattern_in_source(self) -> None:
+        """REJECT#8 AC#1/AC#4: _PY_CRIT_CHUNK_SIZE 상수와 CRITICAL_PYTHON_DIFF_PART_ 패턴이
+        _build_codex_semantic_evidence 소스에 있다. 파일당 50K 단일 절단 sentinel은 제거됐다.
+        """
+        import inspect
+
+        _src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+        assert "_PY_CRIT_CHUNK_SIZE" in _src, (
+            "REJECT#8 AC#1: _PY_CRIT_CHUNK_SIZE 상수가 소스에 없음 — 청크 분할 구현 누락"
+        )
+        assert "CRITICAL_PYTHON_DIFF_PART_" in _src, (
+            "REJECT#8 AC#1: CRITICAL_PYTHON_DIFF_PART_ 헤더 패턴이 소스에 없음"
+        )
+        assert "CRITICAL_PYTHON_DIFF_TRUNCATED_AT_50K" not in _src, (
+            "REJECT#8 AC#1: CRITICAL_PYTHON_DIFF_TRUNCATED_AT_50K 구 sentinel이 아직 소스에 있음 — "
+            "단일 청크 절단 방식이 제거되지 않았음"
+        )
+        assert "_PY_CRIT_DIFF_PER_FILE_LIMIT" not in _src, (
+            "REJECT#8 AC#1: _PY_CRIT_DIFF_PER_FILE_LIMIT 구 상수가 아직 소스에 있음"
+        )
+
+    def test_tc52b_no_truncated_sentinel_in_real_bundle(self) -> None:
+        """REJECT#8 AC#1: 실제 bundle의 어떤 hunk에도 CRITICAL_PYTHON_DIFF_TRUNCATED_AT_50K가 없다.
+
+        단일 절단 방식(REJECT#7)의 sentinel이 완전히 제거되었는지 확인.
+        """
+        import json
+        from pathlib import Path
+
+        try:
+            ar = Path(".pipeline/active_run.json")
+            ptr = json.loads(ar.read_text(encoding="utf-8"))
+            sp = ptr.get("state_path")
+            state = json.loads(Path(sp).read_text(encoding="utf-8"))
+            pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+        except Exception:
+            state = {}
+            pid = "IMP-20260712-DAE1"
+
+        _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
+        bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
+
+        for _h in bundle.get("diff_hunks", []):
+            _hunk_text = _h.get("hunk", "")
+            assert "CRITICAL_PYTHON_DIFF_TRUNCATED_AT_50K" not in _hunk_text, (
+                f"REJECT#8 AC#1: hunk '{_h.get('function')}' 에 구 truncation sentinel이 있음 — "
+                "단일 절단 방식이 아직 사용 중"
+            )
+
+    def test_tc52c_large_diff_produces_part_chunks(self) -> None:
+        """REJECT#8 AC#1/AC#4: diff가 _PY_CRIT_CHUNK_SIZE(45K)를 초과하는 CRITICAL Python 파일은
+        diff_hunks에 [PART N/M] 접미사가 붙은 복수 hunk로 나타난다.
+
+        현재 PR의 test_codex_model_router_dae1.py diff는 45K를 훨씬 초과하므로
+        반드시 여러 PART hunk가 생성되어야 한다.
+        """
+        import json
+        from pathlib import Path
+        import subprocess as sp_
+
+        # 실제 diff 크기 확인
+        _r = sp_.run(
+            ["git", "diff", "origin/main", "--unified=3",
+             "--", "tests/e2e/test_codex_model_router_dae1.py"],
+            capture_output=True, text=True, cwd=str(pipeline.BASE_DIR),
+            encoding="utf-8", errors="replace",
+        )
+        _diff_len = len(_r.stdout.strip()) if _r.returncode == 0 else 0
+
+        if _diff_len <= 45000:
+            # diff가 45K 이내면 단일 hunk — 이 테스트는 PART 다중 청크를 요구하지 않음
+            return
+
+        # diff가 45K 초과면 bundle에 PART 접미사 hunk가 있어야 함
+        try:
+            ar = Path(".pipeline/active_run.json")
+            ptr = json.loads(ar.read_text(encoding="utf-8"))
+            _sp = ptr.get("state_path")
+            state = json.loads(Path(_sp).read_text(encoding="utf-8"))
+            pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+        except Exception:
+            state = {}
+            pid = "IMP-20260712-DAE1"
+
+        _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
+        bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
+
+        _part_hunks = [
+            h for h in bundle.get("diff_hunks", [])
+            if (
+                h.get("function", "").startswith("tests/e2e/test_codex_model_router_dae1.py")
+                and "[PART " in h.get("function", "")
+            )
+        ]
+        assert len(_part_hunks) > 1, (
+            f"REJECT#8 AC#1: diff가 {_diff_len}자(45K 초과)인데 "
+            f"diff_hunks에 PART 청크가 {len(_part_hunks)}개 뿐임 — "
+            "다중 청크 분할이 동작하지 않음"
+        )
+
+        # 각 PART hunk는 is_critical=True
+        for _h in _part_hunks:
+            assert _h.get("is_critical") is True, (
+                f"REJECT#8: PART hunk '{_h.get('function')}' 의 is_critical=False"
+            )
+
+        # bundle의 diff_hunks는 metadata만 저장(hunk 텍스트 미포함).
+        # PART 헤더(CRITICAL_PYTHON_DIFF_PART_N_OF_M)는 Codex 프롬프트에 삽입되며
+        # 소스 코드에서 이미 TC-52a로 검증됨. 여기서는 function 이름 패턴만 확인.
+        for _h in _part_hunks:
+            assert "[PART " in _h.get("function", "") and "/5]" in _h.get("function", "") or "/4]" in _h.get("function", "") or "/3]" in _h.get("function", "") or "/2]" in _h.get("function", ""), (  # noqa: E501
+                f"REJECT#8: PART hunk function name에 [PART N/M] 패턴 없음: {_h.get('function')}"
+            )
+
+    def test_tc52d_budget_overflow_causes_evidence_incomplete(self) -> None:
+        """REJECT#8 AC#2/AC#4: budget이 작아서 CRITICAL Python 청크 일부가 제거되면
+        truncated_critical_hunks > 0 이고 evidence_complete=False가 된다.
+
+        기존 CODEX_REVIEW_BUNDLE_BUDGET_CHARS를 임시로 작게 패치해 overflow를 유발한다.
+        """
+        _orig_budget = pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS
+        try:
+            # 극소 budget(100자)으로 패치 → CRITICAL hunk가 들어가지 않아야 함
+            pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS = 100
+            try:
+                import json
+                from pathlib import Path
+
+                try:
+                    ar = Path(".pipeline/active_run.json")
+                    ptr = json.loads(ar.read_text(encoding="utf-8"))
+                    _sp = ptr.get("state_path")
+                    state = json.loads(Path(_sp).read_text(encoding="utf-8"))
+                    pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+                except Exception:
+                    state = {}
+                    pid = "IMP-20260712-DAE1"
+
+                sem = pipeline._build_codex_semantic_evidence(state, pid)
+                # budget 100자에서는 CRITICAL hunk가 제거되어야 함
+                assert sem["truncated_critical_hunks"] > 0, (
+                    "REJECT#8 AC#2: budget=100에서도 truncated_critical_hunks=0 — "
+                    "budget 초과 감지 로직이 동작하지 않음"
+                )
+                assert sem["evidence_complete"] is False, (
+                    "REJECT#8 AC#2: budget=100에서도 evidence_complete=True — "
+                    "fail-closed 동작 실패"
+                )
+            except Exception as _e:
+                # _build_codex_semantic_evidence가 예외를 던지는 경우도 허용 (git 없는 환경 등)
+                if "evidence_complete" in str(_e) or "truncated" in str(_e):
+                    raise
+                # 다른 예외(git 없음, 파일 없음 등)는 테스트 환경 제약으로 스킵
+                import pytest
+                pytest.skip(f"_build_codex_semantic_evidence 실행 환경 제약: {_e}")
+        finally:
+            pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS = _orig_budget

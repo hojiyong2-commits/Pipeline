@@ -208,4 +208,4 @@ HIGH/CRITICAL risk에서는 `downgrade_blocked=True`이므로, 더 낮은 모델
 | 캐시 정책 통합 | `pipeline.py::_check_codex_cache` |
 | 실행 통합 | `pipeline.py::_cmd_gates_codex_review` |
 | bundle 정책 섹션 | `pipeline.py::_build_codex_review_bundle` (model_policy + raw ACCEPT/nonce 금지 가드) |
-| E2E 테스트 | `tests/e2e/test_codex_model_router_dae1.py` (TC-1~TC-51) |
+| E2E 테스트 | `tests/e2e/test_codex_model_router_dae1.py` (TC-1~TC-52) |

@@ -2510,7 +2510,7 @@ CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
 #   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
 #   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
-CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 400000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000; REJECT#18: 73000→76000; REJECT#22: 76000→85000; REJECT#24: 85000→165000 (3개 helper CODEX_CRITICAL_FUNCTIONS 추가로 cumulative diff 145145자 필요); REJECT#35: 165000→250000 (18파일 PR에서 non-critical 파일 2개 budget 초과 해소); REJECT#7: 250000→400000 (CRITICAL Python 파일 diff 추가로 pipeline.py+test_codex*.py 합산 250K 초과)
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 700000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000; REJECT#18: 73000→76000; REJECT#22: 76000→85000; REJECT#24: 85000→165000 (3개 helper CODEX_CRITICAL_FUNCTIONS 추가로 cumulative diff 145145자 필요); REJECT#35: 165000→250000 (18파일 PR에서 non-critical 파일 2개 budget 초과 해소); REJECT#7: 250000→400000 (CRITICAL Python 파일 diff 추가로 pipeline.py+test_codex*.py 합산 250K 초과); REJECT#8: 400000→700000 (45K 청크 분할 후 test_codex*.py 4청크(~180K)+pipeline.py(~200K)+기타 합산 400K 초과, 5개 CRITICAL 청크 손실 발생)
 
 
 class _CodexCacheSkipError(Exception):
@@ -9228,7 +9228,12 @@ def _build_codex_semantic_evidence(
                 except Exception:  # noqa: BLE001
                     pass  # SHA 수집 실패는 missing_critical_files에서 감지됨
                 # REJECT#7: 실제 unified diff 수집 — Codex가 decorator/import/assert 변경을 볼 수 있어야 함.
-                # per-file 50K 한도로 예산 보호. diff가 없으면 SHA attestation 으로 충분.
+                # REJECT#8: 파일당 50K 단일 청크 방식(REJECT#7)은 50K 이후 내용을 silently drop하여
+                #   truncated_critical_hunks=0 / evidence_complete=True를 잘못 반환한다.
+                #   → 45K 청크로 분할하여 전체 diff를 _all_hunks에 추가.
+                #   budget 초과로 청크가 제거되면 budget trimmer가 truncated_critical_hunks를 증가시켜
+                #   evidence_complete=False로 차단한다 (fail-closed).
+                _PY_CRIT_CHUNK_SIZE = 45000  # 청크당 45K (part 헤더 포함 후 50K 이내 안전 마진)
                 try:
                     _py_diff_r = subprocess.run(
                         ["git", "diff", "origin/main", "--unified=3", "--", _cpf_n],
@@ -9236,20 +9241,33 @@ def _build_codex_semantic_evidence(
                         cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
                     )
                     if _py_diff_r.returncode == 0 and _py_diff_r.stdout.strip():
-                        _PY_CRIT_DIFF_PER_FILE_LIMIT = 50000  # 파일당 50K 상한
                         _py_diff_text = _py_diff_r.stdout.strip()
-                        if len(_py_diff_text) > _PY_CRIT_DIFF_PER_FILE_LIMIT:
-                            _py_diff_text = (
-                                _py_diff_text[:_PY_CRIT_DIFF_PER_FILE_LIMIT]
-                                + "\n[CRITICAL_PYTHON_DIFF_TRUNCATED_AT_50K]"
-                            )
-                        _all_hunks.append({
-                            "function": _cpf_n,
-                            "hunk": _py_diff_text,
-                            "is_critical": True,
-                            "chars": len(_py_diff_text),
-                            "hunk_sha256": hashlib.sha256(_py_diff_text.encode("utf-8")).hexdigest(),
-                        })
+                        if len(_py_diff_text) <= _PY_CRIT_CHUNK_SIZE:
+                            # 단일 청크: 분할 불필요
+                            _all_hunks.append({
+                                "function": _cpf_n,
+                                "hunk": _py_diff_text,
+                                "is_critical": True,
+                                "chars": len(_py_diff_text),
+                                "hunk_sha256": hashlib.sha256(_py_diff_text.encode("utf-8")).hexdigest(),
+                            })
+                        else:
+                            # 다중 청크: 절단 없이 45K 단위로 분할하여 전체 포함
+                            _chunks: List[str] = []
+                            _off = 0
+                            while _off < len(_py_diff_text):
+                                _chunks.append(_py_diff_text[_off:_off + _PY_CRIT_CHUNK_SIZE])
+                                _off += _PY_CRIT_CHUNK_SIZE
+                            _n_ch = len(_chunks)
+                            for _chi, _ck in enumerate(_chunks, 1):
+                                _ck_hdr = f"[CRITICAL_PYTHON_DIFF_PART_{_chi}_OF_{_n_ch}]\n{_ck}"
+                                _all_hunks.append({
+                                    "function": f"{_cpf_n} [PART {_chi}/{_n_ch}]",
+                                    "hunk": _ck_hdr,
+                                    "is_critical": True,
+                                    "chars": len(_ck_hdr),
+                                    "hunk_sha256": hashlib.sha256(_ck_hdr.encode("utf-8")).hexdigest(),
+                                })
                 except Exception:  # noqa: BLE001
                     pass  # diff 수집 실패는 SHA attestation이 대체
                 continue
