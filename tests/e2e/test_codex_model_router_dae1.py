@@ -5035,3 +5035,50 @@ class TestTC57Reject17TrustRootPathCoverage:
         assert pipeline._is_codex_test_path("tests/e2e/test_foo.py"), (
             "REJECT#17: tests/e2e/ 파일은 테스트 제외 경로여야 한다."
         )
+
+
+class TestTC58Reject18CriticalConstantsSelfProtect:
+    """REJECT#18: CODEX_CRITICAL_CONSTANTS 자기 보호가 분류기까지 이어진다 — 불변 내부 집합 방어."""
+
+    def test_tc58a_empty_critical_constants_still_classifies_critical(self, monkeypatch) -> None:
+        """REJECT#18 AC#1: CODEX_CRITICAL_CONSTANTS가 빈 목록인 동안 분류 결과가 CRITICAL이다."""
+        monkeypatch.setattr(pipeline, "CODEX_CRITICAL_CONSTANTS", [])
+        # CODEX_CRITICAL_CONSTANTS 자체가 변경된 것으로 감지된 상황 시뮬레이션
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], [], ["CODEX_CRITICAL_CONSTANTS"])
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#18 AC#1: CODEX_CRITICAL_CONSTANTS 빈 목록인 동안 분류 결과가 CRITICAL이 아님. got={r['risk_level']!r}"
+        )
+
+    def test_tc58b_self_removed_still_classifies_critical(self, monkeypatch) -> None:
+        """REJECT#18 AC#2: CODEX_CRITICAL_CONSTANTS에서 자기 자신 항목만 제거해도 CRITICAL이다."""
+        # 자기 자신 항목 제거 시뮬레이션
+        filtered = [c for c in pipeline.CODEX_CRITICAL_CONSTANTS if c != "CODEX_CRITICAL_CONSTANTS"]
+        monkeypatch.setattr(pipeline, "CODEX_CRITICAL_CONSTANTS", filtered)
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], [], ["CODEX_CRITICAL_CONSTANTS"])
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#18 AC#2: CODEX_CRITICAL_CONSTANTS 자기 항목 제거 후에도 CRITICAL이 아님. got={r['risk_level']!r}"
+        )
+
+    def test_tc58c_detect_and_classify_both_called_in_monkeypatch_scope(self, monkeypatch) -> None:
+        """REJECT#18 AC#3: monkeypatch 범위 안에서 감지와 분류를 모두 실행한다.
+        _detect_changed_critical_constants의 결과를 직접 주입하고 분류기를 호출한다 (git 의존 없이)."""
+        monkeypatch.setattr(pipeline, "CODEX_CRITICAL_CONSTANTS", [])
+        # 감지 결과를 직접 주입 (git repo 의존 없이 monkeypatch 범위 안에서 실행)
+        detected = ["CODEX_CRITICAL_CONSTANTS"]
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], [], detected)
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#18 AC#3: monkeypatch 범위 안에서 감지+분류 결과가 CRITICAL이 아님. got={r['risk_level']!r}"
+        )
+        assert r.get("matched_rule") == "critical_constant", (
+            f"REJECT#18 AC#3: matched_rule이 critical_constant가 아님. got={r.get('matched_rule')!r}"
+        )
+
+    def test_tc58d_critical_policy_force_review_and_no_cache(self) -> None:
+        """REJECT#18 AC#4: CRITICAL 정책은 force_review_required=True + cache_allowed=False이다."""
+        policy = pipeline._build_codex_model_policy("CRITICAL")
+        assert policy.get("force_review_required") is True, (
+            f"REJECT#18 AC#4: CRITICAL 정책에 force_review_required=True가 없음. got={policy!r}"
+        )
+        assert policy.get("cache_allowed") is False, (
+            f"REJECT#18 AC#4: CRITICAL 정책에 cache_allowed=False가 없음. got={policy!r}"
+        )

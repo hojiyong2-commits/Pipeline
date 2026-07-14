@@ -8385,7 +8385,23 @@ def _classify_codex_review_risk(
 
     # REJECT#32 Fix: CODEX_CRITICAL_CONSTANTS에 있는 모듈 상수가 변경된 경우 CRITICAL.
     #   함수 변경이 없어도 라우터·정책·신뢰 경계 상수 자체를 변조하면 자기 보호가 무력화됨.
-    _crit_const_set = set(CODEX_CRITICAL_CONSTANTS)
+    #
+    # REJECT#18: 불변 최소 보호 집합(_CLASSIFY_SELF_PROTECT) 추가.
+    #   런타임 CODEX_CRITICAL_CONSTANTS가 빈 목록/자기 항목 제거 등으로 변조되어도
+    #   이 함수 내부 리터럴 집합이 자기 보호를 유지한다(외부 상수에 의존하지 않음).
+    #   _detect_changed_critical_constants의 _CODEX_MIN_PROTECTED와 같은 방어 패턴.
+    _CLASSIFY_SELF_PROTECT: frozenset = frozenset({
+        "CODEX_CRITICAL_CONSTANTS",
+        "CODEX_CRITICAL_FUNCTIONS",
+        "CODEX_HIGH_RISK_PATHS",
+        "CODEX_MODEL_POLICIES",
+        "CODEX_ALLOWED_MODELS",
+        "CODEX_MODEL_ROUTER_VERSION",
+        "CODEX_VERIFICATION_ACTUAL",
+        "CODEX_CHATGPT_LOGIN_MARKER",
+        "_CODEX_EFFORT_CANONICAL",
+    })
+    _crit_const_set = set(CODEX_CRITICAL_CONSTANTS) | _CLASSIFY_SELF_PROTECT
     for const in _consts:
         if str(const) in _crit_const_set:
             return {
