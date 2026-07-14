@@ -2510,7 +2510,7 @@ CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
 #   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
 #   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
-CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 165000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000; REJECT#18: 73000→76000; REJECT#22: 76000→85000; REJECT#24: 85000→165000 (3개 helper CODEX_CRITICAL_FUNCTIONS 추가로 cumulative diff 145145자 필요)
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 250000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000; REJECT#18: 73000→76000; REJECT#22: 76000→85000; REJECT#24: 85000→165000 (3개 helper CODEX_CRITICAL_FUNCTIONS 추가로 cumulative diff 145145자 필요); REJECT#35: 165000→250000 (18파일 PR에서 non-critical 파일 2개 budget 초과 해소)
 
 
 class _CodexCacheSkipError(Exception):
@@ -9085,10 +9085,14 @@ def _build_codex_semantic_evidence(
     sem: Dict[str, Any] = {
         "diff_hunks": [],
         "function_before_after_shas": {},
+        "file_sha_attestations": {},       # REJECT#35: CRITICAL Python 파일의 file-level SHA 증거
         "test_assertions": {},
         "oracle_results": [],
         "evidence_complete": False,
         "truncated_critical_hunks": 0,
+        "truncated_noncrit_hunks": 0,      # REJECT#35: non-critical 예산 초과 카운트
+        "missing_noncrit_files": [],        # REJECT#35: non-critical 누락 파일 목록
+        "missing_critical_files": [],       # REJECT#35: CRITICAL 파일 중 diff도 SHA도 없는 파일
         "bundle_budget_chars": 0,
         "semantic_evidence_sha256": "",
         "changed_constants": [],  # REJECT#32: CODEX_CRITICAL_CONSTANTS 소속 변경 상수 목록
@@ -9163,9 +9167,12 @@ def _build_codex_semantic_evidence(
     except Exception:  # noqa: BLE001 — diff 실패는 fail-closed(evidence_complete=False)
         _diff_ok = False
 
-    # 1b) 비Python CRITICAL 파일 diff 추출 (pipeline-manager-agent.md 등).
+    # 1b) pipeline.py 이외의 CRITICAL 파일 diff 추출 또는 file-level SHA 증거 생성.
     # IMP-20260712-DAE1 REJECT#10: pipeline.py 이외의 CRITICAL 파일도 diff hunk로 포함.
-    #   Python 파일(.py)은 function-level SHA/hunk로 이미 처리하므로 중복 추가하지 않는다.
+    # REJECT#35: Python CRITICAL 파일(test_codex*.py 등)은 diff 예산 절약을 위해 file-level SHA
+    #   attestation으로 처리한다 (AC#3: "diff가 리뷰 입력에 포함되거나 SHA로 결합된 분할 검토").
+    #   비Python CRITICAL 파일(.md, .yml 등)은 기존과 같이 전체 diff hunk로 포함.
+    #   pipeline.py는 위의 `if _cpf_n == "pipeline.py": continue`에서 이미 제외됨.
     try:
         for _cpf in _cf:
             _cpf_n = _cpf.replace("\\", "/")
@@ -9173,8 +9180,29 @@ def _build_codex_semantic_evidence(
                 continue  # pipeline.py는 위에서 이미 처리
             if not _is_codex_critical_file(_cpf_n):
                 continue
+            # REJECT#35: Python CRITICAL 파일은 file-level SHA attestation (diff hunk 아님).
             if _cpf_n.endswith(".py"):
-                continue  # Python 파일은 function-level SHA/hunk로 처리(별도 hunk 불필요)
+                try:
+                    _before_sha_r = subprocess.run(
+                        ["git", "show", f"origin/main:{_cpf_n}"],
+                        capture_output=True, text=True, timeout=30,
+                        cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+                    )
+                    _before_content = _before_sha_r.stdout if _before_sha_r.returncode == 0 else ""
+                    _after_path = BASE_DIR / _cpf_n
+                    _after_content = _after_path.read_text(encoding="utf-8", errors="replace") if _after_path.exists() else ""
+                    _b_file_sha = hashlib.sha256(_before_content.encode("utf-8")).hexdigest() if _before_content else ""
+                    _a_file_sha = hashlib.sha256(_after_content.encode("utf-8")).hexdigest() if _after_content else ""
+                    sem["file_sha_attestations"][_cpf_n] = {
+                        "before_sha": _b_file_sha,
+                        "after_sha": _a_file_sha,
+                        "changed": _b_file_sha != _a_file_sha,
+                    }
+                    if _a_file_sha:
+                        _diff_ok = True  # SHA 증거 수집 성공 → evidence 진행 가능
+                except Exception:  # noqa: BLE001
+                    pass  # SHA 수집 실패는 missing_critical_files에서 감지됨
+                continue
             _nonpy_crit_expected.append(_cpf_n)
             _npdr = subprocess.run(
                 ["git", "diff", "origin/main...HEAD", "--unified=3", "--", _cpf_n],
@@ -9226,9 +9254,12 @@ def _build_codex_semantic_evidence(
         pass
 
     # 예산 적용: CRITICAL hunk를 먼저 채우고, 예산 초과 시 truncated_critical_hunks 계수.
+    # REJECT#35: non-critical도 예산 초과 시 truncated_noncrit 계수. missing_noncrit_files 기록.
     _budget = CODEX_REVIEW_BUNDLE_BUDGET_CHARS
     _used = 0
     _truncated_crit = 0
+    _truncated_noncrit = 0
+    _missing_noncrit_files: List[str] = []
     _selected: List[Dict[str, Any]] = []
     _crit_hunks = [h for h in _all_hunks if h.get("is_critical")]
     _noncrit_hunks = [h for h in _all_hunks if not h.get("is_critical")]
@@ -9244,9 +9275,15 @@ def _build_codex_semantic_evidence(
         if _used + _c <= _budget:
             _selected.append(_h)
             _used += _c
-        # non-critical은 예산 초과 시 조용히 제외(evidence_complete에 영향 없음)
+        else:
+            # REJECT#35: non-critical 예산 초과도 evidence_complete에 영향을 준다.
+            #   조용히 제외하지 않고 누락 수·파일명을 기록한다.
+            _truncated_noncrit += 1
+            _missing_noncrit_files.append(_h.get("function", "unknown"))
     sem["diff_hunks"] = _selected
     sem["truncated_critical_hunks"] = _truncated_crit
+    sem["truncated_noncrit_hunks"] = _truncated_noncrit
+    sem["missing_noncrit_files"] = _missing_noncrit_files
     sem["bundle_budget_chars"] = _used
 
     # 2) function_before_after_shas: 각 변경 함수의 base/current 본문 SHA (best-effort).
@@ -9366,14 +9403,37 @@ def _build_codex_semantic_evidence(
         _ores = []
     sem["oracle_results"] = _ores
 
-    # 5) evidence_complete: CRITICAL hunk가 모두 포함(truncated==0)되고 hunk가 1개 이상이며 diff 성공.
+    # 5) evidence_complete: 모든 변경 파일이 diff hunk 또는 SHA attestation에 커버되었고
+    #    budget 초과 없을 때 True.
+    #    REJECT#35: non-critical 예산 초과 → False. CRITICAL Python 파일은 SHA attestation 허용.
     #    fail-closed: changed_files가 비었고 CRITICAL 파일도 없으면 False.
     _has_critical_file = any(_is_codex_critical_file(f) for f in _cf)
+    # REJECT#35: CRITICAL 파일 중 diff도 SHA도 없는 누락 파일 식별.
+    # pipeline.py는 section 1에서 function-level hunk로 처리되므로
+    #   hunk의 "function" 키가 함수명(예: "_build_codex_semantic_evidence")임.
+    #   파일 경로 "pipeline.py" 자체는 hunk_covered에 없으므로
+    #   section 1이 성공한 경우(_diff_ok가 pipeline.py diff로 True가 된 경우) 커버 파일에 추가.
+    _hunk_covered = {h["function"] for h in sem["diff_hunks"]}
+    _sha_covered = set(sem["file_sha_attestations"].keys())
+    # pipeline.py가 changed_files에 있고 section 1 diff가 성공했으면 파일 커버로 추가.
+    if "pipeline.py" in _cf and len([h for h in sem["diff_hunks"] if h.get("is_critical")]) > 0:
+        _hunk_covered.add("pipeline.py")
+    _crit_changed = [
+        f.replace("\\", "/") for f in _cf if _is_codex_critical_file(f.replace("\\", "/"))
+    ]
+    sem["missing_critical_files"] = [
+        f for f in _crit_changed
+        if f not in _hunk_covered and f not in _sha_covered
+    ]
     if not _cf and not _has_critical_file:
         sem["evidence_complete"] = False
     else:
         sem["evidence_complete"] = bool(
-            _diff_ok and _truncated_crit == 0 and len(sem["diff_hunks"]) > 0
+            _diff_ok
+            and _truncated_crit == 0
+            and _truncated_noncrit == 0
+            and len(sem["missing_critical_files"]) == 0
+            and (len(sem["diff_hunks"]) > 0 or len(sem["file_sha_attestations"]) > 0)
         )
 
     # 6) semantic_evidence_sha256: 원문 포함 semantic 섹션의 결정적 integrity digest.
@@ -9656,6 +9716,11 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         bundle["oracle_results"] = _semantic["oracle_results"]
         bundle["evidence_complete"] = bool(_semantic["evidence_complete"])
         bundle["truncated_critical_hunks"] = int(_semantic["truncated_critical_hunks"])
+        bundle["truncated_noncrit_hunks"] = int(_semantic.get("truncated_noncrit_hunks", 0))
+        bundle["missing_noncrit_files"] = list(_semantic.get("missing_noncrit_files", []))
+        bundle["missing_critical_files"] = list(_semantic.get("missing_critical_files", []))
+        # REJECT#35: CRITICAL Python 파일의 file-level SHA attestation (before/after SHA)
+        bundle["file_sha_attestations"] = dict(_semantic.get("file_sha_attestations", {}))
         bundle["semantic_evidence_sha256"] = str(_semantic["semantic_evidence_sha256"])
         bundle["bundle_budget_chars"] = int(_semantic["bundle_budget_chars"])
         # REJECT#32: changed_constants는 번들 파일에 포함하지 않는다.

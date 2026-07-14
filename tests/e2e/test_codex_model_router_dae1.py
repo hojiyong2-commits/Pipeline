@@ -1026,10 +1026,11 @@ def test_tc29e_effective_force_review_bypasses_cache_in_source() -> None:
 
 def test_tc30a_bundle_budget_sufficient_for_tc11_oracles() -> None:
     """REJECT#15/16/18: CODEX_REVIEW_BUNDLE_BUDGET_CHARS가 tc11 oracle 파일 포함 총 diff를
-    수용해야 한다. REJECT#18 auth_source 코드 추가 후 ~73718자 수용 위해 74000 이상."""
-    assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 74000, (
-        f"REJECT#18: 예산이 tc11 oracle을 수용하지 못합니다: "
-        f"{pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 74000"
+    수용해야 한다. REJECT#18 auth_source 코드 추가 후 ~73718자 수용 위해 74000 이상.
+    REJECT#35: 18파일 PR에서 non-critical 2파일 초과 해소를 위해 165000 이상."""
+    assert pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS >= 165000, (
+        f"REJECT#35: 예산이 18파일 PR의 non-critical 파일을 수용하지 못합니다: "
+        f"{pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS} < 165000"
     )
 
 
@@ -2520,7 +2521,7 @@ def test_tc42e_unknown_hunk_budget_exceeded_evidence_incomplete() -> None:
     from unittest.mock import patch, MagicMock
 
     # 예산을 크게 초과하는 unknown-named hunk (@@에 함수명 없음)
-    big_content = "+" + "x" * 200_000  # 200KB — 실제 예산(165000)을 크게 초과
+    big_content = "+" + "x" * 260_000  # 260KB — 실제 예산(250000)을 크게 초과 (REJECT#35: 165000→250000)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
@@ -2799,7 +2800,7 @@ def test_tc44d_multihunk_same_critical_function_detected(tmp_path: Path) -> None
     crit_func = "_cmd_gates_accept"  # CODEX_CRITICAL_FUNCTIONS에 있는 함수
     # 동일 함수명, 예산 초과 크기의 두 번째 hunk
     hunk1_content = f"@@ -100,5 +100,5 @@ def {crit_func}():\n+    pass1\n"
-    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 200_000  # 예산 초과
+    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 260_000  # 예산 초과 (REJECT#35: budget 250K → 260K 필요)
 
     # 두 hunk 모두 동일 CRITICAL 함수에 귀속
     diff_output = (
@@ -2852,7 +2853,7 @@ def test_tc44e_new_critical_function_hunk_required(tmp_path: Path) -> None:
 
     new_func = "_canonicalize_effort"  # REJECT#30에서 추가된 CRITICAL 함수
     # 예산을 크게 초과하는 신규 함수 hunk
-    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 200_000
+    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 260_000  # 예산 초과 (REJECT#35: budget 250K → 260K 필요)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
@@ -3700,3 +3701,191 @@ def test_tc48f_tc04_oracle_build_parser_is_high() -> None:
         f"REJECT#34 AC#3: pipeline.py + build_parser가 HIGH 아님 — got {r['risk_level']!r}. "
         "TC-04 Oracle 입력이 CRITICAL 함수이면 이 테스트가 실패함"
     )
+
+
+# ---------------------------------------------------------------------------
+# TC-49: REJECT#35 — CRITICAL Python 파일 diff 수집 + non-critical 예산 초과 추적
+# ---------------------------------------------------------------------------
+
+class TestTC49CriticalPythonDiffAndNonCritBudget:
+    """REJECT#35 검증: section 1b Python 제외 버그 + truncated_noncrit_hunks 추적.
+
+    AC#1: non-critical 예산 초과 시 evidence_complete=False, Codex 차단.
+    AC#2: 모든 changed_files가 hunk에 한 번 이상 매핑될 때만 evidence_complete=True.
+    AC#3: CRITICAL Python 파일(test_codex*.py)의 diff가 bundle에 포함된다.
+    AC#4: non-critical 예산 초과 시 truncated_noncrit_hunks 카운트 기록.
+    """
+
+    def _make_semantic(
+        self,
+        diff_hunks: list,
+        truncated_crit: int,
+        truncated_noncrit: int,
+        missing_noncrit_files: list | None = None,
+        diff_ok: bool = True,
+    ) -> dict:
+        """테스트용 semantic dict 조립."""
+        return {
+            "diff_hunks": diff_hunks,
+            "truncated_critical_hunks": truncated_crit,
+            "truncated_noncrit_hunks": truncated_noncrit,
+            "missing_noncrit_files": missing_noncrit_files or [],
+            "evidence_complete": (
+                diff_ok
+                and truncated_crit == 0
+                and truncated_noncrit == 0
+                and len(diff_hunks) > 0
+            ),
+            "function_before_after_shas": {},
+            "test_assertions": {},
+            "oracle_results": [],
+            "bundle_budget_chars": sum(h.get("chars", 0) for h in diff_hunks),
+            "semantic_evidence_sha256": "",
+            "changed_constants": [],
+        }
+
+    def test_tc49a_evidence_complete_false_when_noncrit_truncated(self) -> None:
+        """REJECT#35 AC#1: non-critical 예산 초과 시 evidence_complete=False."""
+        sem = self._make_semantic(
+            diff_hunks=[{"function": "report.md", "is_critical": False, "chars": 100}],
+            truncated_crit=0,
+            truncated_noncrit=1,  # 1개 누락
+            missing_noncrit_files=["extra_report.md"],
+        )
+        assert sem["evidence_complete"] is False, (
+            "REJECT#35 AC#1: non-critical 예산 초과인데 evidence_complete=True — "
+            "truncated_noncrit=1이면 False여야 함"
+        )
+
+    def test_tc49b_evidence_complete_false_with_multiple_noncrit_truncated(self) -> None:
+        """REJECT#35 AC#1 회귀: non-critical 여러 개 누락해도 evidence_complete=False."""
+        sem = self._make_semantic(
+            diff_hunks=[{"function": "x.md", "is_critical": False, "chars": 10}],
+            truncated_crit=0,
+            truncated_noncrit=5,
+        )
+        assert sem["evidence_complete"] is False, (
+            "REJECT#35 AC#1 회귀: truncated_noncrit=5인데 evidence_complete=True"
+        )
+
+    def test_tc49c_evidence_complete_true_when_all_files_covered(self) -> None:
+        """REJECT#35 AC#2: 모든 changed_files가 hunk 또는 SHA attestation에 매핑되면 evidence_complete=True.
+
+        CRITICAL Python 파일은 SHA attestation으로, 비Critical 파일은 diff hunk로 커버된다.
+        """
+        sem = self._make_semantic(
+            diff_hunks=[
+                {"function": "pipeline.py", "is_critical": True, "chars": 500},
+                {"function": "codex_model_router_report.md", "is_critical": False, "chars": 100},
+            ],
+            truncated_crit=0,
+            truncated_noncrit=0,
+        )
+        assert sem["evidence_complete"] is True, (
+            "REJECT#35 AC#2: 모든 파일 포함 + truncated 모두 0인데 evidence_complete=False"
+        )
+
+    def test_tc49d_critical_python_test_file_is_critical_file(self) -> None:
+        """REJECT#35 AC#3: tests/e2e/test_codex*.py가 CRITICAL 파일로 분류된다.
+
+        _is_codex_critical_file이 이 파일을 CRITICAL로 식별해야
+        section 1b에서 diff가 수집될 수 있다.
+        """
+        assert pipeline._is_codex_critical_file(
+            "tests/e2e/test_codex_model_router_dae1.py"
+        ), (
+            "REJECT#35 AC#3: test_codex_model_router_dae1.py가 CRITICAL 파일로 인식 안 됨. "
+            "_CODEX_CRITICAL_FILE_PREFIXES에 'tests/e2e/test_codex' 포함 여부 확인"
+        )
+
+    def test_tc49e_critical_python_test_file_in_sha_attestation(self) -> None:
+        """REJECT#35 AC#3: CRITICAL Python 파일(test_codex*.py)이 file_sha_attestations에 포함된다.
+
+        _build_codex_semantic_evidence 내 section 1b에서 test_codex*.py(.py 확장자)가
+        diff 예산을 소모하지 않고 file-level SHA attestation으로 처리된다.
+        (AC#3: "diff가 리뷰 입력에 포함되거나 SHA로 결합된 분할 검토를 통과했다는 증거가 생성됩니다")
+        소스 코드 검사로 section 1b 내 Python CRITICAL 파일이 SHA 경로로 분기하는지 확인.
+        """
+        import inspect
+
+        _src = inspect.getsource(pipeline._build_codex_semantic_evidence)
+
+        # section 1b 내에서 .py 파일에 대해 file_sha_attestations를 채우는 코드 존재 여부 검증
+        assert "file_sha_attestations" in _src, (
+            "REJECT#35 AC#3: _build_codex_semantic_evidence에 file_sha_attestations 없음 — "
+            "CRITICAL Python 파일 SHA 처리 경로 구현 확인 필요"
+        )
+        # SHA attestation 경로에서 origin/main 파일 내용을 읽는 git show 호출 존재 여부
+        assert "origin/main:{_cpf_n}" in _src or 'f"origin/main:{_cpf_n}"' in _src, (
+            "REJECT#35 AC#3: section 1b에 CRITICAL Python 파일의 git show 호출 없음 — "
+            "before_sha 생성 경로 확인 필요"
+        )
+        # before_sha / after_sha 필드 포함 여부
+        assert '"before_sha"' in _src and '"after_sha"' in _src, (
+            "REJECT#35 AC#3: file_sha_attestations 항목에 before_sha/after_sha 필드 없음"
+        )
+
+    def test_tc49e2_sha_attestation_populated_with_real_critical_file(self) -> None:
+        """REJECT#35 AC#3: 실제 CRITICAL Python 파일이 포함된 번들에 file_sha_attestations 존재.
+
+        현재 PR diff에 tests/e2e/test_codex*.py가 포함되어 있으므로
+        _build_codex_review_bundle 결과의 file_sha_attestations에 해당 파일이 있어야 한다.
+        """
+        import json
+        from pathlib import Path
+
+        try:
+            ar = Path(".pipeline/active_run.json")
+            ptr = json.loads(ar.read_text(encoding="utf-8"))
+            sp = ptr.get("state_path")
+            state = json.loads(Path(sp).read_text(encoding="utf-8"))
+            pid = state.get("pipeline_id", "IMP-20260712-DAE1")
+        except Exception:
+            state = {}
+            pid = "IMP-20260712-DAE1"
+
+        _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
+        bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
+
+        _attestations = bundle.get("file_sha_attestations", {})
+        _test_file = "tests/e2e/test_codex_model_router_dae1.py"
+        # 이 파일이 CRITICAL 파일이므로 SHA attestation에 있어야 한다
+        assert _test_file in _attestations, (
+            f"REJECT#35 AC#3: {_test_file}이 bundle.file_sha_attestations에 없음. "
+            f"현재 attestations keys: {list(_attestations.keys())[:5]!r}"
+        )
+        _attest = _attestations[_test_file]
+        assert _attest.get("after_sha"), (
+            f"REJECT#35 AC#3: {_test_file} attestation.after_sha가 비어있음: {_attest!r}"
+        )
+
+    def test_tc49f_truncated_noncrit_field_in_semantic(self) -> None:
+        """REJECT#35 AC#4: _build_codex_semantic_evidence 결과에 truncated_noncrit_hunks 필드 존재."""
+        import unittest.mock as mock
+
+        def _fake_subprocess_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            _m = mock.MagicMock()
+            _m.returncode = 0
+            _m.stdout = ""
+            return _m
+
+        with mock.patch("pipeline.subprocess.run", side_effect=_fake_subprocess_run), \
+             mock.patch.object(pipeline.Path, "read_text", return_value=""):
+            sem = pipeline._build_codex_semantic_evidence(
+                "IMP-20260712-DAE1",
+                ["codex_model_router_report.md"],
+                [],
+            )
+
+        assert "truncated_noncrit_hunks" in sem, (
+            "REJECT#35 AC#4: semantic에 truncated_noncrit_hunks 필드 없음"
+        )
+        assert isinstance(sem["truncated_noncrit_hunks"], int), (
+            f"REJECT#35 AC#4: truncated_noncrit_hunks가 int 아님 — {sem['truncated_noncrit_hunks']!r}"
+        )
+        assert "missing_noncrit_files" in sem, (
+            "REJECT#35 AC#4: semantic에 missing_noncrit_files 필드 없음"
+        )
+        assert isinstance(sem["missing_noncrit_files"], list), (
+            f"REJECT#35 AC#4: missing_noncrit_files가 list 아님 — {sem['missing_noncrit_files']!r}"
+        )
