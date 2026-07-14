@@ -2369,6 +2369,21 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_write_codex_review_blocked_invalidation",
     "_finish_codex_review_error",
     "_check_codex_chatgpt_auth",
+    # IMP-20260712-DAE1 REJECT#29: 신뢰 경계 함수 등록 완전성 강화.
+    #   이 함수들을 단독으로 변경해도 실제 모델 실행·인증·모델 검증·증거 생성·운영 신뢰를
+    #   우회할 수 있으므로 CRITICAL 분류 필수이다.
+    #   - _invoke_codex_exec: Codex CLI subprocess 실행 인자 구성 및 실행
+    #   - _parse_codex_exec_capability: capability 파싱 (actual_model 판정)
+    #   - _compute_model_verification_level: verification level 산출
+    #   - _check_codex_model_capability_match: actual vs selected 모델 capability 검증
+    #   - _build_codex_semantic_evidence: semantic evidence(diff hunk+함수SHA) 구성
+    #   - _build_codex_prompt_for_review: Codex에 전달되는 검토 prompt 구성
+    "_invoke_codex_exec",
+    "_parse_codex_exec_capability",
+    "_compute_model_verification_level",
+    "_check_codex_model_capability_match",
+    "_build_codex_semantic_evidence",
+    "_build_codex_prompt_for_review",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴

@@ -2553,3 +2553,187 @@ def test_tc42e_unknown_hunk_budget_exceeded_evidence_incomplete() -> None:
         f"REJECT#28 AC#3: unknown hunk 예산 초과 시 evidence_complete가 False가 아님 — "
         f"got {result['evidence_complete']}"
     )
+
+
+# =========================================================================== #
+# TC-43: REJECT#29 — 신뢰 경계 함수 등록 완전성 + 보고서 SSoT 일치
+# =========================================================================== #
+
+# REJECT#29 AC#1/2: 신뢰 경계 함수 집합 (CODEX_CRITICAL_FUNCTIONS에 모두 포함돼야 함).
+# 이 목록에 새 함수를 추가하지 않으면 TC-43b 완전성 테스트가 실패하여 누락을 자동 감지한다.
+_TRUST_BOUNDARY_FUNCS_REJECT29 = [
+    "_invoke_codex_exec",
+    "_parse_codex_exec_capability",
+    "_compute_model_verification_level",
+    "_check_codex_model_capability_match",
+    "_build_codex_semantic_evidence",
+    "_build_codex_prompt_for_review",
+]
+
+
+def test_tc43a_invoke_codex_exec_is_critical() -> None:
+    """REJECT#29 AC#1: _invoke_codex_exec만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(["pipeline.py"], ["_invoke_codex_exec"])
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#29 AC#1: _invoke_codex_exec 단독 변경이 CRITICAL이 아님 — "
+        f"got risk_level={r['risk_level']!r}. CODEX_CRITICAL_FUNCTIONS에 추가 필요."
+    )
+
+
+def test_tc43b_parse_codex_exec_capability_is_critical() -> None:
+    """REJECT#29 AC#1: _parse_codex_exec_capability만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_parse_codex_exec_capability"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#29 AC#1: _parse_codex_exec_capability 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43c_compute_model_verification_level_is_critical() -> None:
+    """REJECT#29 AC#1: _compute_model_verification_level만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_compute_model_verification_level"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#29 AC#1: _compute_model_verification_level 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43d_check_codex_model_capability_match_is_critical() -> None:
+    """REJECT#29 AC#1: _check_codex_model_capability_match만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_check_codex_model_capability_match"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#29 AC#1: _check_codex_model_capability_match 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43e_build_codex_semantic_evidence_is_critical() -> None:
+    """REJECT#29 AC#1: _build_codex_semantic_evidence만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_build_codex_semantic_evidence"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#29 AC#1: _build_codex_semantic_evidence 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43f_build_codex_prompt_for_review_is_critical() -> None:
+    """REJECT#29 AC#1: _build_codex_prompt_for_review만 변경해도 CRITICAL로 분류된다."""
+    r = pipeline._classify_codex_review_risk(
+        ["pipeline.py"], ["_build_codex_prompt_for_review"]
+    )
+    assert r["risk_level"] == "CRITICAL", (
+        f"REJECT#29 AC#1: _build_codex_prompt_for_review 단독 변경이 CRITICAL이 아님 — "
+        f"got {r['risk_level']!r}."
+    )
+
+
+def test_tc43g_trust_boundary_completeness() -> None:
+    """REJECT#29 AC#2: 신뢰 경계 함수가 CODEX_CRITICAL_FUNCTIONS에 모두 등록돼 있다.
+
+    이 테스트 자체에 신뢰 경계 함수를 추가해야 자동 감지가 동작한다.
+    새 신뢰 경계 함수를 추가할 때는 _TRUST_BOUNDARY_FUNCS_REJECT29 목록도 갱신하시오.
+    """
+    missing = [
+        fn for fn in _TRUST_BOUNDARY_FUNCS_REJECT29
+        if fn not in pipeline.CODEX_CRITICAL_FUNCTIONS
+    ]
+    assert not missing, (
+        f"REJECT#29 AC#2: 아래 신뢰 경계 함수가 CODEX_CRITICAL_FUNCTIONS에 없음:\n"
+        + "\n".join(f"  - {fn}" for fn in missing)
+        + "\npipeline.py의 CODEX_CRITICAL_FUNCTIONS에 추가하십시오."
+    )
+
+
+def test_tc43h_critical_funcs_get_force_review_and_no_cache() -> None:
+    """REJECT#29 AC#3: 신뢰 경계 함수 변경에는 cache 금지·force_review·CRITICAL 정책이 적용된다."""
+    for fn in _TRUST_BOUNDARY_FUNCS_REJECT29:
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], [fn])
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#29 AC#3: {fn!r} 변경이 CRITICAL이 아님 — got {r['risk_level']!r}"
+        )
+    # CRITICAL 정책에서 cache 금지 + force_review 확인
+    policy = pipeline._build_codex_model_policy("CRITICAL")
+    assert policy.get("result") != "BLOCKED", "CRITICAL 정책이 BLOCKED를 반환함"
+    assert policy.get("cache_allowed") is False, (
+        f"REJECT#29 AC#3: CRITICAL 정책에서 cache_allowed가 False가 아님 — "
+        f"got {policy.get('cache_allowed')!r}"
+    )
+    assert policy.get("force_review_required") is True, (
+        f"REJECT#29 AC#3: CRITICAL 정책에서 force_review_required가 True가 아님 — "
+        f"got {policy.get('force_review_required')!r}"
+    )
+
+
+def test_tc43i_report_model_table_uses_gpt56() -> None:
+    """REJECT#29 AC#4: codex_model_router_report.md 모델표에 GPT-5.6 모델만 사용된다.
+    claude-sonnet 또는 claude-opus가 모델 라우팅 표에 남아있으면 FAIL.
+    """
+    import re
+
+    report_path = _ROOT / "codex_model_router_report.md"
+    assert report_path.exists(), f"codex_model_router_report.md 파일이 없음: {report_path}"
+    content = report_path.read_text(encoding="utf-8")
+
+    # 섹션 3(모델 라우팅 표)의 테이블 행에서 claude 모델 참조 검사
+    # 마크다운 테이블 행 패턴: | ... claude-... | 형식
+    table_claude = re.findall(r"^\|.*claude-(?:sonnet|opus|haiku)[^|]*\|", content, re.MULTILINE)
+    assert not table_claude, (
+        f"REJECT#29 AC#4: codex_model_router_report.md 모델 라우팅 표에 claude 모델이 남아있음:\n"
+        + "\n".join(f"  {row}" for row in table_claude)
+        + "\nGPT-5.6 계열(gpt-5.6-luna/terra/sol)로 교체하십시오."
+    )
+
+
+def test_tc43j_report_tests_not_high_risk_path() -> None:
+    """REJECT#29 AC#4: codex_model_router_report.md의 HIGH 경로 목록에 tests/가 없다.
+    tests/ 경로는 HIGH risk 경로가 아니며 제품 코드의 risk를 상속한다.
+    """
+    report_path = _ROOT / "codex_model_router_report.md"
+    content = report_path.read_text(encoding="utf-8")
+
+    # HIGH 섹션(### HIGH 이후 ### MEDIUM 이전)에서 tests/ 참조 검사
+    high_section_match = __import__("re").search(
+        r"### HIGH.*?### MEDIUM", content, __import__("re").DOTALL
+    )
+    if high_section_match:
+        high_section = high_section_match.group(0)
+        # 테이블 행에서 tests/ 가 경로 패턴으로 등록되어 있는지 확인
+        import re as _re
+        tests_in_table = _re.findall(r"^\|[^|]*`?tests/`?[^|]*\|", high_section, _re.MULTILINE)
+        assert not tests_in_table, (
+            f"REJECT#29 AC#4: HIGH 섹션 테이블에 'tests/' 경로가 남아있음:\n"
+            + "\n".join(f"  {row}" for row in tests_in_table)
+            + "\n'tests/'는 HIGH risk 경로가 아닙니다 — 제거하십시오."
+        )
+
+
+def test_tc43k_report_high_unknown_not_blocked() -> None:
+    """REJECT#29 AC#4: codex_model_router_report.md의 unknown 처리 표에서
+    HIGH+unknown이 BLOCKED가 아님을 명시한다(CRITICAL만 BLOCKED).
+    """
+    import re
+
+    report_path = _ROOT / "codex_model_router_report.md"
+    content = report_path.read_text(encoding="utf-8")
+
+    # actual_model=unknown 처리 섹션에서 HIGH + BLOCKED 조합 확인
+    unknown_section_match = re.search(
+        r"actual_model=unknown.*?##\s+\d+\.", content, re.DOTALL
+    )
+    if unknown_section_match:
+        section = unknown_section_match.group(0)
+        # HIGH 행에 BLOCKED가 없어야 함 (CRITICAL 행에는 있어야 함)
+        high_rows = re.findall(r"^\|[^|]*unknown[^|]*\|[^|]*HIGH[^|]*\|[^|]*BLOCK[^|]*\|", section, re.MULTILINE)
+        assert not high_rows, (
+            f"REJECT#29 AC#4: unknown 처리 표에서 HIGH+BLOCKED 조합이 남아있음:\n"
+            + "\n".join(f"  {row}" for row in high_rows)
+            + "\nHIGH는 invocation_verified로 통과 — BLOCKED는 CRITICAL만 적용합니다."
+        )
