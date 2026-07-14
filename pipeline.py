@@ -8970,10 +8970,16 @@ def _verify_npm_wrapper_content(bin_path: "Path") -> bool:
             _suf = bin_path.suffix.lower()
             if _suf in (".cmd", ".bat"):
                 _txt = bin_path.read_text(encoding="utf-8", errors="replace").lower()
-                # npm .cmd wrapper 특징: node 실행 참조 + node_modules 또는 %~dp0 경로
-                return "node" in _txt and ("node_modules" in _txt or "%~dp0" in _txt)
-            # .exe 등 non-script on Windows: 존재 확인만으로 신뢰 (추가 서명 검증 불가)
-            return True
+                # REJECT#20: .cmd 검사 강화 — node 실행 + @openai/codex 패키지 경로 명시 필수.
+                #   단순 node_modules 포함만 확인하면 임의 패키지 wrapper로 우회 가능.
+                #   공식 npm 설치 wrapper는 항상 @openai/codex 경로를 포함한다.
+                #   Windows 경로는 역슬래시(\)를 사용하므로 정규화 후 비교한다.
+                _txt_norm = _txt.replace("\\", "/")
+                return "node" in _txt_norm and "@openai/codex" in _txt_norm
+            # REJECT#20: .exe 등 non-script on Windows — fail-closed 처리.
+            #   npm global bin에 악성 codex.exe를 배치하면 PATHEXT 우선순위로 .cmd보다 먼저 선택된다.
+            #   내용·서명·패키지 출처 검증이 불가능한 .exe는 신뢰하지 않는다 (fail-closed).
+            return False
         else:
             # Linux/macOS: 심볼릭 링크이면 대상 경로에 node_modules 포함 여부
             if bin_path.is_symlink():

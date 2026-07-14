@@ -5133,3 +5133,80 @@ class TestTC59Reject19ToctouBinaryPathFix:
         assert "_trusted_bin_path" in src, (
             "REJECT#19 AC#1: _codex_bin_now 계산에 _trusted_bin_path 없음"
         )
+
+
+class TestTC60Reject20WindowsExeBlocked:
+    """REJECT#20: Windows npm global bin의 .exe 파일을 fail-closed 처리하고 .cmd는 @openai/codex 포함 확인."""
+
+    def test_tc60a_exe_in_npm_bin_returns_false(self, tmp_path: "Path") -> None:
+        """REJECT#20 AC#1: npm global bin 내부라도 .exe 파일은 _verify_npm_wrapper_content에서 False이다."""
+        import sys
+        if sys.platform != "win32":
+            import pytest as _pytest
+            _pytest.skip("Windows 전용 테스트")
+        _fake_exe = tmp_path / "codex.exe"
+        _fake_exe.write_bytes(b"\x4d\x5a" + b"\x00" * 10)  # MZ header (PE binary)
+        result = pipeline._verify_npm_wrapper_content(_fake_exe)
+        assert result is False, (
+            f"REJECT#20 AC#1: npm global bin .exe가 _verify_npm_wrapper_content=True 반환 — fail-closed 미적용. got={result!r}"
+        )
+
+    def test_tc60b_cmd_without_openai_codex_returns_false(self, tmp_path: "Path") -> None:
+        """REJECT#20 AC#4: .cmd 파일에 @openai/codex가 없으면 False 반환 (위조 wrapper 차단)."""
+        import sys
+        if sys.platform != "win32":
+            import pytest as _pytest
+            _pytest.skip("Windows 전용 테스트")
+        # 위조 wrapper: node는 있지만 @openai/codex 경로 없음
+        _fake_cmd = tmp_path / "codex.cmd"
+        _fake_cmd.write_text("@node %~dp0\\node_modules\\evil\\evil.js %*\r\n", encoding="utf-8")
+        result = pipeline._verify_npm_wrapper_content(_fake_cmd)
+        assert result is False, (
+            f"REJECT#20 AC#4: @openai/codex 없는 .cmd가 _verify_npm_wrapper_content=True 반환. got={result!r}"
+        )
+
+    def test_tc60c_legitimate_cmd_with_openai_codex_returns_true(self, tmp_path: "Path") -> None:
+        """REJECT#20 AC#4: 공식 npm wrapper(.cmd)에 @openai/codex가 있으면 True 반환 (정상 설치 허용)."""
+        import sys
+        if sys.platform != "win32":
+            import pytest as _pytest
+            _pytest.skip("Windows 전용 테스트")
+        # 공식 npm wrapper 시뮬레이션
+        _real_cmd = tmp_path / "codex.cmd"
+        _real_cmd.write_text(
+            '@ECHO off\r\n'
+            'CALL :find_dp0\r\n'
+            'SETLOCAL\r\n'
+            '"%~dp0\\node.exe" "%~dp0\\node_modules\\@openai\\codex\\bin\\codex.js" %*\r\n',
+            encoding="utf-8",
+        )
+        result = pipeline._verify_npm_wrapper_content(_real_cmd)
+        assert result is True, (
+            f"REJECT#20 AC#4: 공식 npm wrapper .cmd가 _verify_npm_wrapper_content=False 반환. got={result!r}"
+        )
+
+    def test_tc60d_exe_not_trusted_even_in_npm_global_bin(self, tmp_path: "Path", monkeypatch) -> None:
+        """REJECT#20 AC#1/AC#2: npm global bin 경로라도 .exe는 _verify_codex_binary_path_trust=False."""
+        import sys
+        if sys.platform != "win32":
+            import pytest as _pytest
+            _pytest.skip("Windows 전용 테스트")
+        # npm global bin을 tmp_path로 monkeypatch
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: str(tmp_path))
+        _fake_exe = tmp_path / "codex.exe"
+        _fake_exe.write_bytes(b"\x4d\x5a" + b"\x00" * 10)
+        result = pipeline._verify_codex_binary_path_trust(str(_fake_exe))
+        assert not result["trusted"], (
+            f"REJECT#20 AC#1: npm global bin .exe가 trusted=True 반환 — fail-closed 미적용. got={result!r}"
+        )
+
+    def test_tc60e_verify_npm_wrapper_source_has_exe_false(self) -> None:
+        """REJECT#20: _verify_npm_wrapper_content 소스에 .exe → return False 코드가 있다."""
+        import inspect
+        src = inspect.getsource(pipeline._verify_npm_wrapper_content)
+        assert "return False" in src, (
+            "REJECT#20: _verify_npm_wrapper_content 소스에 .exe에 대한 return False 없음"
+        )
+        assert "@openai/codex" in src, (
+            "REJECT#20: _verify_npm_wrapper_content 소스에 @openai/codex 패턴 확인 없음"
+        )
