@@ -8858,20 +8858,107 @@ def _check_codex_model_capability_match(
     return {"result": "OK", "model_verification_level": _level}
 
 
-def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
-    """REJECT#9: Codex 실행 파일 경로가 신뢰된 위치에 있는지 검증한다.
+def _get_npm_global_bin() -> Optional[str]:
+    """REJECT#10: npm global bin 디렉토리를 쿼리한다.
 
-    신뢰 불가 위치: 현재 git repo, Python/OS 임시 디렉토리.
-    PATH injection을 통한 가짜 binary 사용을 방지한다.
+    npm global bin은 공식 npm install로 설치된 CLI 도구가 위치하는 신뢰된 경로다.
+    Returns:
+        npm global bin 디렉토리 경로 문자열, 조회 실패 시 None.
+    """
+    import subprocess as _subp
+
+    # 1) npm bin -g: npm < 9 에서 직접 bin 경로 반환
+    try:
+        _res = _subp.run(
+            ["npm", "bin", "-g"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if _res.returncode == 0:
+            _out = _res.stdout.strip()
+            if _out and _out != "undefined":
+                return _out
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 2) npm config get prefix: npm >= 9 에서 bin -g deprecated 대안
+    try:
+        _res = _subp.run(
+            ["npm", "config", "get", "prefix"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if _res.returncode == 0:
+            _prefix = _res.stdout.strip()
+            if _prefix and _prefix != "undefined":
+                # Windows: prefix 자체에 .cmd 파일 존재 (e.g. %APPDATA%\npm)
+                # Linux/macOS: prefix/bin
+                if sys.platform == "win32":
+                    return _prefix
+                return str(Path(_prefix) / "bin")
+    except Exception:  # noqa: BLE001
+        pass
+
+    return None
+
+
+def _verify_npm_wrapper_content(bin_path: "Path") -> bool:
+    """REJECT#10: 파일 내용이 npm 래퍼인지 확인한다.
+
+    Windows .cmd: node 실행 + node_modules/%~dp0 참조 패턴.
+    Linux/macOS: 심볼릭 링크 대상에 node_modules 포함 또는 node shebang 스크립트.
+    Returns:
+        True이면 합법적 npm 래퍼, False이면 의심스러운 바이너리.
+    """
+    try:
+        if sys.platform == "win32":
+            _suf = bin_path.suffix.lower()
+            if _suf in (".cmd", ".bat"):
+                _txt = bin_path.read_text(encoding="utf-8", errors="replace").lower()
+                # npm .cmd wrapper 특징: node 실행 참조 + node_modules 또는 %~dp0 경로
+                return "node" in _txt and ("node_modules" in _txt or "%~dp0" in _txt)
+            # .exe 등 non-script on Windows: 존재 확인만으로 신뢰 (추가 서명 검증 불가)
+            return True
+        else:
+            # Linux/macOS: 심볼릭 링크이면 대상 경로에 node_modules 포함 여부
+            if bin_path.is_symlink():
+                return "node_modules" in str(bin_path.resolve())
+            # 셸 스크립트: node 호출 포함 여부
+            _txt = bin_path.read_text(encoding="utf-8", errors="replace")
+            return "node" in _txt.lower() and (
+                "node_modules" in _txt or "#!/usr/bin/env node" in _txt
+            )
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
+    """REJECT#10: 공식 npm 설치 또는 시스템 경로만 신뢰; 임의 사용자 경로는 fail-closed.
+
+    신뢰 불가 위치:
+      - 현재 git repo (개발/테스트 환경 fake binary 주입)
+      - OS 임시 디렉토리 (pytest tmp_path PATH injection)
+      - npm global bin 외 임의 사용자 경로 (PATH 선두 삽입 공격)
+
+    신뢰 가능 위치:
+      - npm global bin 디렉토리 내 node 래퍼 (공식 npm install 경로)
+      - 시스템 경로 (Linux/macOS: /usr/local/bin, /usr/bin 등)
 
     Args:
         bin_path: 검증할 실행 파일 경로.
     Returns:
-        {"trusted": bool, "path": str, "sha256": str, "untrusted_reason": str|None}.
+        {"trusted": bool, "path": str, "sha256": str, "untrusted_reason": str|None,
+         "install_source": str}.
     """
     import tempfile as _tf
 
-    _r: Dict[str, Any] = {"trusted": False, "path": bin_path, "sha256": "", "untrusted_reason": None}
+    _r: Dict[str, Any] = {
+        "trusted": False,
+        "path": bin_path,
+        "sha256": "",
+        "untrusted_reason": None,
+        "install_source": "unknown",
+    }
     try:
         _bin_p = Path(bin_path).resolve()
 
@@ -8893,17 +8980,57 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         except ValueError:
             pass  # 임시 디렉토리 밖 → OK
 
-        # 3) 파일 존재 확인 + SHA-256 계산
+        # 3) 파일 존재 확인
         if not _bin_p.exists():
             _r["untrusted_reason"] = f"binary_not_found:{_bin_p}"
             return _r
 
-        # .cmd/.bat script wrapper(Windows npm install)도 SHA 계산 대상
+        # 4) npm global bin 검증 (REJECT#10 핵심: 임의 경로 차단)
+        _npm_bin = _get_npm_global_bin()
+        _trusted_by_npm = False
+        if _npm_bin:
+            _npm_bin_p = Path(_npm_bin).resolve()
+            try:
+                _bin_p.relative_to(_npm_bin_p)
+                # npm global bin 내에 있음 → wrapper 내용 검증
+                if not _verify_npm_wrapper_content(_bin_p):
+                    _r["untrusted_reason"] = f"binary_in_npm_dir_but_not_npm_wrapper:{_bin_p}"
+                    return _r
+                _trusted_by_npm = True
+                _r["install_source"] = "npm_global"
+            except ValueError:
+                pass  # npm bin 밖 → 아직 판정 안 함
+
+        if not _trusted_by_npm:
+            # 5) 시스템 경로 검증 (Linux/macOS 시스템 패키지 설치 경로)
+            #    Windows에서는 시스템 경로 예외 없음 — npm global bin 필수
+            _SYSTEM_PREFIXES = (
+                "/usr/local/bin", "/usr/bin", "/bin",
+                "/opt/homebrew/bin", "/opt/homebrew/Cellar",
+                "/usr/local/Cellar",
+            )
+            _trusted_by_system = False
+            if sys.platform != "win32":
+                for _sp_str in _SYSTEM_PREFIXES:
+                    try:
+                        _bin_p.relative_to(Path(_sp_str).resolve())
+                        _trusted_by_system = True
+                        _r["install_source"] = "system_path"
+                        break
+                    except ValueError:
+                        pass
+
+            if not _trusted_by_system:
+                # 임의 사용자 경로 — fail-closed 차단
+                _r["untrusted_reason"] = f"binary_in_arbitrary_user_path:{_bin_p}"
+                return _r
+
+        # 6) SHA-256 계산 (신뢰 경로 확인 후)
         try:
             _sha = hashlib.sha256(_bin_p.read_bytes()).hexdigest()
         except (OSError, PermissionError) as _exc:
-            # 읽기 불가 → SHA 없이 trusted=True로 처리(존재 확인만)
-            _sha = f"unreadable:{type(_exc).__name__}"
+            _r["untrusted_reason"] = f"sha_read_error:{type(_exc).__name__}"
+            return _r
 
         _r.update({"trusted": True, "path": str(_bin_p), "sha256": _sha})
         return _r
@@ -27864,9 +27991,9 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             "   파이프라인 내부 산출물이며 PR diff에 포함될 수 없습니다.)"
         )
 
-    # REJECT#9 AC#3: Codex 실행 파일 SHA 재검증.
-    # gates codex-review 시점에 기록된 binary path/sha256이 현재도 일치하는지 확인한다.
-    # binary가 변경됐으면 BLOCKED (binary 교체 공격 방지).
+    # REJECT#9/10 AC#3/4: Codex 실행 파일 경로 신뢰 + SHA 재검증 (fail-closed).
+    # gates codex-review 시점에 기록된 binary path/sha256이 현재도 유효한지 확인한다.
+    # 신뢰 실패 / SHA 변경 / SHA 계산 불가 / 예외 모두 BLOCKED (fail-closed).
     _cx_result_path = _codex_review_result_path()
     if _cx_result_path.exists():
         try:
@@ -27875,8 +28002,24 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             _stored_bin_sha = str(_cx_res.get("codex_binary_sha256", "") or "")
             if _stored_bin_path and _stored_bin_sha and not _stored_bin_sha.startswith("unreadable:"):
                 _cur_trust = _verify_codex_binary_path_trust(_stored_bin_path)
+                # REJECT#10: 신뢰 실패 → fail-closed
+                if not _cur_trust["trusted"]:
+                    _die(
+                        "[BLOCKED] failure_code=codex_binary_revalidation_trust_failed\n"
+                        f"  Codex 실행 파일 경로 신뢰 검증 실패: "
+                        f"{_cur_trust.get('untrusted_reason', 'unknown')}\n"
+                        "  gates codex-review를 재실행하세요."
+                    )
                 _cur_sha = _cur_trust.get("sha256", "")
-                if _cur_sha and _cur_sha != _stored_bin_sha:
+                # REJECT#10: SHA 계산 불가 → fail-closed
+                if not _cur_sha or _cur_sha.startswith("unreadable:"):
+                    _die(
+                        "[BLOCKED] failure_code=codex_binary_sha_unreadable\n"
+                        "  Codex 실행 파일 SHA 계산 실패 — "
+                        "gates codex-review를 재실행하세요."
+                    )
+                # SHA 변경 → fail-closed
+                if _cur_sha != _stored_bin_sha:
                     _die(
                         "[BLOCKED] failure_code=codex_binary_sha_changed\n"
                         f"  Codex 실행 파일 SHA가 변경됐습니다.\n"
@@ -27884,8 +28027,13 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                         f"  현재 SHA: {_cur_sha[:16]}...\n"
                         "  gates codex-review를 재실행하여 최신 binary로 검토를 갱신하세요."
                     )
-        except Exception:  # noqa: BLE001
-            pass  # SHA 재검증 실패는 fail-open (binary 해시 실패 시 차단하지 않음)
+        except (json.JSONDecodeError, OSError) as _exc:
+            # REJECT#10: JSON 파싱 실패 / 파일 읽기 실패도 fail-closed
+            _die(
+                "[BLOCKED] failure_code=codex_binary_revalidation_error\n"
+                f"  Codex review 결과 파일 읽기/파싱 실패: {type(_exc).__name__}\n"
+                "  gates codex-review를 재실행하세요."
+            )
 
     # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
     # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다

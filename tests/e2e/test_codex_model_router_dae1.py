@@ -4518,3 +4518,91 @@ class TestTC53CodexBinaryPathTrust:
         assert _effort == "unknown", (
             f"REJECT#9 AC#4: verdict JSON에서 effort가 추출됨: {_effort!r}"
         )
+
+
+class TestTC54CodexBinaryArbitraryPathBlocked:
+    """REJECT#10 검증: 임의 사용자 경로 바이너리를 차단하고 request-accept 재검증을 fail-closed로 처리한다.
+
+    AC1: 임의 사용자 경로의 가짜 codex → codex_binary_untrusted_path BLOCKED.
+    AC2: 가짜 바이너리가 정상 메타데이터를 출력해도 actual_verified/acceptance_eligible=true 불가.
+    AC3: npm global bin 검증 경로만 신뢰, 절대 경로/출처/SHA-256 기록.
+    AC4: request-accept 재검증 — 신뢰 실패/SHA 불일치/해시 계산 실패/예외 모두 BLOCKED.
+    """
+
+    def test_tc54a_arbitrary_path_untrusted_reason_in_source(self) -> None:
+        """REJECT#10 AC1: _verify_codex_binary_path_trust 소스에 'binary_in_arbitrary_user_path' 문자열이 있다."""
+        import inspect
+        _src = inspect.getsource(pipeline._verify_codex_binary_path_trust)
+        assert "binary_in_arbitrary_user_path" in _src, (
+            "REJECT#10 AC1: _verify_codex_binary_path_trust에 arbitrary user path 차단 로직 없음"
+        )
+
+    def test_tc54b_get_npm_global_bin_called_in_trust_function(self) -> None:
+        """REJECT#10 AC3: _verify_codex_binary_path_trust가 _get_npm_global_bin을 호출한다."""
+        import inspect
+        _src = inspect.getsource(pipeline._verify_codex_binary_path_trust)
+        assert "_get_npm_global_bin" in _src, (
+            "REJECT#10 AC3: _verify_codex_binary_path_trust가 npm global bin 쿼리를 하지 않음"
+        )
+
+    def test_tc54c_arbitrary_path_binary_blocked_by_trust_check(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """REJECT#10 AC1: npm global bin / 시스템 경로 밖의 실제 파일 → trusted=False, binary_in_arbitrary_user_path."""
+        import tempfile
+
+        # 1. fake binary를 tmp_path/subdir에 생성 (실제 존재하는 파일)
+        _fake_dir = tmp_path / "subdir_codex_fake"
+        _fake_dir.mkdir()
+        _fake_bin = _fake_dir / "codex.cmd"
+        _fake_bin.write_text("@echo fake codex\r\n", encoding="utf-8")
+
+        # 2. gettempdir를 tmp_path/fake_tmpdir로 바꿔서 temp 체크에 걸리지 않게 함
+        _mock_tmpdir = tmp_path / "fake_tmpdir"
+        _mock_tmpdir.mkdir()
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(_mock_tmpdir))
+
+        # 3. npm global bin도 tmp_path/npm_bin으로 설정 (fake_bin과 다른 경로)
+        _mock_npm_bin = tmp_path / "npm_bin"
+        _mock_npm_bin.mkdir()
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: str(_mock_npm_bin))
+
+        # 4. _verify_codex_binary_path_trust 호출
+        _result = pipeline._verify_codex_binary_path_trust(str(_fake_bin))
+
+        assert not _result["trusted"], (
+            f"REJECT#10 AC1: 임의 경로 바이너리가 trusted=True 반환: {_result}"
+        )
+        _reason = str(_result.get("untrusted_reason", ""))
+        assert "arbitrary_user_path" in _reason, (
+            f"REJECT#10 AC1: untrusted_reason에 'arbitrary_user_path' 없음: {_reason!r}"
+        )
+
+    def test_tc54d_request_accept_revalidation_fail_closed_for_trust_failure(self) -> None:
+        """REJECT#10 AC4: _cmd_gates_request_accept 소스에 신뢰 실패 fail-closed 코드가 있다."""
+        import inspect
+        _src = inspect.getsource(pipeline._cmd_gates_request_accept)
+        assert "codex_binary_revalidation_trust_failed" in _src, (
+            "REJECT#10 AC4: request-accept에 신뢰 실패 fail-closed(codex_binary_revalidation_trust_failed) 없음"
+        )
+
+    def test_tc54e_request_accept_revalidation_fail_closed_for_sha_unreadable(self) -> None:
+        """REJECT#10 AC4: _cmd_gates_request_accept 소스에 SHA 계산 불가 fail-closed 코드가 있다."""
+        import inspect
+        _src = inspect.getsource(pipeline._cmd_gates_request_accept)
+        assert "codex_binary_sha_unreadable" in _src, (
+            "REJECT#10 AC4: request-accept에 SHA 계산 실패 fail-closed(codex_binary_sha_unreadable) 없음"
+        )
+
+    def test_tc54f_request_accept_revalidation_exception_is_fail_closed(self) -> None:
+        """REJECT#10 AC4: _cmd_gates_request_accept의 재검증 예외 처리가 fail-closed(pass 없음)이다."""
+        import inspect
+        _src = inspect.getsource(pipeline._cmd_gates_request_accept)
+        # SHA 재검증 블록의 except 절이 fail-closed(_die 호출)여야 함
+        assert "codex_binary_revalidation_error" in _src, (
+            "REJECT#10 AC4: request-accept 재검증 예외를 fail-closed로 처리하지 않음"
+        )
+        # 이전 fail-open 패턴("SHA 재검증 실패는 fail-open")이 제거됐는지 확인
+        assert "SHA 재검증 실패는 fail-open" not in _src, (
+            "REJECT#10 AC4: request-accept에 여전히 fail-open 주석/패턴이 남아 있음"
+        )
