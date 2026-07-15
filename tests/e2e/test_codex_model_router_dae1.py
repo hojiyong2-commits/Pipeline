@@ -8099,3 +8099,87 @@ def test_tc49b_npm_subprocess_env_clean():
         assert "PATH" in captured_env or "Path" in captured_env, (
             "REJECT#34: sanitized env가 정상 배선되지 않음 (PATH 누락)"
         )
+
+
+class TestTC61Reject35MissingFunctionConstantsCritical:
+    """REJECT#35: 승인 신뢰 경계 helper(_is_valid_sha256_hex, _codex_clean_env,
+    _run_codex_preflight_checks) 및 CRITICAL 파일 집합 상수(_CODEX_CRITICAL_FILE_EXACT,
+    _CODEX_CRITICAL_FILE_PREFIXES)가 등록됐는지 검증한다."""
+
+    def test_tc61a_is_valid_sha256_hex_in_critical_functions(self) -> None:
+        """REJECT#35 AC#1: _is_valid_sha256_hex가 CODEX_CRITICAL_FUNCTIONS에 있다."""
+        assert "_is_valid_sha256_hex" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+            "REJECT#35 AC#1: _is_valid_sha256_hex가 CODEX_CRITICAL_FUNCTIONS에 없음 — "
+            "변조 시 위조 SHA 통과 가능하므로 CRITICAL 등록 필수"
+        )
+
+    def test_tc61b_codex_clean_env_in_critical_functions(self) -> None:
+        """REJECT#35 AC#2: _codex_clean_env가 CODEX_CRITICAL_FUNCTIONS에 있다."""
+        assert "_codex_clean_env" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+            "REJECT#35 AC#2: _codex_clean_env가 CODEX_CRITICAL_FUNCTIONS에 없음 — "
+            "변조 시 OPENAI_API_KEY가 Codex subprocess에 노출 가능"
+        )
+
+    def test_tc61c_run_codex_preflight_checks_in_critical_functions(self) -> None:
+        """REJECT#35 AC#3: _run_codex_preflight_checks가 CODEX_CRITICAL_FUNCTIONS에 있다."""
+        assert "_run_codex_preflight_checks" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+            "REJECT#35 AC#3: _run_codex_preflight_checks가 CODEX_CRITICAL_FUNCTIONS에 없음 — "
+            "변조 시 실행 전 전체 trust-chain 검사를 우회 가능"
+        )
+
+    def test_tc61d_critical_file_exact_in_critical_constants(self) -> None:
+        """REJECT#35 AC#4: _CODEX_CRITICAL_FILE_EXACT가 CODEX_CRITICAL_CONSTANTS에 있다."""
+        assert "_CODEX_CRITICAL_FILE_EXACT" in pipeline.CODEX_CRITICAL_CONSTANTS, (
+            "REJECT#35 AC#4: _CODEX_CRITICAL_FILE_EXACT가 CODEX_CRITICAL_CONSTANTS에 없음 — "
+            "변조 시 특정 파일 CRITICAL 분류가 HIGH로 저하 가능"
+        )
+
+    def test_tc61e_critical_file_prefixes_in_critical_constants(self) -> None:
+        """REJECT#35 AC#5: _CODEX_CRITICAL_FILE_PREFIXES가 CODEX_CRITICAL_CONSTANTS에 있다."""
+        assert "_CODEX_CRITICAL_FILE_PREFIXES" in pipeline.CODEX_CRITICAL_CONSTANTS, (
+            "REJECT#35 AC#5: _CODEX_CRITICAL_FILE_PREFIXES가 CODEX_CRITICAL_CONSTANTS에 없음 — "
+            "변조 시 CRITICAL 경로 판정 우회 가능"
+        )
+
+    def test_tc61f_is_valid_sha256_hex_change_triggers_critical(self) -> None:
+        """REJECT#35 AC#1: _is_valid_sha256_hex가 CODEX_CRITICAL_FUNCTIONS에 있으면
+        해당 함수만 변경된 경우 _classify_codex_review_risk가 CRITICAL을 반환한다."""
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], ["_is_valid_sha256_hex"])
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#35 AC#1: _is_valid_sha256_hex 단독 변경이 CRITICAL 아님. got={r['risk_level']!r}"
+        )
+        assert r.get("matched_rule") == "critical_function", (
+            f"REJECT#35 AC#1: matched_rule이 critical_function 아님. got={r.get('matched_rule')!r}"
+        )
+
+    def test_tc61g_codex_clean_env_change_triggers_critical(self) -> None:
+        """REJECT#35 AC#2: _codex_clean_env 단독 변경이 CRITICAL 분류를 트리거한다."""
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], ["_codex_clean_env"])
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#35 AC#2: _codex_clean_env 단독 변경이 CRITICAL 아님. got={r['risk_level']!r}"
+        )
+
+    def test_tc61h_run_preflight_change_triggers_critical(self) -> None:
+        """REJECT#35 AC#3: _run_codex_preflight_checks 단독 변경이 CRITICAL 분류를 트리거한다."""
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], ["_run_codex_preflight_checks"])
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#35 AC#3: _run_codex_preflight_checks 단독 변경이 CRITICAL 아님. got={r['risk_level']!r}"
+        )
+
+    def test_tc61i_critical_file_exact_change_triggers_critical(self) -> None:
+        """REJECT#35 AC#4: _CODEX_CRITICAL_FILE_EXACT 상수 변경이 CRITICAL 분류를 트리거한다.
+        _detect_changed_critical_constants 결과를 직접 주입하여 git 의존 없이 검증한다."""
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], [], ["_CODEX_CRITICAL_FILE_EXACT"])
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#35 AC#4: _CODEX_CRITICAL_FILE_EXACT 변경이 CRITICAL 아님. got={r['risk_level']!r}"
+        )
+        assert r.get("matched_rule") == "critical_constant", (
+            f"REJECT#35 AC#4: matched_rule이 critical_constant 아님. got={r.get('matched_rule')!r}"
+        )
+
+    def test_tc61j_critical_file_prefixes_change_triggers_critical(self) -> None:
+        """REJECT#35 AC#5: _CODEX_CRITICAL_FILE_PREFIXES 상수 변경이 CRITICAL 분류를 트리거한다."""
+        r = pipeline._classify_codex_review_risk(["pipeline.py"], [], ["_CODEX_CRITICAL_FILE_PREFIXES"])
+        assert r["risk_level"] == "CRITICAL", (
+            f"REJECT#35 AC#5: _CODEX_CRITICAL_FILE_PREFIXES 변경이 CRITICAL 아님. got={r['risk_level']!r}"
+        )

@@ -2441,6 +2441,15 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   _verify_node_interpreter_trust를 단독 변경하면 사용자 쓰기 가능 위치의 악성 node를
     #   그대로 실행시켜 로그인·모델·APPROVE 출력을 위조할 수 있으므로 CRITICAL 분류 필수이다.
     "_verify_node_interpreter_trust",
+    # IMP-20260712-DAE1 REJECT#35: 승인 신뢰 경계 helper 추가 등록.
+    #   이 함수들을 단독으로 변경하면 SHA 검증, subprocess 환경 정제, 실행 전 신뢰 검사
+    #   전체를 우회할 수 있으므로 CRITICAL 분류 필수이다.
+    #   - _is_valid_sha256_hex: SHA256 형식 검증 — 변조 시 위조 SHA 통과 허용
+    #   - _codex_clean_env: Codex subprocess 환경 정제 — 변조 시 OPENAI_API_KEY 노출
+    #   - _run_codex_preflight_checks: 실행 전 전체 trust-chain 검사 — 변조 시 신뢰 검증 우회
+    "_is_valid_sha256_hex",
+    "_codex_clean_env",
+    "_run_codex_preflight_checks",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -2489,6 +2498,11 @@ CODEX_CRITICAL_CONSTANTS: List[str] = [
     "CODEX_VERIFICATION_ACTUAL",
     "CODEX_CHATGPT_LOGIN_MARKER",
     "_CODEX_EFFORT_CANONICAL",
+    # IMP-20260712-DAE1 REJECT#35: CRITICAL 파일 집합·검증 정책 상수 추가.
+    #   이 상수들을 변경하면 _is_codex_critical_file 판정이 우회되어 trust-root 파일이
+    #   CRITICAL 대신 HIGH로 저하될 수 있으므로 CRITICAL 분류 필수이다.
+    "_CODEX_CRITICAL_FILE_EXACT",
+    "_CODEX_CRITICAL_FILE_PREFIXES",
 ]
 
 # risk level별 모델 정책 SSoT.
