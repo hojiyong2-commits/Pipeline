@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <run_id>dev-64c34360b04ab29c</run_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_model_router_dae1.py</file>
+    </files_to_modify>
+    <excluded_files>none</excluded_files>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>CODEX_REVIEW_BUNDLE_BUDGET_CHARS</target_function>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_model_router_dae1.py</file>
+    </target_files>
+    <affected_call_sites>
+      <site>_build_codex_review_bundle (budget 적용 지점)</site>
+    </affected_call_sites>
+    <change_summary>budget 상수 1줄 + 테스트 하드코딩 3줄 수정</change_summary>
+  </impact_analysis>
+  <changed_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_model_router_dae1.py</file>
+  </changed_files>
+  <change_summary>
+    CODEX_REVIEW_BUNDLE_BUDGET_CHARS 830000→1200000 (budget fix for 21-file diff).
+    tests/e2e/test_codex_model_router_dae1.py 내 하드코딩 850_000 → 1_300_000 (3곳: tc42e, tc44d, tc44e).
+    test_tc30c_evidence_complete_true_with_current_diff PASS 확인.
+  </change_summary>
+  <evidence>
+    <test_results>403 passed, 1 skipped — tests/e2e/test_codex_model_router_dae1.py + tests/e2e/test_codex_defects_dae1.py</test_results>
+    <budget_fix>CODEX_REVIEW_BUNDLE_BUDGET_CHARS: 830000 → 1200000 (pipeline.py line 2697)</budget_fix>
+    <test_fix>test_codex_model_router_dae1.py lines 2634, 3025, 3078: 850_000 → 1_300_000</test_fix>
+  </evidence>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_model_router_dae1.py</git_diff_files>
+    <manifest_files>MT-1: pipeline.py, MT-9: tests/e2e/test_codex_model_router_dae1.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
