@@ -6426,6 +6426,11 @@ class TestTC21ProvenanceBlockingE2E:
             pipeline, "_find_codex_native_binary",
             lambda _js: native,
         )
+        # REJECT#22: Authenticode 검증 mock → 정상 설치를 시뮬레이션 (OpenAI 서명 있음)
+        monkeypatch.setattr(
+            pipeline, "_check_authenticode_signature",
+            lambda _path: {"available": True, "ok": True, "subject": 'CN="OpenAI OpCo, LLC"', "reason": "authenticode_valid_openai"},
+        )
 
         # npm global bin이 tmp_path를 반환하도록 (경로 신뢰 우회 → trusted=True 확보)
         npm_bin_dir = str(tmp_path / "npm_bin")
@@ -6437,13 +6442,12 @@ class TestTC21ProvenanceBlockingE2E:
         wrapper = self._make_fake_npm_wrapper(tmp_path)
         _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
 
-        # REJECT#20 재조정: npm 7+ 정상 설치 → provenance 부재 → acceptance_eligible=True(non-blocking)
+        # REJECT#22: Authenticode valid(OpenAI 서명) → acceptance_eligible=True
         assert _r.get("trusted") is True, (
             f"AC-2 실패: 정상 체인인데 trusted=False: {_r!r}"
         )
         assert _r.get("acceptance_eligible") is True, (
-            f"AC-2 실패: provenance 부재(npm 7+ 정상)인데 acceptance_eligible=False — "
-            f"부재는 non-blocking이어야 함. 결과: {_r!r}"
+            f"AC-2 실패: Authenticode valid인데 acceptance_eligible=False. 결과: {_r!r}"
         )
 
     def test_tc21b_npm_ls_integrity_ok_acceptance_eligible_true(
@@ -6489,6 +6493,11 @@ class TestTC21ProvenanceBlockingE2E:
         )
         monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
         monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
+        # REJECT#22: Authenticode mock (정상 설치 → OpenAI 서명 있음)
+        monkeypatch.setattr(
+            pipeline, "_check_authenticode_signature",
+            lambda _path: {"available": True, "ok": True, "subject": 'CN="OpenAI OpCo, LLC"', "reason": "authenticode_valid_openai"},
+        )
         npm_bin_dir = str(tmp_path / "npm_bin")
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
         monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
@@ -6498,7 +6507,7 @@ class TestTC21ProvenanceBlockingE2E:
         _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
 
         assert _r.get("acceptance_eligible") is True, (
-            f"AC-3 실패: npm ls ok인데 acceptance_eligible={_r.get('acceptance_eligible')!r}. "
+            f"AC-3 실패: npm ls ok + Authenticode valid인데 acceptance_eligible={_r.get('acceptance_eligible')!r}. "
             f"결과: {_r!r}"
         )
 
@@ -6550,6 +6559,11 @@ class TestTC21ProvenanceBlockingE2E:
         )
         monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
         monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
+        # REJECT#22: Authenticode mock (PowerShell 호출 방지, 속도 개선)
+        monkeypatch.setattr(
+            pipeline, "_check_authenticode_signature",
+            lambda _path: {"available": True, "ok": False, "subject": "", "reason": "authenticode_invalid:NotSigned:"},
+        )
         npm_bin_dir = str(tmp_path / "npm_bin")
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
         monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
@@ -6563,6 +6577,68 @@ class TestTC21ProvenanceBlockingE2E:
         )
         assert "npm_ls_integrity_invalid" in (_r.get("untrusted_reason") or ""), (
             f"AC-4 실패: untrusted_reason에 'npm_ls_integrity_invalid' 없음: {_r.get('untrusted_reason')!r}"
+        )
+
+    def test_tc21f_authenticode_invalid_acceptance_eligible_false(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """REJECT#22 AC-1/2: Authenticode 서명 없음/위조 → acceptance_eligible=False (fail-closed).
+
+        %APPDATA%\\npm에 가짜 chain을 구성해도 native binary에 OpenAI 서명 없으면 차단.
+        사용자 쓰기 가능 경로에서 npm provenance 부재 + Authenticode 실패 → 승인 자격 없음.
+        """
+        import tempfile as _tf_mod
+
+        pkg_dir = tmp_path / "node_modules" / "@openai" / "codex"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        bin_dir = pkg_dir / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        js_ep = bin_dir / "codex.js"
+        js_ep.write_text("#!/usr/bin/env node\nconsole.log('codex');\n", encoding="utf-8")
+        vendor_dir = pkg_dir / "vendor"
+        vendor_dir.mkdir(exist_ok=True)
+        if pipeline.sys.platform == "win32":
+            native = vendor_dir / "codex-x86_64-pc-windows-msvc.exe"
+        else:
+            native = vendor_dir / "codex-x86_64-unknown-linux-gnu"
+        native.write_bytes(b"\x00FAKE_UNSIGNED_NATIVE")
+
+        monkeypatch.setattr(_tf_mod, "gettempdir", lambda: "/nonexistent_temp_dir_for_tc21f")
+        monkeypatch.setattr(
+            pipeline, "_check_npm_lockfile_integrity",
+            lambda _root: {"available": False, "ok": True, "reason": "lockfile_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_check_package_json_npm_integrity",
+            lambda _root: {"available": False, "ok": True, "reason": "integrity_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_get_npm_ls_integrity",
+            lambda _root=None: {"available": False, "ok": True, "reason": "npm_ls_absent"},
+        )
+        monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
+        monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
+        # Authenticode: 서명 없음 (가짜 binary 시나리오)
+        monkeypatch.setattr(
+            pipeline, "_check_authenticode_signature",
+            lambda _path: {"available": True, "ok": False, "subject": "", "reason": "authenticode_invalid:NotSigned:"},
+        )
+        npm_bin_dir = str(tmp_path / "npm_bin")
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
+        monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
+        monkeypatch.setattr(pipeline, "_verify_npm_wrapper_content", lambda _p: True)
+
+        wrapper = self._make_fake_npm_wrapper(tmp_path)
+        _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
+
+        assert _r.get("trusted") is True, (
+            f"TC-21f 실패: 체인 구조는 OK인데 trusted=False: {_r!r}"
+        )
+        assert _r.get("acceptance_eligible") is False, (
+            f"TC-21f 실패: Authenticode 실패인데 acceptance_eligible=True (차단되어야 함). 결과: {_r!r}"
+        )
+        assert "authenticode" in (_r.get("provenance_reason") or "").lower(), (
+            f"TC-21f 실패: provenance_reason에 'authenticode' 없음: {_r.get('provenance_reason')!r}"
         )
 
     def test_tc21d_acceptance_eligible_false_chatgpt_auth_blocked(

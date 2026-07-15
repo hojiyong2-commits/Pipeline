@@ -9742,6 +9742,58 @@ def _verify_direct_native_ownership(native_path: "Path") -> Dict[str, Any]:
         }
 
 
+def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
+    """REJECT#22: Windows Authenticode 서명으로 native binary가 OpenAI 서명인지 검증한다.
+
+    npm 7+ 글로벌 설치는 lockfile·package.json·npm ls provenance가 모두 absent이 정상.
+    이 함수는 npm provenance와 독립된 OS 레벨 신뢰 소스를 제공한다.
+
+    Returns:
+        {"available": bool, "ok": bool, "subject": str, "reason": str}
+        available=True  → Authenticode 검사가 실행됨 (바이너리 존재, Windows 환경)
+        ok=True         → 서명 유효 + Subject에 "openai" 포함
+    """
+    _r: Dict[str, Any] = {"available": False, "ok": False, "subject": "", "reason": ""}
+    if sys.platform != "win32":
+        _r["reason"] = "non_windows"
+        return _r
+    if not native_binary_path or not os.path.isfile(native_binary_path):
+        _r["reason"] = "binary_not_found"
+        return _r
+    try:
+        _safe_path = native_binary_path.replace("'", "").replace('"', "")
+        _ps_script = (
+            "$ErrorActionPreference = 'Stop';"
+            + f"$sig = Get-AuthenticodeSignature -FilePath '{_safe_path}';"
+            + "$subj = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { '' };"
+            + "@{status=$sig.Status.ToString();subject=$subj} | ConvertTo-Json -Compress"
+        )
+        _proc = subprocess.run(
+            ["powershell", "-NonInteractive", "-Command", _ps_script],
+            capture_output=True, text=True, timeout=20,
+        )
+        if _proc.returncode != 0:
+            _r["reason"] = f"powershell_error:{_proc.returncode}"
+            return _r
+        _stdout = (_proc.stdout or "").strip()
+        if not _stdout:
+            _r["reason"] = "powershell_empty_output"
+            return _r
+        _data = json.loads(_stdout)
+        _r["available"] = True
+        _r["subject"] = str(_data.get("subject") or "")
+        _status = str(_data.get("status") or "")
+        if _status == "Valid" and "openai" in _r["subject"].lower():
+            _r["ok"] = True
+            _r["reason"] = "authenticode_valid_openai"
+        else:
+            _r["ok"] = False
+            _r["reason"] = f"authenticode_invalid:{_status}:{_r['subject'][:60]}"
+    except Exception as _exc:  # noqa: BLE001
+        _r["reason"] = f"authenticode_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
+    return _r
+
+
 def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
     """REJECT#10: 공식 npm 설치 또는 시스템 경로만 신뢰; 임의 사용자 경로는 fail-closed.
 
@@ -9918,10 +9970,33 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["trusted"] = False
                 _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
                 return _r
-            # REJECT#17 수정 B + REJECT#19: package.json npm 레지스트리 provenance 교차 검증.
-            #   pkg_root = <js_entrypoint>/../.. = @openai/codex 패키지 루트.
-            #   REJECT#19 변경: 조작 양성은 즉시 fail-closed. 세 소스 모두 absent이면
-            #   trusted=True 유지하되 acceptance_eligible=False(독립 provenance 없음).
+            # REJECT#22: Authenticode 독립 신뢰 소스 검증 (항상 실행 — npm provenance와 독립).
+            #   npm 7+ 글로벌 설치는 lockfile·package.json·npm ls provenance가 모두 absent이 정상.
+            #   OS 수준 서명(Authenticode)이 유일한 독립 신뢰 소스: 공격자는 OpenAI 서명을 위조 불가.
+            #   - Windows: valid+OpenAI → acceptance_eligible=True; invalid → False (fail-closed).
+            #   - non-Windows: Authenticode 해당 없음 → acceptance_eligible=True (플랫폼별 신뢰).
+            _authenticode = _check_authenticode_signature(str(_native_bin))
+            if _authenticode.get("available"):
+                if _authenticode.get("ok"):
+                    _r["acceptance_eligible"] = True
+                    _r["provenance_reason"] = (
+                        f"authenticode_valid:{_authenticode.get('subject', '')[:40]}"
+                    )
+                else:
+                    # Authenticode 실행됐으나 실패 → fake/tampered binary → fail-closed
+                    _r["acceptance_eligible"] = False
+                    _r["provenance_reason"] = (
+                        f"authenticode_invalid:{_authenticode.get('reason', '')[:80]}"
+                    )
+            elif sys.platform == "win32":
+                # Windows인데 Authenticode 검사 불가 (binary 없음 등) → fail-closed
+                _r["acceptance_eligible"] = False
+                _r["provenance_reason"] = (
+                    f"authenticode_unavailable_win32:{_authenticode.get('reason', '')[:60]}"
+                )
+            # else: non-Windows → acceptance_eligible 기본값 True 유지 (POSIX 시스템 경로 기반 신뢰)
+            # REJECT#17 수정 B + REJECT#19: npm provenance 교차 검증 — 조작 양성(tamper) 탐지 전용.
+            #   acceptance_eligible은 Authenticode로 결정; 아래는 trust(trusted=False) 판정만 수행.
             try:
                 _pkg_root_for_integrity = _js_ep.parent.parent
                 # 소스 1: .package-lock.json (조작 양성이면 즉시 차단)
@@ -9940,28 +10015,18 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                         f"npm_integrity_non_registry_resolved:{_integ.get('reason', '')}"
                     )
                     return _r
-                # REJECT#19: 소스 1·2 모두 absent이면 소스 3(npm ls -g --json) fallback 시도.
-                #   npm ls available=True, ok=True → 독립 provenance 확보 (acceptance_eligible 유지).
-                #   npm ls available=True, ok=False → 조작 양성(integrity 형식 오류) → fail-closed.
-                #   npm ls absent → npm 7+ 글로벌 설치에서 정상 결과 (_integrity 미기록).
-                #                   absence는 non-blocking(3-layer 체인 구조 검증이 이미 완료됨).
-                # REJECT#20 설계 재조정: "provenance 부재"는 non-blocking.
-                #   npm 7+ 글로벌 설치 환경에서는 lockfile·package.json _integrity·npm ls _integrity
-                #   세 소스 모두 부재인 것이 정상이다. 조작 양성(available=True, ok=False)만 차단한다.
-                #   acceptance_eligible=False는 "조작 양성 → 바이너리 교체 가능" 시에만 설정한다.
+                # 소스 3: npm ls (조작 양성만 차단)
                 if not _lock.get("available") and not _integ.get("available"):
                     _npm_ls = _get_npm_ls_integrity(_pkg_root_for_integrity)
-                    if _npm_ls.get("available"):
-                        if not _npm_ls.get("ok"):
-                            _r["trusted"] = False
-                            _r["untrusted_reason"] = (
-                                f"npm_ls_integrity_invalid:{_npm_ls.get('reason', '')}"
-                            )
-                            return _r
-                        # npm ls ok → acceptance_eligible 유지 (True)
-                    # npm ls absent → acceptance_eligible 유지 (True, npm 7+ 정상 설치)
+                    if _npm_ls.get("available") and not _npm_ls.get("ok"):
+                        _r["trusted"] = False
+                        _r["untrusted_reason"] = (
+                            f"npm_ls_integrity_invalid:{_npm_ls.get('reason', '')}"
+                        )
+                        return _r
+                    # npm ls absent → non-blocking (Authenticode가 acceptance_eligible 결정)
             except Exception as _exc:  # noqa: BLE001
-                # provenance 확인 자체 실패는 정상 설치를 깨지 않도록 non-blocking(수정 A/C가 보완).
+                # provenance 확인 자체 실패는 정상 설치를 깨지 않도록 non-blocking.
                 pass
         elif _trusted_by_npm:
             # npm 래퍼 디렉토리에 있으나 JS 진입점을 찾을 수 없음 → fail-closed (AC#1/#4)
