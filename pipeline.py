@@ -2514,6 +2514,13 @@ CODEX_CRITICAL_CONSTANTS: List[str] = [
     "_CODEX_NODE_PRELOAD_VARS",
     # REJECT#14: Authenticode Issuer 패턴 목록 — 변경 시 자체 서명 우회 방어가 무력화된다.
     "_CODEX_KNOWN_CERT_ISSUER_PATTERNS",
+    # REJECT#20(IMP-20260712-DAE1): bounded trust 범위 목록 및 circuit breaker 임계값 — 변경 시
+    #   _classify_codex_findings의 scope 분류가 우회되거나 IN_SCOPE 취약점이 OUT_OF_SCOPE로 강등됩니다.
+    "CODEX_BOUNDED_TRUST_IN_SCOPE",
+    "CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC",
+    "CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED",
+    "CODEX_CB_MAX_SAME_CATEGORY_REPEATS",
+    "CODEX_CB_MAX_EFFECTIVE_REJECTS",
 ]
 
 
@@ -12465,6 +12472,19 @@ def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
     }
     if findings is None or not isinstance(findings, list) or len(findings) == 0:
         return out
+    # REJECT#20(IMP-20260712-DAE1): 세 bounded trust SSoT 목록이 상호 배타적(disjoint)인지 검증.
+    # 목록 간 겹침이 있으면 OUT_OF_SCOPE 우선 처리로 취약점이 강등될 수 있으므로 fail-closed BLOCKED.
+    _bt_in = set(CODEX_BOUNDED_TRUST_IN_SCOPE)
+    _bt_out = set(CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC)
+    _bt_env = set(CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED)
+    _bt_overlap = (_bt_in & _bt_out) | (_bt_in & _bt_env) | (_bt_out & _bt_env)
+    if _bt_overlap:
+        # 중복 감지 → fail-closed: IN_SCOPE P0 취급으로 reject_count_delta=1, acceptance 차단.
+        out["valid"] = False
+        out["in_scope_count"] = 1
+        out["in_scope_all_count"] = 1
+        out["reject_count_delta"] = 1
+        return out
     out["valid"] = True
     _cats: List[str] = []
     # REJECT#19(IMP-20260712-DAE1): 모든 finding이 명시적으로 OUT_OF_SCOPE_DIAGNOSTIC 목록에 있는지 추적.
@@ -12486,13 +12506,17 @@ def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
         # root_cause_category를 SSoT 목록에 매핑해 canonical_scope를 결정한다.
         # 전달된 scope와 불일치해도 SSoT canonical scope를 사용한다(fail-closed).
         # 알 수 없는 category는 fail-closed로 IN_SCOPE 처리한다.
+        # REJECT#20: 분류 순서를 ENVIRONMENT_UNTRUSTED > IN_SCOPE > OUT_OF_SCOPE_DIAGNOSTIC으로 변경.
+        #   OUT_OF_SCOPE를 마지막으로 확인하므로 중복이 있어도 더 제한적인 분류가 우선된다.
+        #   (disjointness 검사가 첫 번째 방어선; 이 순서는 두 번째 방어선.)
         if _cat:
             if _cat in CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED:
                 _canonical_scope = "ENVIRONMENT_UNTRUSTED"
+            elif _cat in CODEX_BOUNDED_TRUST_IN_SCOPE:
+                # REJECT#20: IN_SCOPE를 OUT_OF_SCOPE보다 먼저 확인 — 중복 시 IN_SCOPE 우선.
+                _canonical_scope = "IN_SCOPE"
             elif _cat in CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC:
                 _canonical_scope = "OUT_OF_SCOPE_DIAGNOSTIC"
-            elif _cat in CODEX_BOUNDED_TRUST_IN_SCOPE:
-                _canonical_scope = "IN_SCOPE"
             else:
                 # 알 수 없는 category → fail-closed로 IN_SCOPE 취급.
                 _canonical_scope = "IN_SCOPE"

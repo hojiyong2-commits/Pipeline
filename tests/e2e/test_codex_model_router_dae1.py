@@ -8028,6 +8028,53 @@ class TestBoundedTrustModelV2:
         assert cls["in_scope_count"] == 0          # P2 NOT in P0/P1 count
         assert cls["out_of_scope_diagnostic_count"] == 1
 
+    def test_reject38a_bounded_trust_constants_in_critical_constants_list(self):
+        """REJECT#20 AC-1: bounded trust 정책 상수가 CODEX_CRITICAL_CONSTANTS에 등록되어 있다."""
+        critical = pipeline.CODEX_CRITICAL_CONSTANTS
+        assert "CODEX_BOUNDED_TRUST_IN_SCOPE" in critical
+        assert "CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC" in critical
+        assert "CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED" in critical
+        assert "CODEX_CB_MAX_SAME_CATEGORY_REPEATS" in critical
+        assert "CODEX_CB_MAX_EFFECTIVE_REJECTS" in critical
+
+    def test_reject38b_overlap_in_scope_and_out_of_scope_blocked(self):
+        """REJECT#20 AC-2: IN_SCOPE와 OUT_OF_SCOPE에 같은 category → 분류 BLOCKED."""
+        import pipeline as _p
+        original_out = list(_p.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC)
+        _p.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC.append("fake_codex_exec")
+        try:
+            cls = pipeline._classify_codex_findings([
+                {"severity": "P0", "scope": "IN_SCOPE",
+                 "root_cause_category": "fake_codex_exec"},
+            ])
+            # disjointness 검사 → BLOCKED: valid=False, in_scope_count=1
+            assert cls["valid"] is False
+            assert cls["in_scope_count"] == 1
+            assert cls["reject_count_delta"] == 1
+        finally:
+            _p.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC[:] = original_out
+
+    def test_reject38c_fake_codex_exec_in_out_of_scope_fail_closed(self):
+        """REJECT#20 AC-3: fake_codex_exec을 OUT_OF_SCOPE 목록에 추가 → diagnostic_only=false, reject_count_delta=1."""
+        import pipeline as _p
+        original_out = list(_p.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC)
+        _p.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC.append("fake_codex_exec")
+        try:
+            cls = pipeline._classify_codex_findings([
+                {"severity": "P0", "scope": "IN_SCOPE",
+                 "root_cause_category": "fake_codex_exec"},
+            ])
+            assert cls["diagnostic_only"] is False   # fail-closed → not diagnostic
+            assert cls["reject_count_delta"] == 1    # fail-closed → reject
+        finally:
+            _p.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC[:] = original_out
+
+    def test_reject38d_critical_policy_has_force_review_and_cache_disabled(self):
+        """REJECT#20 AC-4: CRITICAL 분류 → force_review_required=True, cache_allowed=False."""
+        policy = pipeline._build_codex_model_policy("CRITICAL")
+        assert policy.get("force_review_required") is True
+        assert policy.get("cache_allowed") is False
+
     def test_reject37d_all_explicit_out_of_scope_diagnostic_only_true(self):
         """REJECT#19 AC-4: 모든 category가 명시적으로 OUT_OF_SCOPE 목록에 있을 때만 diagnostic_only=true."""
         # 모두 명시적 OUT_OF_SCOPE
