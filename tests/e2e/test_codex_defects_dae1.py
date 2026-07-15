@@ -632,7 +632,7 @@ def test_existing_head_sha_check_maintained(tmp_path: Path, monkeypatch) -> None
     )
     assert res["status"] == "BLOCKED", res
     assert res["failure_code"] == "codex_review_stale", res
-    assert "pr_head_sha" in res["message"], res
+    assert "pr_head_sha" in str(res["message"]), res
 
 
 def test_existing_packet_sha_check_maintained(tmp_path: Path, monkeypatch) -> None:
@@ -644,7 +644,7 @@ def test_existing_packet_sha_check_maintained(tmp_path: Path, monkeypatch) -> No
     )
     assert res["status"] == "BLOCKED", res
     assert res["failure_code"] == "codex_review_stale", res
-    assert "packet_sha256" in res["message"], res
+    assert "packet_sha256" in str(res["message"]), res
 
 
 if __name__ == "__main__":
