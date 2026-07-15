@@ -10796,16 +10796,40 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
     # IMP-20260712-DAE1 REJECT#3(요구6): verdict 스키마를 JSON으로 강제한다.
     # IMP-20260712-DAE1 bugfix#3/4: 모델이 파일을 읽거나 명령어를 실행하여 내부 타임아웃이 발생하는
     # 버그 수정. 위에서 제공한 diff 내용만 보고 판단하도록 명령어 실행과 파일 읽기를 금지한다.
+    # REJECT#21(IMP-20260712-DAE1) AC-1: bounded trust findings 스키마를 프롬프트에 명시한다.
+    #   Codex가 findings[]를 올바른 scope/root_cause_category로 제출해야 IN_SCOPE/OUT_OF_SCOPE
+    #   분류가 정확하게 동작한다. 스키마 미제공 시 Codex가 임의 scope 값을 쓰거나 category를 생략할 수 있음.
+    _bt_in_list = "\n".join(f"  - {c}" for c in CODEX_BOUNDED_TRUST_IN_SCOPE)
+    _bt_out_list = "\n".join(f"  - {c}" for c in CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC)
+    _bt_env_list = "\n".join(f"  - {c}" for c in CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED)
     lines += [
+        "",
+        "## Bounded Trust Findings 스키마 (선택 포함)",
+        "findings[]는 선택 사항입니다. 실제 bounded trust 경계 취약점 발견 시에만 포함하세요.",
+        "포함할 경우 각 finding의 필수 필드:",
+        '  {"severity": "P0|P1|P2|P3", "root_cause_category": "<아래 허용 목록 중 하나>",',
+        '   "scope": "IN_SCOPE|OUT_OF_SCOPE_DIAGNOSTIC|ENVIRONMENT_UNTRUSTED", "summary": "한국어 요약"}',
+        "",
+        "IN_SCOPE (실제 취약점 — 반드시 수정 필요, reject_count 증가):",
+        _bt_in_list,
+        "",
+        "OUT_OF_SCOPE_DIAGNOSTIC (이론적 위협 — reject_count 미증가, 진단 참고용):",
+        _bt_out_list,
+        "",
+        "ENVIRONMENT_UNTRUSTED (실행 환경 침해 신호 — 즉시 BLOCKED, acceptance_eligible=false):",
+        _bt_env_list,
         "",
         "## 출력 규칙 (엄격히 준수 필수)",
         "- 쉘 명령어를 실행하지 마세요 (command_execution 사용 금지).",
         "- 파일을 직접 읽지 마세요. 위 diff 내용만으로 판단하세요.",
         "- 리뷰 분석/설명/코드 인용 텍스트를 출력하지 마세요.",
         "- 마지막 출력은 아래 JSON 하나만 출력하세요 (다른 텍스트 없이).",
-        '승인: {"verdict": "APPROVE_TO_USER"}',
+        '승인(findings 없음): {"verdict": "APPROVE_TO_USER"}',
+        '승인(진단 findings 포함): {"verdict": "APPROVE_TO_USER", "findings": [...]}',
         '거절: {"verdict": "REJECT", "root_cause": "...", "reproduction": "...", '
         '"required_fix": "...", "acceptance_criteria": ["..."]}',
+        '거절(findings 포함): {"verdict": "REJECT", "root_cause": "...", "reproduction": "...", '
+        '"required_fix": "...", "acceptance_criteria": ["..."], "findings": [...]}',
         "REJECT인데 root_cause/reproduction/required_fix/acceptance_criteria 중 하나라도 "
         "누락되면 무효 처리됩니다.",
     ]
@@ -27212,6 +27236,41 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     if not pipeline_id:
         _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다.")
 
+    # REJECT#21(IMP-20260712-DAE1) AC-5: --start-epoch 운영 경로 — 사용자 결정에 의한 contract migration.
+    #   circuit breaker NON_CONVERGING 발동 후 사용자가 직접 실행하는 유일한 운영 진입점.
+    #   _record_user_authorized_contract_migration을 호출하여 새 review_epoch를 시작한다.
+    _start_epoch_reason = str(getattr(args, "start_epoch", None) or "").strip()
+    if _start_epoch_reason:
+        _migration_old_sha = str(
+            (state.get("codex_review_contract_migration") or {}).get("new_contract_sha256", "") or ""
+        )
+        _migration_new_sha = ""
+        try:
+            _migration_new_sha = _sha256_file(BASE_DIR / "pipeline.py")
+        except Exception:  # noqa: BLE001
+            _migration_new_sha = ""
+        if not _migration_new_sha:
+            _die(
+                "[BLOCKED] failure_code=contract_migration_sha_failed\n"
+                "  pipeline.py SHA 계산 실패 — contract migration 기록 불가 (fail-closed)."
+            )
+        _record_user_authorized_contract_migration(
+            state,
+            old_contract_sha256=_migration_old_sha,
+            new_contract_sha256=_migration_new_sha,
+            migration_reason=_start_epoch_reason,
+            decided_at=_now(),
+        )
+        _save_state(state, pipeline_id)
+        _new_epoch = str(
+            (state.get("codex_review_contract_migration") or {}).get("review_epoch", "")
+        )
+        print(f"[CODEX REVIEW] contract migration 기록 완료")
+        print(f"  review_epoch={_new_epoch}")
+        print(f"  migration_reason={_start_epoch_reason!r}")
+        print("  새 epoch에서 circuit breaker가 초기화됩니다.")
+        sys.exit(0)
+
     # BUG-20260702-E69E: 직전 기록에서 reject/CLI-error 누적 카운터를 읽는다.
     #   reject_count는 status==REJECTED일 때만, cli_error_count는 status==ERROR일 때만 누적한다.
     retry_cli_error = bool(getattr(args, "retry_cli_error", False))
@@ -28332,6 +28391,18 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     ]
     _raw_findings = _cli.get("findings")
     _findings_list: list = list(_raw_findings) if isinstance(_raw_findings, list) else []
+    # REJECT#21(IMP-20260712-DAE1) AC-2/AC-3: scope 기반 effective review_status 결정.
+    #   raw verdict → scope-overridden effective verdict 변환. reject_count/_reject_delta/
+    #   _effective_status/acceptance_eligible 모두 effective review_status를 SSoT로 사용한다.
+    # Case 1: APPROVE_TO_USER + IN_SCOPE P0/P1 finding → effective REJECTED (fail-closed).
+    #   Codex가 APPROVE_TO_USER를 출력했더라도 IN_SCOPE 취약점 finding이 있으면 verdict를 무효화한다.
+    if _finding_in_scope > 0 and review_status == "APPROVED":
+        review_status = "REJECTED"
+    # Case 2: REJECT + OUT_OF_SCOPE_DIAGNOSTIC only → effective APPROVED (진단 비차단).
+    #   모든 finding이 OUT_OF_SCOPE_DIAGNOSTIC이면 진단 참고용 → reject_count 미증가, 승인 자격 유지.
+    #   ENVIRONMENT_UNTRUSTED finding이 있으면(diagnostic_only=False 보장됨) Case 2 적용 안 됨.
+    if _finding_diagnostic_only and review_status == "REJECTED" and _finding_env_untrusted == 0:
+        review_status = "APPROVED"
     if review_status == "REJECTED":
         _reject_delta = int(_cli.get("reject_count_delta", 1) or 0) if _findings_present else 1
     else:
@@ -28533,7 +28604,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "codex_cli_exit_code": (cli_run.get("codex_cli_exit_code") if cli_run else None),
         "codex_cli_stdout_excerpt": (cli_run.get("codex_cli_stdout_excerpt", "") if cli_run else ""),
         "codex_cli_stderr_excerpt": (cli_run.get("codex_cli_stderr_excerpt", "") if cli_run else ""),
-        "verdict": verdict,
+        # REJECT#21(IMP-20260712-DAE1) AC-2/AC-3: scope-overridden effective verdict를 저장한다.
+        #   raw Codex 출력은 raw_codex_verdict에 보존(감사 추적용). verdict 필드는 항상 effective 값.
+        "verdict": ("APPROVE_TO_USER" if review_status == "APPROVED" else "REJECT"),
+        "raw_codex_verdict": verdict,  # 원본 Codex 출력 (scope 정규화 전) — 감사 추적 전용
         "verdict_source": _verdict_source_now,
         "reject_reason": (cli_run.get("reject_reason") if cli_run else (reason or None)),
         # IMP-20260712-DAE1 REJECT#9: _parse_json_verdict가 검증한 structured REJECT 필드를 보존.
@@ -28893,7 +28967,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "  동일 root_cause_category 반복 또는 실제 REJECT 임계값 도달 — 부분 패치로 해결 불가.\n"
             "  사용자 결정(USER_AUTHORIZED_CONTRACT_MIGRATION) 또는 전략 재설계가 필요합니다 (fail-closed)."
         )
-    sys.exit(0 if verdict == "APPROVE_TO_USER" else 1)
+    # REJECT#21(IMP-20260712-DAE1) AC-2/AC-3: exit code는 scope-overridden effective review_status 기반.
+    #   raw verdict("APPROVE_TO_USER" from Codex) 대신 effective review_status("APPROVED"/"REJECTED")를 사용.
+    #   _non_converging/_env_untrusted_blocked는 이미 _die()로 sys.exit(1) 처리됐으므로 여기 미도달.
+    sys.exit(0 if review_status == "APPROVED" else 1)
 
 
 # [Purpose]: BUG-20260702-E69E REJECT-1 — Codex Review 시도(attempt)마다 고유 식별자를 부여하여
@@ -29748,6 +29825,41 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             "codex_review_auth_source_not_chatgpt",
             f"auth_source={result.get('auth_source') or '(없음)'} — ChatGPT 인증 증거가 아닙니다 "
             "(fail-closed).",
+        )
+    # (8) REJECT#21(IMP-20260712-DAE1) AC-4: status/verdict/환경/수렴 상태를 명시적으로 검증한다.
+    #   acceptance_eligible=True이더라도 effective status/verdict 불일치, ENV_UNTRUSTED 증거,
+    #   또는 NON_CONVERGING 상태이면 운영 경로 진입 불가 (fail-closed).
+    #   scope 정규화 후 저장된 effective 값을 기준으로 검증한다 — raw_codex_verdict 미사용.
+    #   하위 호환(backward compat): status/verdict 필드가 없는 레거시 result는 empty string("")으로
+    #   읽히므로 empty이면 skip한다. 새 result(updated _cmd_gates_codex_review 기록)는 항상 이 필드를
+    #   포함하므로 비어 있을 경우가 없다.
+    _stored_ot_status = str(result.get("status", "") or "")
+    if _stored_ot_status and _stored_ot_status != "APPROVED":
+        return _blocked(
+            "codex_review_status_not_approved",
+            f"codex_review_result.status={_stored_ot_status!r} — APPROVED가 아닙니다 "
+            "(REJECTED/BLOCKED/NON_CONVERGING 등 비승인 상태는 운영 경로 진입 불가, fail-closed).",
+        )
+    _stored_ot_verdict = str(result.get("verdict", "") or "")
+    if _stored_ot_verdict and _stored_ot_verdict != "APPROVE_TO_USER":
+        return _blocked(
+            "codex_review_verdict_not_approve_to_user",
+            f"codex_review_result.verdict={_stored_ot_verdict!r} — APPROVE_TO_USER가 아닙니다 "
+            "(REJECT 등 비승인 verdict는 운영 경로 진입 불가, fail-closed).",
+        )
+    _stored_ot_env_cnt = int(result.get("environment_untrusted_count", 0) or 0)
+    if _stored_ot_env_cnt > 0:
+        return _blocked(
+            "codex_review_environment_untrusted_count",
+            f"codex_review_result.environment_untrusted_count={_stored_ot_env_cnt} > 0 — "
+            "실행 환경 침해 증거 존재, 운영 경로 진입 불가 (fail-closed).",
+        )
+    _stored_ot_nc_at = result.get("non_converging_at")
+    if _stored_ot_nc_at is not None:
+        return _blocked(
+            "codex_review_non_converging",
+            f"codex_review_result.non_converging_at={_stored_ot_nc_at!r} — "
+            "수렴하지 않은 결과는 운영 경로 진입 불가 (fail-closed).",
         )
     return {"status": "PASS"}
 
@@ -35239,6 +35351,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "request-accept가 stage할 snapshot과 동일한 packet을 staging하여 결정적 "
             "packet SHA를 계산해 검토 결과를 기록한다 (검토 대상==publish 대상 보장)."
+        ),
+    )
+    # REJECT#21(IMP-20260712-DAE1) AC-5: 사용자 결정에 의한 contract migration 운영 경로.
+    #   circuit breaker가 발동(NON_CONVERGING)하면 사용자가 직접 --start-epoch REASON을 실행하여
+    #   새 review_epoch를 시작한다. 이 경로만이 _record_user_authorized_contract_migration의 운영 진입점이다.
+    p_gate_codex.add_argument(
+        "--start-epoch", dest="start_epoch", default=None,
+        help=(
+            "사용자 결정에 의한 contract migration: 새 review_epoch를 시작합니다. "
+            "circuit breaker NON_CONVERGING 후 사용자가 전략적 재설계를 결정했을 때 실행. "
+            "REASON에 migration 사유를 전달하세요 (예: '바이너리 검증 전략 재설계')."
         ),
     )
 

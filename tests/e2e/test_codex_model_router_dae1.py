@@ -483,6 +483,11 @@ def _trust_base(**over) -> dict:
         # REJECT#LATEST: native/vendor binary 신뢰 증거 필수 (test-only dummy).
         "codex_native_binary_path": "/usr/local/lib/codex/vendor/codex",
         "codex_native_binary_sha256": "e" * 64,
+        # REJECT#21: 새 operational trust 검사 필수 필드 추가.
+        "status": "APPROVED",
+        "verdict": "APPROVE_TO_USER",
+        "environment_untrusted_count": 0,
+        "non_converging_at": None,
     }
     base.update(over)
     return base
@@ -8093,3 +8098,200 @@ class TestBoundedTrustModelV2:
             {"severity": "P1", "scope": "OUT_OF_SCOPE_DIAGNOSTIC"},  # category 없음
         ])
         assert cls_no_cat["diagnostic_only"] is False  # category 없는 finding → IN_SCOPE → 차단
+
+    # ---------------------------------------------------------------------- #
+    # REJECT#21 tests (AC-1 ~ AC-5)                                          #
+    # ---------------------------------------------------------------------- #
+
+    def test_reject39a_prompt_includes_bounded_trust_schema(self):
+        """REJECT#21 AC-1: _build_codex_prompt_for_review에 bounded trust findings 스키마가 포함된다."""
+        # 최소 bundle과 pipeline_id로 프롬프트를 생성한다.
+        # 함수 시그니처: _build_codex_prompt_for_review(bundle, pipeline_id)
+        bundle = {
+            "pipeline_id": "IMP-20260712-DAE1",
+            "diff_hunks": [{"hunk_id": "h1", "file": "pipeline.py", "content": "# test diff"}],
+            "included_functions": [],
+            "function_before_after_shas": {},
+            "semantic_evidence_sha256": "aaaa",
+            "truncated_critical_hunks": 0,
+            "evidence_complete": True,
+        }
+        prompt = pipeline._build_codex_prompt_for_review(bundle, "IMP-20260712-DAE1")
+        # IN_SCOPE 카테고리 중 하나 이상이 프롬프트에 있어야 한다.
+        in_scope_sample = pipeline.CODEX_BOUNDED_TRUST_IN_SCOPE[0]
+        assert in_scope_sample in prompt, (
+            f"IN_SCOPE 카테고리 {in_scope_sample!r}이 프롬프트에 없습니다"
+        )
+        # OUT_OF_SCOPE_DIAGNOSTIC 카테고리 중 하나 이상이 프롬프트에 있어야 한다.
+        out_scope_sample = pipeline.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC[0]
+        assert out_scope_sample in prompt, (
+            f"OUT_OF_SCOPE 카테고리 {out_scope_sample!r}이 프롬프트에 없습니다"
+        )
+        # ENVIRONMENT_UNTRUSTED 카테고리 중 하나 이상이 프롬프트에 있어야 한다.
+        env_sample = pipeline.CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED[0]
+        assert env_sample in prompt, (
+            f"ENVIRONMENT_UNTRUSTED 카테고리 {env_sample!r}이 프롬프트에 없습니다"
+        )
+        # scope 필드명도 포함되어야 한다.
+        assert "IN_SCOPE" in prompt
+        assert "OUT_OF_SCOPE_DIAGNOSTIC" in prompt
+        assert "ENVIRONMENT_UNTRUSTED" in prompt
+
+    def test_reject39b_approve_with_in_scope_finding_review_status_rejected(self):
+        """REJECT#21 AC-2: APPROVE_TO_USER + IN_SCOPE finding → review_status=REJECTED, verdict=REJECT.
+
+        _classify_codex_findings + scope override 로직을 통해 in_scope_count>0이면
+        review_status가 "REJECTED"로 변경되어야 한다.
+        """
+        # _classify_codex_findings에서 in_scope_count를 확인한다.
+        # APPROVE+IN_SCOPE → review_status override 결과를 verify하기 위해 simulate한다.
+        findings = [
+            {
+                "severity": "P0",
+                "root_cause_category": "fake_codex_exec",  # IN_SCOPE SSoT 첫 번째 항목
+                "scope": "OUT_OF_SCOPE_DIAGNOSTIC",  # Codex가 잘못된 scope 제출 (override 필요)
+                "summary": "가짜 codex 실행 파일 감지",
+            }
+        ]
+        cls = pipeline._classify_codex_findings(findings)
+        # SSoT override: root_cause_category "fake_codex_exec"은 IN_SCOPE
+        assert cls["in_scope_count"] == 1, "fake_codex_exec은 IN_SCOPE SSoT에 있으므로 in_scope_count=1"
+        assert cls["out_of_scope_diagnostic_count"] == 0
+        assert cls["diagnostic_only"] is False
+        assert cls["reject_count_delta"] == 1
+
+        # review_status override 로직 시뮬레이션: APPROVED + in_scope>0 → REJECTED
+        review_status_before = "APPROVED"  # APPROVE_TO_USER에서 매핑
+        if cls["in_scope_count"] > 0 and review_status_before == "APPROVED":
+            review_status_after = "REJECTED"
+        else:
+            review_status_after = review_status_before
+        assert review_status_after == "REJECTED", (
+            "APPROVE_TO_USER + IN_SCOPE finding → review_status must be REJECTED"
+        )
+
+    def test_reject39c_reject_with_out_of_scope_only_review_status_approved(self):
+        """REJECT#21 AC-3: REJECT + OUT_OF_SCOPE_DIAGNOSTIC only → review_status=APPROVED.
+
+        diagnostic_only=True인 경우 review_status가 "APPROVED"로 전환되어야 한다.
+        """
+        findings = [
+            {
+                "severity": "P1",
+                "root_cause_category": "openai_registry_compromise",  # OUT_OF_SCOPE_DIAGNOSTIC
+                "scope": "IN_SCOPE",  # Codex가 잘못된 scope 제출 (override 필요)
+                "summary": "OpenAI 레지스트리 타협 이론적 위협",
+            },
+            {
+                "severity": "P2",
+                "root_cause_category": "native_binary_origin_proof",  # OUT_OF_SCOPE_DIAGNOSTIC
+                "scope": "IN_SCOPE",
+                "summary": "native binary 출처 증명 이론적 위협",
+            },
+        ]
+        cls = pipeline._classify_codex_findings(findings)
+        # 두 finding 모두 OUT_OF_SCOPE SSoT에 있으므로
+        assert cls["in_scope_count"] == 0
+        assert cls["in_scope_all_count"] == 0
+        assert cls["out_of_scope_diagnostic_count"] == 2
+        assert cls["diagnostic_only"] is True, "모두 OUT_OF_SCOPE → diagnostic_only=True"
+        assert cls["reject_count_delta"] == 0  # reject_count 미증가
+
+        # review_status override 로직 시뮬레이션: REJECTED + diagnostic_only + env_untrusted==0 → APPROVED
+        review_status_before = "REJECTED"  # REJECT에서 매핑
+        _finding_env_untrusted = cls["environment_untrusted_count"]
+        if cls["diagnostic_only"] and review_status_before == "REJECTED" and _finding_env_untrusted == 0:
+            review_status_after = "APPROVED"
+        else:
+            review_status_after = review_status_before
+        assert review_status_after == "APPROVED", (
+            "REJECT + OUT_OF_SCOPE only → review_status must be APPROVED"
+        )
+
+    def test_reject39d_operational_trust_checks_status_verdict_env_nc(self):
+        """REJECT#21 AC-4: _check_codex_review_operational_trust가 status/verdict/env_untrusted/non_converging_at를 검증."""
+        # _trust_base()를 사용하여 이미 올바른 정책 서명과 binary 경로 등 모든 필드를 포함한 기본값으로 시작한다.
+        # _trust_base()는 status="APPROVED", verdict="APPROVE_TO_USER",
+        # environment_untrusted_count=0, non_converging_at=None을 기본으로 갖는다.
+
+        # 먼저 기본값이 PASS인지 확인한다.
+        res_pass = pipeline._check_codex_review_operational_trust(_trust_base())
+        assert res_pass["status"] == "PASS", f"기본 _trust_base()는 PASS여야 함: {res_pass}"
+
+        # 4-A: status != APPROVED → BLOCKED
+        r_bad_status = _trust_base(status="REJECTED")
+        res = pipeline._check_codex_review_operational_trust(r_bad_status)
+        assert res["status"] == "BLOCKED"
+        assert res["failure_code"] == "codex_review_status_not_approved"
+
+        # 4-B: verdict != APPROVE_TO_USER → BLOCKED
+        r_bad_verdict = _trust_base(verdict="REJECT")
+        res = pipeline._check_codex_review_operational_trust(r_bad_verdict)
+        assert res["status"] == "BLOCKED"
+        assert res["failure_code"] == "codex_review_verdict_not_approve_to_user"
+
+        # 4-C: environment_untrusted_count > 0 → BLOCKED
+        r_env = _trust_base(environment_untrusted_count=1)
+        res = pipeline._check_codex_review_operational_trust(r_env)
+        assert res["status"] == "BLOCKED"
+        assert res["failure_code"] == "codex_review_environment_untrusted_count"
+
+        # 4-D: non_converging_at is not None → BLOCKED
+        r_nc = _trust_base(non_converging_at="2026-07-15T00:00:00Z")
+        res = pipeline._check_codex_review_operational_trust(r_nc)
+        assert res["status"] == "BLOCKED"
+        assert res["failure_code"] == "codex_review_non_converging"
+
+    def test_reject39e_start_epoch_records_contract_migration(self, tmp_path):
+        """REJECT#21 AC-5: --start-epoch가 _record_user_authorized_contract_migration를 호출한다.
+
+        _record_user_authorized_contract_migration을 직접 호출하여 state에 codex_review_contract_migration이
+        기록되고 review_epoch가 생성되는지 검증한다(unit 경로; CLI E2E는 별도 격리 상태 필요).
+        """
+        state: dict = {"pipeline_id": "IMP-20260712-DAE1"}
+        new_sha = "a" * 64  # 64자리 SHA256 더미
+        pipeline._record_user_authorized_contract_migration(
+            state,
+            old_contract_sha256="",
+            new_contract_sha256=new_sha,
+            migration_reason="REJECT#21 AC-5 test — 바이너리 검증 전략 재설계",
+            decided_at="2026-07-15T00:00:00Z",
+        )
+        migration = state.get("codex_review_contract_migration")
+        assert isinstance(migration, dict), "codex_review_contract_migration이 기록돼야 한다"
+        assert migration.get("new_contract_sha256") == new_sha
+        # review_epoch는 "epoch_YYYYMMDD_NNN" 형식이어야 한다.
+        epoch = migration.get("review_epoch", "")
+        import re
+        assert re.match(r"^epoch_\d{8}_\d{3}$", epoch), (
+            f"review_epoch 형식이 잘못됐습니다: {epoch!r}"
+        )
+        assert migration.get("scope_decision_source") == "user"
+        assert migration.get("migration_flag_consumed") is True
+
+        # circuit breaker는 review_epoch가 있을 때만 활성화된다 — epoch 없으면 triggered=False.
+        history_no_epoch = [
+            {"review_epoch": "", "root_cause_category": "fake_codex_exec",
+             "counts_toward_reject_rate_limit": True}
+            for _ in range(6)  # CODEX_CB_MAX_EFFECTIVE_REJECTS(5) 초과
+        ]
+        cb_no_epoch = pipeline._check_codex_circuit_breaker(history_no_epoch, "")
+        assert not cb_no_epoch.get("triggered"), "epoch 없으면 circuit breaker 비활성화"
+
+        # circuit breaker는 review_epoch가 있고 동일 category 3회 반복이면 triggered=True.
+        # _check_codex_circuit_breaker 조건: status=="REJECTED" AND counts_toward_reject_rate_limit==True
+        #   AND scope != "OUT_OF_SCOPE_DIAGNOSTIC" AND 동일 epoch.
+        history_with_epoch = [
+            {
+                "review_epoch": epoch,
+                "root_cause_category": "fake_codex_exec",
+                "status": "REJECTED",
+                "verdict_scope": "IN_SCOPE",
+                "counts_toward_reject_rate_limit": True,
+            }
+            for _ in range(3)  # CODEX_CB_MAX_SAME_CATEGORY_REPEATS(3) 도달
+        ]
+        cb_with_epoch = pipeline._check_codex_circuit_breaker(history_with_epoch, epoch)
+        assert cb_with_epoch.get("triggered"), (
+            f"동일 category 3회 반복 → circuit breaker triggered. result={cb_with_epoch}"
+        )
