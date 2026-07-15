@@ -1,0 +1,88 @@
+<qa_report>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+  <category_check>
+    <wa>PASS — codex CLI 호출 경로(preflight/binary trust chain)의 timeout/retry/오류 분기/JSON fallback은 이전 D1-D7 사이클에서 검증됨. 이번 budget fix는 네트워크 경로 미변경.</wa>
+    <ui>N-A — GUI 위젯 없음(인프라/파이프라인 코드).</ui>
+    <fs>PASS — bundle/state 파일 persist 로직 미변경. budget는 prompt에만 반영(파일 원문 persist 안 함, 라인 2695 주석 확인).</fs>
+    <pd>PASS — 모듈 분리 유지. budget 상수는 SSoT 위치(pipeline.py 라인 2697)에 단일 정의, 테스트는 budget-relative 참조로 결합도 감소.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — budget 상수 830000→1200000으로 21파일 diff(829980자) 수용. evidence_complete fail-closed 로직 무결(tc42e/tc52d overflow 감지 PASS), test_tc30c PASS로 AL 만점 복구.</al>
+    <build>N-A — meta-task(파이프라인 엔진 수정), EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VSCE 카테고리 없음.</vsce>
+  </category_check>
+  <numeric_score_detail>
+    <wa score="20" max="20">codex 호출 견고성 이전 사이클 검증, 이번 변경 네트워크 경로 무영향</wa>
+    <fs score="20" max="20">파일 persist 로직 무변경, budget prompt-only 반영</fs>
+    <pd score="10" max="10">SSoT 단일 정의 + budget-relative 테스트 결합도 개선</pd>
+    <al score="20" max="20">budget overflow 수용 + fail-closed 무결 + tc30c 만점 복구</al>
+    <build score="N/A" max="N/A">meta-task</build>
+    <ui score="N/A" max="N/A">GUI 없음</ui>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="110" max="120"/>
+    <percentage>91.7</percentage>
+    <numeric_verdict>PASS(>=96/120)</numeric_verdict>
+  </numeric_score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A — 이번 변경 네트워크 코드 무수정</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 상수 정의에 `: int` 타입 어노테이션 존재(라인 2697)</type_hinting_all>
+      <widget_naming>N-A — GUI 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 파일 쓰기 로직 무수정</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — 전체 E2E 스위트 403 passed, 1 skipped 실행 증거 제출</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — budget 상수가 실제 _budget(라인 11230)에서 참조되고 test_tc30c가 21파일 diff로 evidence_complete=True 실증</functional_binding_verified>
+  </runtime_functional_check>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <mt id="MT-1"><files>pipeline.py</files><verdict>PASS</verdict></mt>
+    <mt id="MT-9"><files>tests/e2e/test_codex_model_router_dae1.py</files><verdict>PASS</verdict></mt>
+    <declared_functions>1</declared_functions>
+    <actual_modified_functions>0</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — 상수 값 변경만, 함수 시그니처/본문 무변경</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <regression_check>
+    <before>1차 QA: test_tc30c FAIL(evidence_complete=False, 829980자 > 830000 budget 초과 근접)</before>
+    <after>2차 QA: budget=1200000, test_tc30c PASS, 전체 403 passed 1 skipped, overflow 감지(tc42e/tc52d)/하한(tc27b/tc30a) 모두 PASS</after>
+    <verdict>NO_REGRESSION</verdict>
+  </regression_check>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - budget 상수의 REJECT 이력 주석(라인 2697)이 매우 길어짐. 향후 별도 CHANGELOG로 이관하면 가독성 개선 가능(비차단, 감점 아님).
+    - 테스트가 하드코딩(1_300_000) 대신 budget-relative(`CODEX_REVIEW_BUNDLE_BUDGET_CHARS + 50_000`)로 정착되어 향후 budget 조정 시 테스트 재수정 불필요 — 우수한 개선.
+  </improvement_suggestions>
+</qa_report>
