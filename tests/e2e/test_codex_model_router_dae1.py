@@ -592,11 +592,27 @@ def test_tc25a_diff_hunk_contains_sentinel_change() -> None:
 
 
 def test_tc25b_evidence_incomplete_blocks_prompt() -> None:
-    """evidence_complete=False이면 prompt 생성 자체가 차단(ValueError)된다."""
+    """evidence_complete=False + truncated_critical_hunks>0이면 prompt 생성 차단(ValueError).
+
+    REJECT#28 대응: truncated_critical_hunks=0이면 비-critical 잘림만이므로 허용.
+    CRITICAL hunk 잘림(truncated_critical_hunks>0)이 실제 blind approval 위험이다."""
     import pytest
-    bundle = _semantic_bundle(evidence_complete=False, diff_hunks=[])
+    # truncated_critical_hunks=1 → CRITICAL hunk 누락 → ValueError BLOCKED
+    bundle = _semantic_bundle(evidence_complete=False, truncated_critical_hunks=1, diff_hunks=[])
     with pytest.raises((ValueError, SystemExit)):
         pipeline._build_codex_prompt_for_review(bundle, "TEST")
+
+
+def test_tc25b2_evidence_incomplete_but_no_critical_truncation_allowed() -> None:
+    """evidence_complete=False + truncated_critical_hunks=0이면 prompt 생성 허용.
+
+    REJECT#28: pipeline.py 코드 증가로 전체 diff가 예산 초과하나,
+    truncated_critical_hunks=0이면 critical 파일 hunk는 모두 포함 → blind approval 위험 없음."""
+    # truncated_critical_hunks=0 → 비-critical 잘림만 → ValueError 없이 통과
+    bundle = _semantic_bundle(evidence_complete=False, truncated_critical_hunks=0)
+    # ValueError가 발생하지 않아야 함
+    result = pipeline._build_codex_prompt_for_review(bundle, "TEST")
+    assert isinstance(result, str) and len(result) > 0
 
 
 def test_tc25c_before_after_sha_differs_after_change() -> None:

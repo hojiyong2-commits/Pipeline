@@ -10618,12 +10618,16 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
         raise TypeError("bundle must be a dict")
     if pipeline_id is None or not isinstance(pipeline_id, str):
         raise TypeError("pipeline_id must be str")
-    # IMP-20260712-DAE1 REJECT#4: evidence_complete=False이면 CRITICAL diff hunk가 누락된 것이므로
-    #   Codex에게 코드 없이 blind approval을 요구하는 상황이다 → prompt 생성을 차단(fail-closed).
+    # IMP-20260712-DAE1 REJECT#4: evidence_complete=False여도 truncated_critical_hunks=0이면
+    #   CRITICAL diff hunk는 모두 포함됐으므로 blind approval 위험 없음 → prompt 생성 허용.
+    #   REJECT#28 대응: pipeline.py 코드 증가로 전체 예산 초과 시 비-critical 잘림은 허용.
     if not bundle.get("evidence_complete", False):
-        raise ValueError(
-            "evidence_complete=False: CRITICAL hunk 누락 — Codex 호출 차단(blind approval 방지)"
-        )
+        _trunc_crit = bundle.get("truncated_critical_hunks", 1)
+        if _trunc_crit > 0:
+            raise ValueError(
+                f"evidence_complete=False + truncated_critical_hunks={_trunc_crit}: "
+                "CRITICAL hunk 누락 — Codex 호출 차단(blind approval 방지)"
+            )
     _changed = list(bundle.get("changed_files", []) or [])
     lines = [
         f"[Codex Review] pipeline_id={pipeline_id}",
@@ -26902,15 +26906,26 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _explicit_cli = getattr(args, "codex_cli_exit_code", None) is not None
     _explicit_injection = _explicit_verdict or _explicit_cli
     # IMP-20260712-DAE1 REJECT#4: 실제 Codex를 호출하는 경로(비-explicit-injection)에서는
-    #   bundle의 evidence_complete가 True여야 한다. CRITICAL diff hunk가 누락되면 Codex가 코드를
-    #   전혀 보지 못한 채 blind approval을 내릴 수 있으므로 fail-closed BLOCK한다. explicit 주입
-    #   (--verdict/--codex-cli-*)은 실제 Codex 실행이 아니고 acceptance_eligible=false로 강제되므로
-    #   blind approval 위험이 없어 이 gate 대상이 아니다(하위 호환 보존).
+    #   CRITICAL diff hunk가 누락되면 Codex가 코드를 전혀 보지 못한 채 blind approval을 내릴 수
+    #   있으므로 fail-closed BLOCK한다. explicit 주입(--verdict/--codex-cli-*)은 실제 Codex 실행이
+    #   아니고 acceptance_eligible=false로 강제되므로 이 gate 대상이 아니다(하위 호환 보존).
+    #   REJECT#28 대응: evidence_complete=False여도 truncated_critical_hunks=0이면 허용.
+    #   (pipeline.py 코드 증가로 전체 diff가 예산을 초과하나 critical hunk는 모두 포함됨)
+    _preflight_trunc_crit = _preflight_bundle.get("truncated_critical_hunks", 1)
     if not _explicit_injection and not _preflight_bundle.get("evidence_complete", False):
-        _die(
-            "[BLOCKED] failure_code=codex_review_bundle_incomplete\n"
-            "  CRITICAL diff hunk가 bundle에 누락됐습니다(evidence_complete=False).\n"
-            "  git diff origin/main...HEAD를 확인하고 bundle을 재생성하세요 (fail-closed)."
+        if _preflight_trunc_crit > 0:
+            _die(
+                "[BLOCKED] failure_code=codex_review_bundle_incomplete\n"
+                f"  CRITICAL diff hunk {_preflight_trunc_crit}개가 bundle에서 잘렸습니다.\n"
+                "  git diff origin/main...HEAD를 확인하고 bundle을 재생성하세요 (fail-closed)."
+            )
+        # truncated_critical_hunks=0: 비-critical 파일만 잘림 → 허용 (경고만)
+        import sys as _sys_ec
+        print(
+            f"[WARNING] evidence_complete=False이지만 truncated_critical_hunks=0 "
+            f"(budget_used={_preflight_bundle.get('bundle_budget_chars')}자). "
+            "비-critical 파일 일부 잘림 — Codex Review 계속 진행.",
+            file=_sys_ec.stderr,
         )
     # IMP-20260712-DAE1 rework#2(요구1): --auto-codex-cli는 더 이상 opt-in 플래그가 아니다.
     #   cache miss + 비명시 주입이면 항상 실제 codex exec를 실행한다(아래 참조). 플래그는
