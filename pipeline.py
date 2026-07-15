@@ -8638,6 +8638,8 @@ def _invoke_codex_exec(
     timeout: int = 600,
     codex_bin: Optional[str] = None,
     repo_root: Optional[str] = None,
+    codex_js: Optional[str] = None,
+    node_bin: Optional[str] = None,
 ) -> Dict[str, Any]:
     """선택된 모델/effort로 codex exec를 실제 실행하고 결과를 표준 dict로 반환한다.
 
@@ -8656,6 +8658,11 @@ def _invoke_codex_exec(
         timeout: subprocess 타임아웃(초, 기본 600).
         codex_bin: codex 실행 파일 경로(테스트 fake executable 주입용). None이면 PATH 해석.
         repo_root: -C 인자로 전달할 저장소 루트. None이면 BASE_DIR.
+        codex_js: 레지스트리 SHA가 검증된 codex.js 진입점 절대 경로(REJECT#31). node_bin과
+            함께 제공되면 사용자 쓰기 가능 npm 래퍼(codex.cmd) 대신 [node_bin, codex_js, ...]로
+            직접 실행하여 주석 decoy·악성 래퍼 우회를 차단한다. None/빈 값이면 codex_bin 사용.
+        node_bin: 신뢰 검증된 node 인터프리터 절대 경로(REJECT#31). codex_js와 함께 제공될 때만
+            직접 실행 경로가 활성화된다.
     Returns:
         {"available": bool, "exit_code": int, "stdout": str, "stderr": str,
          "invoked_model": str, "invoked_effort": str,
@@ -8673,6 +8680,10 @@ def _invoke_codex_exec(
             raise TypeError(f"{_n} must be str, got {type(_v).__name__}")
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
         raise ValueError(f"timeout must be positive int, got {timeout!r}")  # 0/음수 불허: 무한대기/즉시실패 방지
+    # REJECT#31: codex_js/node_bin은 Optional[str] — 제공되면 str이어야 한다(암묵적 형변환 금지).
+    for _pn, _pv in (("codex_js", codex_js), ("node_bin", node_bin)):
+        if _pv is not None and not isinstance(_pv, str):
+            raise TypeError(f"{_pn} must be str or None, got {type(_pv).__name__}")
 
     # Codex 실행 파일 경로를 PATHEXT까지 고려하여 결정적으로 해석한다(.exe/.cmd/.bat 지원).
     _codex_bin = str(codex_bin) if codex_bin else (shutil.which("codex") or "codex")
@@ -8681,8 +8692,8 @@ def _invoke_codex_exec(
     # invoked_effort는 정책 선택값(reasoning_effort)을 그대로 기록하고, CLI 인자에만 정규화를 적용한다.
     _CLI_EFFORT_ALIAS: Dict[str, str] = {"max": "xhigh"}
     _cli_effort = _CLI_EFFORT_ALIAS.get(reasoning_effort, reasoning_effort)
-    cmd = [
-        _codex_bin, "exec",
+    _exec_args = [
+        "exec",
         "--model", selected_model,
         "-c", f"model_reasoning_effort={_cli_effort}",
         "--sandbox", "read-only",
@@ -8691,6 +8702,16 @@ def _invoke_codex_exec(
         "-C", _repo_root,
         "-",
     ]
+    # REJECT#31 AC#2: node_bin + codex_js가 모두 제공되면 검증된 node 인터프리터로 codex.js를
+    #   직접 실행한다([node_bin, codex_js, "exec", ...]). 사용자 쓰기 가능 npm 래퍼(codex.cmd)를
+    #   실행 파일로 쓰지 않으므로 주석 decoy/악성 래퍼가 auth/exec/version을 가로챌 수 없다.
+    #   둘 중 하나라도 없으면 기존 동작(codex_bin 직접 실행)을 유지한다(direct_native/test seam 호환).
+    _codex_js = str(codex_js) if codex_js else ""
+    _node_bin = str(node_bin) if node_bin else ""
+    if _node_bin and _codex_js:
+        cmd = [_node_bin, _codex_js] + _exec_args
+    else:
+        cmd = [_codex_bin] + _exec_args
     # sanitized 명령: nonce/secret이 섞이지 않는 결정적 인자만 기록한다(prompt/경로 제외).
     codex_cli_command = (
         f"codex exec --model {selected_model} "
@@ -9225,13 +9246,28 @@ def _verify_npm_wrapper_content(bin_path: "Path") -> bool:
         if sys.platform == "win32":
             _suf = bin_path.suffix.lower()
             if _suf in (".cmd", ".bat"):
-                _txt = bin_path.read_text(encoding="utf-8", errors="replace").lower()
-                # REJECT#20: .cmd 검사 강화 — node 실행 + @openai/codex 패키지 경로 명시 필수.
-                #   단순 node_modules 포함만 확인하면 임의 패키지 wrapper로 우회 가능.
-                #   공식 npm 설치 wrapper는 항상 @openai/codex 경로를 포함한다.
-                #   Windows 경로는 역슬래시(\)를 사용하므로 정규화 후 비교한다.
-                _txt_norm = _txt.replace("\\", "/")
-                return "node" in _txt_norm and "@openai/codex" in _txt_norm
+                _raw = bin_path.read_text(encoding="utf-8", errors="replace")
+                # REJECT#31: 주석(rem/::)에만 정품 JS 경로를 넣고 실제로는 다른 악성 실행 파일을
+                #   호출하는 decoy 래퍼를 차단한다. 문자열이 파일 어딘가에 존재하는지가 아니라,
+                #   주석 줄을 제거한 "실제 실행 코드"에서만 node 실행 + @openai/codex 패키지 경로를
+                #   확인한다. .cmd/.bat 주석 규칙: 'rem '으로 시작하거나 '::'으로 시작하는 줄은 주석.
+                #   REJECT#20 요건(node + @openai/codex 명시)은 실행 코드 기준으로 그대로 유지한다.
+                _exec_lines = []
+                for _ln in _raw.splitlines():
+                    _stripped = _ln.lstrip()
+                    _stripped_low = _stripped.lower()
+                    # 'rem ' 접두 또는 'rem' 단독 = 배치 주석 → 제거.
+                    if _stripped_low == "rem" or _stripped_low.startswith("rem "):
+                        continue
+                    # '::' 접두 = 배치 주석 → 제거 (GOTO 레이블 예외는 단순화를 위해 미고려).
+                    if _stripped.startswith("::"):
+                        continue
+                    if not _stripped:
+                        continue
+                    _exec_lines.append(_stripped_low)
+                # 남은 실행 코드만 합쳐 경로 정규화(역슬래시→슬래시) 후 검사한다.
+                _exec_txt = "\n".join(_exec_lines).replace("\\", "/")
+                return "node" in _exec_txt and "@openai/codex" in _exec_txt
             # REJECT#20: .exe 등 non-script on Windows — fail-closed 처리.
             #   npm global bin에 악성 codex.exe를 배치하면 PATHEXT 우선순위로 .cmd보다 먼저 선택된다.
             #   내용·서명·패키지 출처 검증이 불가능한 .exe는 신뢰하지 않는다 (fail-closed).
@@ -10487,7 +10523,11 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         return _r
 
 
-def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]:
+def _check_codex_chatgpt_auth(
+    codex_bin: Optional[str] = None,
+    node_bin: Optional[str] = None,
+    codex_js: Optional[str] = None,
+) -> Dict[str, Any]:
     """`codex login status`로 ChatGPT Plus 인증을 강제한다(요구3).
 
     정확히 "Logged in using ChatGPT" 만 허용한다. 미로그인/상태확인실패/API key/불명은 차단.
@@ -10495,6 +10535,11 @@ def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]
 
     Args:
         codex_bin: codex 실행 파일 경로(테스트 주입용). None이면 PATH에서 해석.
+        node_bin: 신뢰 검증된 node 인터프리터 절대 경로(REJECT#31). codex_js와 함께 제공되면
+            login status 확인을 [node_bin, codex_js, "login", "status"]로 직접 실행하여 사용자
+            쓰기 가능 npm 래퍼(codex.cmd) 우회를 차단한다. 로그인 상태 위조를 방지한다.
+        codex_js: 레지스트리 SHA가 검증된 codex.js 진입점 절대 경로(REJECT#31). node_bin과 함께
+            제공될 때만 직접 실행 경로가 활성화된다. None/빈 값이면 기존 codex_bin 경로를 사용.
     Returns:
         {"result": "OK", "auth_source": "chatgpt"} 또는
         {"result": "BLOCKED", "failure_code": str, "message": str}.
@@ -10550,12 +10595,21 @@ def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]
                     "codex_binary_path": _bin,
                     "codex_binary_sha256": "",
                 }
+    # REJECT#31 AC#2: node_bin + codex_js가 모두 제공되면 검증된 node로 codex.js를 직접 실행하여
+    #   login status를 확인한다. 사용자 쓰기 가능 npm 래퍼(codex.cmd)를 실행 파일로 쓰지 않으므로
+    #   악성 래퍼가 "Logged in using ChatGPT"를 위조할 수 없다. 둘 중 하나라도 없으면 기존 경로 유지.
+    _auth_node_bin = str(node_bin) if node_bin else ""
+    _auth_codex_js = str(codex_js) if codex_js else ""
+    if _auth_node_bin and _auth_codex_js:
+        _login_cmd = [_auth_node_bin, _auth_codex_js, "login", "status"]
+    else:
+        _login_cmd = [_bin, "login", "status"]
     # 인증 상태 확인 subprocess에도 OPENAI_API_KEY를 제거한다(API key 인증 경로 차단).
     _env = os.environ.copy()
     _env.pop("OPENAI_API_KEY", None)
     try:
         _res = subprocess.run(
-            [_bin, "login", "status"],
+            _login_cmd,
             capture_output=True, text=True, timeout=30,
             encoding="utf-8", errors="replace", env=_env,
         )
@@ -26926,6 +26980,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
 
     # IMP-20260712-DAE1 rework(문제2/4): auto-invoke 결과를 담을 override 및 실제 명령/능력 기록 변수.
     _auto_cli_override: Optional[Dict[str, Any]] = None
+    # REJECT#31: wrapper 체인(npm_wrapper/posix_npm_symlink)에서 검증된 node + codex.js 직접 실행
+    #   경로. auto-invoke 분기에서 _codex_binary_trust로부터 채워지며, auth/exec/version-check가
+    #   사용자 쓰기 가능 npm 래퍼(codex.cmd) 대신 이 경로를 실행 파일로 고정한다(REJECT#31 AC#2).
+    #   direct_native/test seam에서는 빈 문자열로 남아 기존 codex_bin 경로가 그대로 쓰인다.
+    _node_bin_for_exec = ""
+    _codex_js_for_exec = ""
     # REJECT#21 deadlock fix: CRITICAL+actual_model=unknown 감지 시 설정되는 failure_code 플래그.
     #   CLI는 이미 실행됐으므로 verdict를 기록하되 acceptance_eligible=false 강제 + 종료 시 보고.
     _capability_blocked_failure_code = ""
@@ -27184,6 +27244,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             #   shutil.which("codex")를 다시 조회하여 TOCTOU 취약점이 발생하므로 명시적 전달 필수.
             _trusted_bin_path = str(_codex_binary_trust.get("path", "") or "")
             _codex_bin_now = _fake_codex_bin or (_trusted_bin_path if _trusted_bin_path else None)
+            # REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js를 auth/exec/version-check의
+            #   실제 실행 파일로 고정한다. _fake_codex_bin(test seam)일 때는 신뢰 체인 필드가 비어
+            #   있으므로 빈 값이 되어 기존 fake 실행 경로가 유지된다(회귀 방지). direct_native도 빈 값.
+            if not _fake_codex_bin:
+                _node_bin_for_exec = str(_codex_binary_trust.get("node_interpreter_path", "") or "")
+                _codex_js_for_exec = str(_codex_binary_trust.get("js_entrypoint_path", "") or "")
             # REJECT#22: 실제 codex exec 자동 실행 시작 시점에 기존 effective 결과를 즉시 무효화한다.
             #   이후 인증 실패, snapshot 변경, capability 불일치 등 어떤 경로로 종료되더라도
             #   기존 APPROVED effective 결과가 request-accept에 남지 않도록 보장한다(fail-closed).
@@ -27195,7 +27261,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 _review_bundle_sha256, _risk_level_str, _model_policy,
             )
             # 요구3: 실제 codex exec 실행 전 ChatGPT Plus 인증을 강제한다(API key/미로그인 차단).
-            _auth = _check_codex_chatgpt_auth(codex_bin=_codex_bin_now)
+            #   REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js로 직접 login status를 확인한다.
+            _auth = _check_codex_chatgpt_auth(
+                codex_bin=_codex_bin_now,
+                node_bin=_node_bin_for_exec,
+                codex_js=_codex_js_for_exec,
+            )
             if _auth.get("result") != "OK":
                 # REJECT#23: 인증 실패 직전 해당 failure_code로 BLOCKED invalidation 저장 (review_in_progress 덮어쓰기).
                 _auth_fc = str(_auth.get("failure_code", "codex_not_chatgpt_authenticated"))
@@ -27302,12 +27373,15 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     "  gates codex-review를 재실행하세요 (fail-closed)."
                 )
             _pre_cli_fn_shas = dict(_sem_for_prompt.get("function_before_after_shas", {}) or {})
+            # REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js를 exec 실행 파일로 고정한다.
             _auto_run = _invoke_codex_exec(
                 _selected_model_now,
                 _selected_effort_now,
                 _prompt_text,
                 codex_bin=_codex_bin_now,
                 timeout=_codex_exec_timeout,
+                codex_js=_codex_js_for_exec,
+                node_bin=_node_bin_for_exec,
             )
             _codex_cli_command_real = str(_auto_run.get("codex_cli_command", "") or "")
             _invoked_model_str = str(_auto_run.get("invoked_model", _selected_model_now) or _selected_model_now)
@@ -27911,10 +27985,19 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _codex_cli_version_actual = "unknown"
     if _auto_cli_override is not None:
         _ver_bin = _codex_bin_now if _codex_bin_now else ""
-        if _ver_bin:
+        # REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js로 --version을 직접 실행한다.
+        #   사용자 쓰기 가능 npm 래퍼(codex.cmd) 대신 고정된 실행 체인을 사용하여 버전 위조를 차단한다.
+        #   node/js가 없으면(direct_native/test seam) 기존 [_ver_bin, "--version"] 경로를 유지한다.
+        if _node_bin_for_exec and _codex_js_for_exec:
+            _ver_cmd = [_node_bin_for_exec, _codex_js_for_exec, "--version"]
+        elif _ver_bin:
+            _ver_cmd = [_ver_bin, "--version"]
+        else:
+            _ver_cmd = []
+        if _ver_cmd:
             try:
                 _ver_r = subprocess.run(
-                    [_ver_bin, "--version"],
+                    _ver_cmd,
                     capture_output=True, text=True, timeout=10,
                     encoding="utf-8", errors="replace",
                     env=_codex_clean_env(),  # REJECT#28 AC-5: OPENAI_API_KEY 제거 env 전달

@@ -7609,3 +7609,122 @@ class TestTC24Reject28NodeInterpreterVerification:
             )
         )
         assert r["status"] == "PASS", f"TC-24i: 정상 node 체인인데 BLOCKED: {r!r}"
+
+
+# --------------------------------------------------------------------------- #
+# REJECT#31: 사용자 쓰기 가능 npm 래퍼(codex.cmd) 우회 차단.
+#   - _verify_npm_wrapper_content: 주석(rem/::)에만 정품 JS 경로를 넣은 decoy 래퍼 차단.
+#   - _invoke_codex_exec/_check_codex_chatgpt_auth: 검증된 node + codex.js 직접 실행.
+# --------------------------------------------------------------------------- #
+def test_tc45a_cmd_with_js_path_in_comment_only_blocked():
+    """REJECT#31 AC#1: 정품 JS 경로가 주석에만 있고 실제 실행은 다른 악성 파일인 cmd는 BLOCKED."""
+    import tempfile
+    malicious_cmd = (
+        "@echo off\n"
+        "rem node \"%~dp0\\node_modules\\@openai\\codex\\bin\\codex.js\" -- fake comment\n"
+        ":: @openai/codex reference in comment only\n"
+        "malicious.exe %*\n"  # 실제 실행은 악성 파일
+    )
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cmd', delete=False, encoding='utf-8') as f:
+        f.write(malicious_cmd)
+        fname = f.name
+    # 플랫폼 무관 결정성: .cmd 주석-제거 검사가 win32 분기에서 실행되도록 강제한다.
+    _orig_platform = pipeline.sys.platform
+    try:
+        pipeline.sys.platform = "win32"
+        result = pipeline._verify_npm_wrapper_content(Path(fname))
+        assert result is False, (
+            "REJECT#31 AC#1: 주석에만 정품 JS 경로가 있는 cmd가 True를 반환 — "
+            "주석 제거 후 실행 코드만 검사해야 함"
+        )
+    finally:
+        pipeline.sys.platform = _orig_platform
+        os.unlink(fname)
+
+
+def test_tc45b_normal_npm_cmd_still_passes():
+    """REJECT#31 AC#4: 정상 npm 래퍼는 통과 (회귀 방지)."""
+    import tempfile
+    normal_cmd = (
+        "@echo off\n"
+        "rem npm cmd wrapper for @openai/codex\n"
+        "@node \"%~dp0\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\n"
+    )
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cmd', delete=False, encoding='utf-8') as f:
+        f.write(normal_cmd)
+        fname = f.name
+    _orig_platform = pipeline.sys.platform
+    try:
+        pipeline.sys.platform = "win32"
+        result = pipeline._verify_npm_wrapper_content(Path(fname))
+        assert result is True, (
+            "REJECT#31 AC#4: 정상 npm cmd가 False를 반환 — 정상 npm 설치를 깨트림"
+        )
+    finally:
+        pipeline.sys.platform = _orig_platform
+        os.unlink(fname)
+
+
+def test_tc45c_invoke_codex_exec_uses_node_direct_when_provided():
+    """REJECT#31 AC#2/3: codex_js와 node_bin 제공 시 subprocess argv가 node 직접 실행."""
+    from unittest.mock import patch, MagicMock
+    captured_cmd = []
+
+    def _mock_run(cmd, **kwargs):
+        captured_cmd.extend(cmd)
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        return mock_result
+
+    fake_node = "/usr/local/bin/node"
+    fake_js = "/usr/local/lib/node_modules/@openai/codex/bin/codex.js"
+    with patch("pipeline.subprocess.run", side_effect=_mock_run):
+        pipeline._invoke_codex_exec(
+            "gpt-5.6-sol", "high", "test prompt",
+            codex_js=fake_js, node_bin=fake_node
+        )
+    assert captured_cmd[0] == fake_node, (
+        f"REJECT#31 AC#2: subprocess argv[0]이 node_bin이 아님: {captured_cmd[0]}"
+    )
+    assert captured_cmd[1] == fake_js, (
+        f"REJECT#31 AC#3: subprocess argv[1]이 codex_js가 아님: {captured_cmd[1]}"
+    )
+    assert "exec" in captured_cmd, "exec 인자가 없음"
+
+
+def test_tc45d_check_auth_uses_node_direct_when_provided():
+    """REJECT#31 AC#2/3: _check_codex_chatgpt_auth도 node + codex.js 직접 실행(login status)."""
+    from unittest.mock import patch, MagicMock
+    captured_cmd = []
+
+    def _mock_run(cmd, **kwargs):
+        captured_cmd.clear()
+        captured_cmd.extend(cmd)
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Logged in using ChatGPT\n"
+        mock_result.stderr = ""
+        return mock_result
+
+    fake_node = "/usr/local/bin/node"
+    fake_js = "/usr/local/lib/node_modules/@openai/codex/bin/codex.js"
+    # codex_bin 명시 → trust 검증 우회(mock)하여 login status 실행 경로만 관측한다.
+    with patch("pipeline.subprocess.run", side_effect=_mock_run), \
+            patch("pipeline._verify_codex_binary_path_trust",
+                  return_value={"trusted": True, "path": "/x/codex", "sha256": "a" * 64,
+                                "acceptance_eligible": True}):
+        res = pipeline._check_codex_chatgpt_auth(
+            codex_bin="/x/codex", node_bin=fake_node, codex_js=fake_js
+        )
+    assert res.get("result") == "OK", f"TC-45d: 정상 로그인인데 OK 아님: {res!r}"
+    assert captured_cmd[0] == fake_node, (
+        f"REJECT#31 AC#2: login status argv[0]이 node_bin이 아님: {captured_cmd[0]}"
+    )
+    assert captured_cmd[1] == fake_js, (
+        f"REJECT#31 AC#3: login status argv[1]이 codex_js가 아님: {captured_cmd[1]}"
+    )
+    assert captured_cmd[2:] == ["login", "status"], (
+        f"REJECT#31 AC#3: login status 인자 불일치: {captured_cmd!r}"
+    )
