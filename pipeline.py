@@ -9970,26 +9970,12 @@ def _verify_codex_js_against_registry(
         if _npm_exe is None:
             _r["reason"] = "npm_not_found"
             return _r
-        # REJECT#26 AC-2: 사용자 쓰기 가능 경로(홈 디렉토리, AppData, .nvm 등)의 npm은 신뢰 루트 불가.
-        #   PATH 앞에 가짜 npm을 두는 공격을 차단한다. 시스템 경로(/usr/bin, /usr/local/bin,
-        #   C:\Program Files\)의 npm만 허용한다.
-        _npm_exe_norm = os.path.normcase(os.path.abspath(_npm_exe))
-        _home_norm = os.path.normcase(os.path.abspath(os.path.expanduser("~")))
-        _appdata_norm = os.path.normcase(os.path.abspath(
-            os.environ.get("APPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Roaming"))
-        ))
-        _localappdata_norm = os.path.normcase(os.path.abspath(
-            os.environ.get("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local"))
-        ))
-        _npm_user_writable = (
-            _npm_exe_norm.startswith(_home_norm + os.sep)
-            or _npm_exe_norm.startswith(_appdata_norm + os.sep)
-            or _npm_exe_norm.startswith(_localappdata_norm + os.sep)
-            or os.sep + ".nvm" + os.sep in _npm_exe_norm
-            or os.sep + ".npm" + os.sep in _npm_exe_norm
-        )
-        if _npm_user_writable:
-            _r["reason"] = f"npm_in_user_writable_path:{_npm_exe_norm[:80]}"
+        # REJECT#34 AC#1/2: 공통 신뢰 헬퍼로 npm 실행 경로를 한 번만 시스템 경로 검증한다.
+        #   _verify_npm_binary_is_system_path는 홈/AppData/.nvm뿐 아니라 임의 경로(/tmp/evil,
+        #   D:\evil 등) 전부를 차단하고 관리자 보호 시스템 설치 경로만 허용한다(fail-closed).
+        #   미검증 PATH 결과나 bare npm은 절대 subprocess로 실행하지 않는다.
+        if not _verify_npm_binary_is_system_path(str(_npm_exe)):
+            _r["reason"] = f"npm_not_in_system_path:{str(_npm_exe)[:80]}"
             return _r
         # REJECT#27: shell=True + bare "npm"은 PATH를 재해석하여 가짜 npm 실행 허용.
         #   검증된 _npm_exe 절대 경로를 직접 사용하고 shell=True를 제거한다.
@@ -10009,6 +9995,18 @@ def _verify_codex_js_against_registry(
                             if not k.upper().startswith("NPM_CONFIG_")}
                 _npm_env.pop("npm_config_registry", None)
                 _npm_env.pop("NPM_CONFIG_REGISTRY", None)
+                # REJECT#34 AC#3: API 키, GitHub 토큰, NPM 토큰, AWS 자격 증명, 파이프라인 승인
+                #   시크릿을 npm subprocess 환경에서 제거한다. 임의 코드 실행 시에도 시크릿 유출 차단.
+                _SENSITIVE_ENV_VARS_TO_REMOVE = [
+                    "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+                    "GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PAT",
+                    "NPM_TOKEN", "NPM_AUTH_TOKEN",
+                    "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+                    "PIPELINE_ACCEPT_SECRET", "PIPELINE_APPROVAL_SECRET",
+                ]
+                for _sensitive_var in _SENSITIVE_ENV_VARS_TO_REMOVE:
+                    _npm_env.pop(_sensitive_var, None)
+                    _npm_env.pop(_sensitive_var.lower(), None)
                 # 검증된 _npm_exe만 사용: PATH의 가짜 npm 우선순위 공격 차단
                 _npm_install_args = [
                     "--prefix", _tmpdir,

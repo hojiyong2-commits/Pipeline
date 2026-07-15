@@ -7293,8 +7293,15 @@ class TestTC23Reject26FailOpenDefense:
             f"TC-23c: 사용자 쓰기 가능 경로 npm → available=False 필요. 실제: {_result!r}"
         )
         _reason = _result.get("reason", "")
-        assert "user_writable" in _reason or "npm_not_found" == _reason, (
-            f"TC-23c: reason에 'user_writable' 또는 'npm_not_found' 필요. 실제: {_reason!r}"
+        # REJECT#34: 경로 검증이 공통 헬퍼 _verify_npm_binary_is_system_path로 위임되어
+        #   사용자 쓰기 경로는 'npm_not_in_system_path' reason으로 fail-closed된다.
+        assert (
+            "user_writable" in _reason
+            or "npm_not_in_system_path" in _reason
+            or "npm_not_found" == _reason
+        ), (
+            f"TC-23c: reason에 'user_writable'/'npm_not_in_system_path'/'npm_not_found' 필요. "
+            f"실제: {_reason!r}"
         )
 
     def test_tc23d_npm_install_uses_registry_flag(
@@ -7316,6 +7323,10 @@ class TestTC23Reject26FailOpenDefense:
 
         monkeypatch.setattr("shutil.which", _mock_which)
 
+        # REJECT#34: 경로 검증이 공통 헬퍼로 위임됨. 이 테스트는 install 인자(--registry,
+        #   --no-userconfig, non-bare npm)만 검증하므로, tmp_path의 가짜 npm이 시스템 경로
+        #   검증을 통과하도록 헬퍼를 True로 monkeypatch한다. (임의 경로 차단은 TC-49a가 검증)
+        monkeypatch.setattr("pipeline._verify_npm_binary_is_system_path", lambda _p: True)
         # npm 경로가 user-writable로 분류되지 않도록 expanduser를 home이 아닌 경로로
         monkeypatch.setattr("os.path.expanduser", lambda _p: "/different/home" if _p == "~" else _p)
         monkeypatch.setenv("APPDATA", "/different/appdata")
@@ -7984,3 +7995,107 @@ def test_tc48e_get_npm_global_bin_sanitizes_env():
     assert 'pop("OPENAI_API_KEY"' in src or "OPENAI_API_KEY" in src, (
         "REJECT#33 AC#5: OPENAI_API_KEY 등 민감 변수 제거 로직이 없음"
     )
+
+
+def test_tc49a_arbitrary_path_npm_not_executed():
+    """REJECT#34 AC#1/2: /tmp/evil/npm 같은 임의 경로 npm은 subprocess 미실행."""
+    from unittest.mock import patch
+    import tempfile as _tf
+
+    with _tf.TemporaryDirectory() as tmpdir:
+        fake_npm_path = os.path.join(tmpdir, "npm")
+        sentinel_file = os.path.join(tmpdir, "sentinel_created")
+
+        subprocess_called = []
+
+        def mock_which(name):
+            if name in ("npm", "npm.cmd", "npm.CMD"):
+                return fake_npm_path
+            return None
+
+        def mock_run(cmd, **kwargs):
+            subprocess_called.append(cmd)
+            raise AssertionError(
+                f"REJECT#34 AC#1: subprocess 실행됨 — sentinel 파일 생성 위험: {cmd}"
+            )
+
+        with patch("shutil.which", side_effect=mock_which), \
+                patch("pipeline.subprocess.run", side_effect=mock_run):
+            with _tf.NamedTemporaryFile(
+                mode="w", suffix=".js", delete=False, encoding="utf-8"
+            ) as jf:
+                jf.write("// fake codex.js\n")
+                fake_js = jf.name
+            try:
+                result = pipeline._verify_codex_js_against_registry(
+                    Path(fake_js), "1.0.0"
+                )
+            finally:
+                os.unlink(fake_js)
+
+    assert not subprocess_called, (
+        f"REJECT#34 AC#1: subprocess 실행됨: {subprocess_called}"
+    )
+    assert not result.get("ok"), "REJECT#34: 임의 경로 npm이 ok=True를 반환"
+    assert not os.path.exists(sentinel_file), "REJECT#34: sentinel 파일 생성됨"
+    assert result.get("reason", "").startswith("npm_not_in_system_path"), (
+        f"REJECT#34 AC#2: 시스템 경로 검증 실패 reason이 아님: {result.get('reason')!r}"
+    )
+
+
+def test_tc49b_npm_subprocess_env_clean():
+    """REJECT#34 AC#3: npm subprocess 환경에 API 키 등 민감 변수 없음."""
+    from unittest.mock import patch
+
+    captured_env = {}
+
+    def mock_run(cmd, **kwargs):
+        captured_env.update(kwargs.get("env", {}))
+        return type("MockResult", (), {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": "not found",
+        })()
+
+    # 시스템 경로에 있는 것처럼 mock (C:\Program Files\nodejs 내)
+    fake_system_npm = r"C:\Program Files\nodejs\npm.cmd"
+
+    def mock_which(name):
+        if name in ("npm", "npm.cmd", "npm.CMD"):
+            return fake_system_npm
+        return None
+
+    test_env = dict(os.environ)
+    test_env["OPENAI_API_KEY"] = "sk-" + "EXAMPLE_DUMMY_" + "A" * 8  # noqa: S105
+    test_env["GITHUB_TOKEN"] = "ghp_" + "EXAMPLE_DUMMY_" + "A" * 8  # noqa: S105
+    test_env["AWS_ACCESS_KEY_ID"] = "AKIA" + "EXAMPLEDUMMY000"  # noqa: S105
+    test_env["NPM_TOKEN"] = "npm_" + "EXAMPLE_DUMMY_" + "A" * 8  # noqa: S105
+
+    with patch("shutil.which", side_effect=mock_which), \
+            patch("pipeline.subprocess.run", side_effect=mock_run), \
+            patch.dict("os.environ", test_env, clear=True):
+        import tempfile as _tf
+        with _tf.NamedTemporaryFile(
+            mode="w", suffix=".js", delete=False, encoding="utf-8"
+        ) as jf:
+            jf.write("// fake codex.js\n")
+            fake_js = jf.name
+        try:
+            _res = pipeline._verify_codex_js_against_registry(
+                Path(fake_js), "1.0.0"
+            )
+        finally:
+            os.unlink(fake_js)
+
+    # 시스템 경로 검증을 통과하지 못하는 플랫폼(POSIX)에서는 subprocess가 실행되지 않아
+    # captured_env가 비어 있을 수 있다. 실행된 경우에는 민감 변수가 없어야 한다.
+    sensitive_vars = ["OPENAI_API_KEY", "GITHUB_TOKEN", "AWS_ACCESS_KEY_ID", "NPM_TOKEN"]
+    for var in sensitive_vars:
+        assert var not in captured_env, (
+            f"REJECT#34 AC#3: {var}가 npm subprocess 환경에 포함됨"
+        )
+    # Windows에서 시스템 경로 검증을 통과하면 실제로 subprocess가 호출되어 env를 캡처한다.
+    if sys.platform == "win32" and captured_env:
+        assert "PATH" in captured_env or "Path" in captured_env, (
+            "REJECT#34: sanitized env가 정상 배선되지 않음 (PATH 누락)"
+        )
