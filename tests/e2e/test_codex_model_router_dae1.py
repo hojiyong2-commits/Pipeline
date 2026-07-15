@@ -6641,6 +6641,67 @@ class TestTC21ProvenanceBlockingE2E:
             f"TC-21f 실패: provenance_reason에 'authenticode' 없음: {_r.get('provenance_reason')!r}"
         )
 
+    def test_tc21g_posix_no_authenticode_acceptance_eligible_false(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """REJECT#23 AC-1: POSIX 환경 (Authenticode 없음) + npm provenance 부재 → acceptance_eligible=False.
+
+        ~/.nvm 경로에 가짜 Codex를 설치해도 Authenticode 서명을 제공할 수 없으므로
+        provenance 부재 → fail-closed: acceptance_eligible=False.
+        _check_authenticode_signature가 available=False를 반환하면 else 분기로 진입해
+        acceptance_eligible=False를 설정해야 한다.
+        """
+        import tempfile as _tf_mod
+
+        pkg_dir = tmp_path / "node_modules" / "@openai" / "codex"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        bin_dir = pkg_dir / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        js_ep = bin_dir / "codex.js"
+        js_ep.write_text("#!/usr/bin/env node\nconsole.log('codex');\n", encoding="utf-8")
+        vendor_dir = pkg_dir / "vendor"
+        vendor_dir.mkdir(exist_ok=True)
+        native = vendor_dir / "codex-x86_64-unknown-linux-gnu"
+        native.write_bytes(b"\x00FAKE_POSIX_NATIVE")
+
+        monkeypatch.setattr(_tf_mod, "gettempdir", lambda: "/nonexistent_temp_dir_for_tc21g")
+        monkeypatch.setattr(
+            pipeline, "_check_npm_lockfile_integrity",
+            lambda _root: {"available": False, "ok": True, "reason": "lockfile_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_check_package_json_npm_integrity",
+            lambda _root: {"available": False, "ok": True, "reason": "integrity_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_get_npm_ls_integrity",
+            lambda _root=None: {"available": False, "ok": True, "reason": "npm_ls_absent"},
+        )
+        monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
+        monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
+        # POSIX 시뮬레이션: Authenticode 미지원 (available=False, reason="non_windows")
+        monkeypatch.setattr(
+            pipeline, "_check_authenticode_signature",
+            lambda _path: {"available": False, "ok": False, "subject": "", "reason": "non_windows"},
+        )
+        npm_bin_dir = str(tmp_path / "npm_bin")
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
+        monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
+        monkeypatch.setattr(pipeline, "_verify_npm_wrapper_content", lambda _p: True)
+
+        wrapper = self._make_fake_npm_wrapper(tmp_path)
+        _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
+
+        assert _r.get("trusted") is True, (
+            f"TC-21g 실패: 체인 구조는 OK인데 trusted=False: {_r!r}"
+        )
+        assert _r.get("acceptance_eligible") is False, (
+            f"TC-21g 실패: POSIX+Authenticode 없음인데 acceptance_eligible=True (차단되어야 함). 결과: {_r!r}"
+        )
+        assert "authenticode_unavailable" in (_r.get("provenance_reason") or "").lower(), (
+            f"TC-21g 실패: provenance_reason에 'authenticode_unavailable' 없음: {_r.get('provenance_reason')!r}"
+        )
+
     def test_tc21d_acceptance_eligible_false_chatgpt_auth_blocked(
         self, monkeypatch: "pytest.MonkeyPatch"
     ) -> None:

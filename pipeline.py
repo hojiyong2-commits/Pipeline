@@ -9973,8 +9973,8 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
             # REJECT#22: Authenticode 독립 신뢰 소스 검증 (항상 실행 — npm provenance와 독립).
             #   npm 7+ 글로벌 설치는 lockfile·package.json·npm ls provenance가 모두 absent이 정상.
             #   OS 수준 서명(Authenticode)이 유일한 독립 신뢰 소스: 공격자는 OpenAI 서명을 위조 불가.
-            #   - Windows: valid+OpenAI → acceptance_eligible=True; invalid → False (fail-closed).
-            #   - non-Windows: Authenticode 해당 없음 → acceptance_eligible=True (플랫폼별 신뢰).
+            #   - Windows: valid+OpenAI → acceptance_eligible=True; invalid/unavailable → False (fail-closed).
+            #   - non-Windows: Authenticode 없음 → acceptance_eligible=False (POSIX provenance 부재 fail-closed).
             _authenticode = _check_authenticode_signature(str(_native_bin))
             if _authenticode.get("available"):
                 if _authenticode.get("ok"):
@@ -9988,13 +9988,13 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                     _r["provenance_reason"] = (
                         f"authenticode_invalid:{_authenticode.get('reason', '')[:80]}"
                     )
-            elif sys.platform == "win32":
-                # Windows인데 Authenticode 검사 불가 (binary 없음 등) → fail-closed
+            else:
+                # REJECT#23: Authenticode 미사용 환경(비Windows POSIX + Win32 오류) → fail-closed.
+                # non-Windows에서 npm provenance 부재 시 ~/.nvm 가짜 체인 우회 가능 — 차단 필수.
                 _r["acceptance_eligible"] = False
                 _r["provenance_reason"] = (
-                    f"authenticode_unavailable_win32:{_authenticode.get('reason', '')[:60]}"
+                    f"authenticode_unavailable_fail_closed:{_authenticode.get('reason', '')[:60]}"
                 )
-            # else: non-Windows → acceptance_eligible 기본값 True 유지 (POSIX 시스템 경로 기반 신뢰)
             # REJECT#17 수정 B + REJECT#19: npm provenance 교차 검증 — 조작 양성(tamper) 탐지 전용.
             #   acceptance_eligible은 Authenticode로 결정; 아래는 trust(trusted=False) 판정만 수행.
             try:
