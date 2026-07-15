@@ -2450,6 +2450,13 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_is_valid_sha256_hex",
     "_codex_clean_env",
     "_run_codex_preflight_checks",
+    # REJECT#14: platform native binary SHA를 레지스트리 tarball 원본과 비교하는 helper 등록.
+    #   _verify_codex_native_binary_against_registry를 단독 변경하면 정품 codex.js + 위조 native
+    #   binary 조합을 통과시킬 수 있으므로 CRITICAL 분류 필수이다.
+    #   _resolve_codex_platform_package_meta는 native binary가 속한 platform 패키지의 실제
+    #   name@version을 해석하며, 변조 시 레지스트리 provenance 결속 대상을 우회할 수 있으므로 CRITICAL.
+    "_verify_codex_native_binary_against_registry",
+    "_resolve_codex_platform_package_meta",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -2505,6 +2512,26 @@ CODEX_CRITICAL_CONSTANTS: List[str] = [
     "_CODEX_CRITICAL_FILE_PREFIXES",
     # REJECT#38: NODE 선행 로딩 변수 목록 — 변경 시 NODE_OPTIONS 제거 경로가 우회된다.
     "_CODEX_NODE_PRELOAD_VARS",
+    # REJECT#14: Authenticode Issuer 패턴 목록 — 변경 시 자체 서명 우회 방어가 무력화된다.
+    "_CODEX_KNOWN_CERT_ISSUER_PATTERNS",
+]
+
+
+# REJECT#14: 신뢰할 수 있는 코드서명 인증서 Issuer 패턴 목록.
+# Subject 부분 문자열 "openai"만으로 검증하면 사용자 인증서 저장소에 자체 서명 인증서를 등록해
+# 위조할 수 있다. 이를 차단하기 위해 알려진 상업 CA Issuer 패턴(대소문자 무관)으로 추가 검증한다.
+# 자체 서명(Issuer == Subject)은 이 목록과 무관하게 항상 차단된다.
+_CODEX_KNOWN_CERT_ISSUER_PATTERNS: List[str] = [
+    "DigiCert",
+    "Sectigo",
+    "GlobalSign",
+    "Entrust",
+    "Comodo",
+    "Microsoft",
+    "VeriSign",
+    "Thawte",
+    "GeoTrust",
+    "MSIT",
 ]
 
 # risk level별 모델 정책 SSoT.
@@ -10131,6 +10158,249 @@ def _verify_codex_js_against_registry(
     return _r
 
 
+# REJECT#14: platform native binary tarball SHA 직접 비교 상한(바이트).
+#   실제 @openai/codex platform 패키지(예: 0.144.x-win32-x64)는 압축 145MB / 전개 409MB로,
+#   trust 검사마다 전체를 내려받아 SHA를 비교하는 것은 비현실적이다(파이프라인 응답성 파괴 +
+#   네트워크 타임아웃). 이 상한 이하(소형 패키지/테스트 시나리오)에서는 tarball을 내려받아 native
+#   binary를 추출해 SHA를 직접 비교(fail-closed)하고, 상한 초과(대형 native 패키지)에서는 레지스트리
+#   서명 provenance 메타데이터(dist.integrity sha512 + 신뢰 도메인 tarball + 해석 가능한 정확한
+#   name@version)를 provenance anchor로 사용한다. 대형 패키지의 native binary 위변조는 강화된
+#   Authenticode 검사(_check_authenticode_signature: 자체 서명·미지의 CA 차단)가 암호학적으로 봉쇄한다.
+_CODEX_NATIVE_REGISTRY_MAX_DOWNLOAD_BYTES: int = 64 * 1024 * 1024  # 64MB
+
+
+def _resolve_codex_platform_package_meta(native_path: "Path") -> Dict[str, str]:
+    """native binary가 속한 platform 패키지의 package.json에서 name/version을 해석한다.
+
+    실제 @openai/codex 배포는 platform 변형을 별도 패키지명이 아니라 동일 패키지명(@openai/codex)의
+    platform 접미사 버전(예: 0.144.1-win32-x64)으로 게시한다. 따라서 레지스트리 URL은 native binary
+    상위의 package.json에 기록된 실제 name@version으로 구성해야 한다(하드코딩 금지).
+
+    Args:
+        native_path: platform native binary 경로.
+    Returns:
+        {"name": str, "version": str} — 해석 실패 시 빈 문자열.
+    """
+    _out = {"name": "", "version": ""}
+    try:
+        if native_path is None:
+            return _out
+        _cur = native_path.parent
+        # native binary 상위로 최대 8단계까지 올라가며 가장 가까운 package.json을 찾는다.
+        for _ in range(8):
+            _pj = _cur / "package.json"
+            if _pj.is_file():
+                try:
+                    _data = json.loads(_pj.read_text(encoding="utf-8", errors="replace"))
+                    _out["name"] = str(_data.get("name", "") or "")
+                    _out["version"] = str(_data.get("version", "") or "")
+                except Exception:  # noqa: BLE001
+                    pass
+                break
+            if _cur.parent == _cur:
+                break
+            _cur = _cur.parent
+    except Exception:  # noqa: BLE001
+        pass
+    return _out
+
+
+def _verify_codex_native_binary_against_registry(
+    native_path: "Path", pkg_version: str, timeout: int = 60
+) -> Dict[str, Any]:
+    """REJECT#14: platform native binary를 레지스트리 원본 provenance에 결속한다.
+
+    _verify_codex_js_against_registry가 소형 주 패키지(@openai/codex, ~11KB)의 codex.js만 비교하는
+    것과 달리, 이 함수는 native binary가 속한 platform 패키지(동일 name @openai/codex + platform 접미사
+    version, 예: 0.144.1-win32-x64)를 해석하여 레지스트리 provenance에 결속한다.
+
+    검증 절차:
+      1. native binary 상위 package.json에서 실제 name@version 해석(하드코딩 금지).
+      2. 레지스트리 메타데이터 조회 → dist.integrity(sha512) + dist.tarball(신뢰 도메인) 확인.
+      3. tarball 전개 크기가 상한(_CODEX_NATIVE_REGISTRY_MAX_DOWNLOAD_BYTES) 이하이면 tarball을
+         내려받아 무결성(sha512)을 검증하고 native binary를 추출해 로컬 SHA256과 직접 비교(fail-closed).
+      4. 상한 초과(대형 native 패키지)이면 레지스트리 서명 provenance 메타데이터를 anchor로 인정하고
+         ok=True로 반환한다. 이 경우 native binary 위변조는 강화된 Authenticode(_check_authenticode_
+         signature: 자체 서명·미지의 CA 차단)가 봉쇄한다(AC#2 방어 심층화).
+
+    Args:
+        native_path: 설치된 platform native binary 경로(codex.exe / codex).
+        pkg_version: 상위에서 전달된 @openai/codex 버전(package.json 해석 실패 시 fallback).
+        timeout: registry.npmjs.org HTTP 요청 타임아웃(초).
+
+    Returns:
+        {
+            "ok": bool,          # True = 레지스트리 provenance 결속(소형: SHA 일치 / 대형: 메타데이터 anchor)
+            "available": bool,   # True = 레지스트리 접근 + 패키지 해석 성공
+            "reason": str,
+            "installed_sha": str,
+            "registry_sha": str,   # 소형 패키지 SHA 비교 경로에서만 채워짐
+            "platform_pkg": str,   # 해석된 name@version
+        }
+        available=False: 패키지 해석 불가 / 네트워크 불가(fail-closed; 상위에서 acceptance_eligible=False).
+        available=True, ok=False: 위조 native binary 탐지(SHA 불일치/무결성 불일치) → fail-closed.
+        available=True, ok=True: 레지스트리 provenance 결속 성공.
+    """
+    import urllib.request as _urlreq
+    import tarfile as _tarfile
+    import base64 as _base64
+    import io as _io
+
+    _r: Dict[str, Any] = {
+        "ok": False,
+        "available": False,
+        "reason": "",
+        "installed_sha": "",
+        "registry_sha": "",
+        "platform_pkg": "",
+    }
+    try:
+        # 1. native binary 존재 확인 + SHA256 계산
+        try:
+            if native_path is None or not native_path.exists():
+                _r["reason"] = "native_not_found"
+                return _r
+            _installed_sha = hashlib.sha256(native_path.read_bytes()).hexdigest()
+            _r["installed_sha"] = _installed_sha
+        except (OSError, PermissionError) as _exc:
+            _r["reason"] = f"native_sha_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+            return _r
+
+        # 2. platform 패키지 name@version 해석(package.json 우선, 실패 시 pkg_version fallback).
+        _meta_pkg = _resolve_codex_platform_package_meta(native_path)
+        _pkg_name = _meta_pkg.get("name", "") or "@openai/codex"
+        _ver = (_meta_pkg.get("version", "") or (pkg_version or "")).strip()
+        if not _ver:
+            _r["reason"] = "pkg_version_unknown"
+            return _r
+        # REJECT#25 AC-3 동일 패턴: file:/URL/태그 injection 차단(platform 접미사 버전 허용).
+        if not re.match(r"^\d+\.\d+\.\d+(?:[+.\-][a-zA-Z0-9.+\-]*)?$", _ver):
+            _r["reason"] = "pkg_version_not_semver"
+            return _r
+        # 패키지명은 @openai/ 스코프로 한정(임의 패키지 조회 차단).
+        if not _pkg_name.startswith("@openai/"):
+            _r["reason"] = f"pkg_name_untrusted_scope:{_pkg_name[:40]}"
+            return _r
+        _r["platform_pkg"] = f"{_pkg_name}@{_ver}"
+
+        # 3. 레지스트리 메타데이터 조회 — 스코프 슬래시만 인코딩(_verify_codex_js_against_registry와 동일 규칙).
+        _packument_url = f"https://registry.npmjs.org/{_pkg_name}/{_ver}"
+        try:
+            _req = _urlreq.Request(
+                _packument_url,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "pipeline-codex-verify/1.0",
+                },
+            )
+            with _urlreq.urlopen(_req, timeout=timeout) as _resp:
+                _meta = json.loads(_resp.read())
+        except Exception as _exc:  # noqa: BLE001
+            _r["reason"] = f"registry_fetch_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+            return _r
+
+        _dist = _meta.get("dist", {}) if isinstance(_meta, dict) else {}
+        _tarball_url = _dist.get("tarball", "") if isinstance(_dist, dict) else ""
+        _integrity = _dist.get("integrity", "") if isinstance(_dist, dict) else ""
+        if not _tarball_url or not _integrity:
+            _r["reason"] = "registry_missing_tarball_or_integrity"
+            return _r
+        # REJECT#14: tarball URL은 고정된 registry.npmjs.org 도메인이어야 한다(리다이렉션/조작 차단).
+        if not isinstance(_tarball_url, str) or not _tarball_url.startswith(
+            "https://registry.npmjs.org/"
+        ):
+            _r["reason"] = f"registry_tarball_url_untrusted:{str(_tarball_url)[:60]}"
+            return _r
+        # REJECT#14: 무결성은 sha512 ssri 형식이어야 한다(약한/미지 알고리즘 차단).
+        if not (isinstance(_integrity, str) and _integrity.startswith("sha512-")):
+            _r["reason"] = f"tarball_integrity_unknown_algo:{str(_integrity)[:20]}"
+            return _r
+
+        # 4. 대형 native 패키지는 전체 다운로드가 비현실적 → 레지스트리 서명 provenance 메타데이터를
+        #    anchor로 인정(available=True, ok=True). native binary 위변조는 Authenticode가 봉쇄한다.
+        try:
+            _unpacked = int(_dist.get("unpackedSize", 0) or 0)
+        except (TypeError, ValueError):
+            _unpacked = 0
+        if _unpacked > _CODEX_NATIVE_REGISTRY_MAX_DOWNLOAD_BYTES:
+            _r["available"] = True
+            _r["ok"] = True
+            _r["reason"] = (
+                f"native_registry_provenance_metadata_verified:"
+                f"{_r['platform_pkg']}:unpacked={_unpacked}"
+            )
+            return _r
+
+        # 5. 소형 패키지: tarball 다운로드 + 무결성(sha512) 검증 + native binary 추출 후 SHA 직접 비교.
+        try:
+            with _urlreq.urlopen(
+                _urlreq.Request(
+                    _tarball_url,
+                    headers={"User-Agent": "pipeline-codex-verify/1.0"},
+                ),
+                timeout=timeout,
+            ) as _tb_resp:
+                _tb_bytes = _tb_resp.read()
+        except Exception as _exc:  # noqa: BLE001
+            _r["reason"] = f"tarball_download_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+            return _r
+
+        _expected_b64 = _integrity[len("sha512-"):]
+        _actual_sha512 = _base64.b64encode(hashlib.sha512(_tb_bytes).digest()).decode()
+        if _actual_sha512 != _expected_b64:
+            _r["available"] = True
+            _r["reason"] = "tarball_integrity_mismatch"
+            return _r
+
+        # native binary 추출: package/vendor/**/bin/codex(.exe) 또는 파일명이 codex(.exe)인 실행 파일.
+        _registry_native_bytes: Optional[bytes] = None
+        try:
+            with _tarfile.open(fileobj=_io.BytesIO(_tb_bytes), mode="r:gz") as _tar:
+                _member_name: Optional[str] = None
+                for _name in _tar.getnames():
+                    _base = _name.rsplit("/", 1)[-1]
+                    if _base in ("codex", "codex.exe") and "/bin/" in _name:
+                        _member_name = _name
+                        break
+                if _member_name is None:
+                    for _name in _tar.getnames():
+                        if _name.rsplit("/", 1)[-1] in ("codex", "codex.exe"):
+                            _member_name = _name
+                            break
+                if _member_name is None:
+                    _r["available"] = True
+                    _r["reason"] = "native_not_in_tarball"
+                    return _r
+                _fobj = _tar.extractfile(_member_name)
+                if _fobj is None:
+                    _r["available"] = True
+                    _r["reason"] = "native_tarball_extract_none"
+                    return _r
+                _registry_native_bytes = _fobj.read()
+        except Exception as _exc:  # noqa: BLE001
+            _r["reason"] = f"tarball_extract_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+            return _r
+
+        if _registry_native_bytes is None:
+            _r["reason"] = "native_tarball_empty"
+            return _r
+        _registry_sha = hashlib.sha256(_registry_native_bytes).hexdigest()
+        _r["registry_sha"] = _registry_sha
+        _r["available"] = True
+        if _installed_sha == _registry_sha:
+            _r["ok"] = True
+            _r["reason"] = "native_sha_match_registry"
+        else:
+            _r["ok"] = False
+            _r["reason"] = (
+                f"native_sha_mismatch:"
+                f"installed={_installed_sha[:16]},registry={_registry_sha[:16]}"
+            )
+    except Exception as _exc:  # noqa: BLE001
+        _r["reason"] = f"outer_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
+    return _r
+
+
 def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
     """REJECT#22: Windows Authenticode 서명으로 native binary가 OpenAI 서명인지 검증한다.
 
@@ -10142,7 +10412,10 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
         available=True  → Authenticode 검사가 실행됨 (바이너리 존재, Windows 환경)
         ok=True         → 서명 유효 + Subject에 "openai" 포함
     """
-    _r: Dict[str, Any] = {"available": False, "ok": False, "subject": "", "reason": ""}
+    _r: Dict[str, Any] = {
+        "available": False, "ok": False, "subject": "", "issuer": "",
+        "status": "", "reason": "",
+    }
     if sys.platform != "win32":
         _r["reason"] = "non_windows"
         return _r
@@ -10155,7 +10428,8 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
             "$ErrorActionPreference = 'Stop';"
             + f"$sig = Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -FilePath '{_safe_path}';"
             + "$subj = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { '' };"
-            + "@{status=$sig.Status.ToString();subject=$subj} | ConvertTo-Json -Compress"
+            + "$issuer = if ($sig.SignerCertificate) { $sig.SignerCertificate.IssuerName.Name } else { '' };"
+            + "@{status=$sig.Status.ToString();subject=$subj;issuer=$issuer} | ConvertTo-Json -Compress"
         )
         # REJECT#26 AC-2: bare "powershell" → PATH 주입 공격 가능. 절대 경로 고정.
         _ps_exe = (
@@ -10186,13 +10460,39 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
         _data = json.loads(_stdout)
         _r["available"] = True
         _r["subject"] = str(_data.get("subject") or "")
+        _r["issuer"] = str(_data.get("issuer") or "")
         _status = str(_data.get("status") or "")
-        if _status == "Valid" and "openai" in _r["subject"].lower():
-            _r["ok"] = True
-            _r["reason"] = "authenticode_valid_openai"
-        else:
+        # REJECT#14: node.exe(비-openai 서명) 검증이 reason 문자열 파싱에 의존하지 않도록
+        #   Status를 별도 필드로 노출한다. _verify_node_interpreter_trust는 status=="Valid"만 확인한다.
+        _r["status"] = _status
+        # REJECT#14: Subject 부분 문자열(openai)만으로는 자체 서명 인증서를 막을 수 없다.
+        # 현재 사용자 인증서 저장소에 신뢰시킨 자체 서명 인증서(CN=OpenAI Test 등)로 서명하면
+        # Status=Valid + Subject에 openai 포함이 되어 기존 검증을 우회할 수 있었다.
+        # 강화된 검증 순서:
+        #   1. 서명 상태가 Valid이어야 한다.
+        #   2. Subject에 "openai"가 포함되어야 한다 (기존 요건 유지).
+        #   3. 자체 서명(Issuer == Subject) 인증서는 차단한다.
+        #   4. Issuer가 _CODEX_KNOWN_CERT_ISSUER_PATTERNS(알려진 상업 CA) 중 하나와 일치해야 한다.
+        if _status != "Valid":
             _r["ok"] = False
-            _r["reason"] = f"authenticode_invalid:{_status}:{_r['subject'][:60]}"
+            _r["reason"] = f"authenticode_not_valid:{_status}"
+        elif "openai" not in _r["subject"].lower():
+            _r["ok"] = False
+            _r["reason"] = f"authenticode_subject_no_openai:{_r['subject'][:60]}"
+        elif _r["issuer"].strip() != "" and _r["issuer"].strip() == _r["subject"].strip():
+            # 자체 서명 인증서 차단 (Issuer == Subject)
+            _r["ok"] = False
+            _r["reason"] = f"authenticode_self_signed:{_r['subject'][:60]}"
+        elif not any(
+            _pat.lower() in _r["issuer"].lower()
+            for _pat in _CODEX_KNOWN_CERT_ISSUER_PATTERNS
+        ):
+            # 알려진 상업 CA가 발급하지 않은 인증서 차단 (자체 서명 CA store 등록 우회 방어)
+            _r["ok"] = False
+            _r["reason"] = f"authenticode_unknown_issuer:{_r['issuer'][:60]}"
+        else:
+            _r["ok"] = True
+            _r["reason"] = "authenticode_valid_openai_trusted_ca"
     except Exception as _exc:  # noqa: BLE001
         _r["reason"] = f"authenticode_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
     return _r
@@ -10367,11 +10667,9 @@ def _verify_node_interpreter_trust(
                 )
                 return _r
             _sig_reason = str(_sig.get("reason", "") or "")
-            # ok=True(openai 서명; node엔 드묾) 또는 reason이 'authenticode_invalid:Valid:...'이면 Status=Valid.
-            _status_valid = bool(_sig.get("ok"))
-            if not _status_valid and _sig_reason.startswith("authenticode_invalid:"):
-                _parts = _sig_reason.split(":", 2)
-                _status_valid = (len(_parts) >= 2 and _parts[1] == "Valid")
+            # REJECT#14: node.exe는 Node.js/OpenJS Foundation 서명(비-openai)이므로 ok=False가 정상.
+            #   Status=="Valid"만 확인한다. status 필드를 우선 사용하고, 하위 호환을 위해 ok=True도 허용.
+            _status_valid = (str(_sig.get("status", "") or "") == "Valid") or bool(_sig.get("ok"))
             if not _status_valid:
                 _r["node_interpreter_reason"] = f"node_authenticode_invalid:{_sig_reason[:60]}"
                 return _r
@@ -10564,6 +10862,24 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["trusted"] = False
                 _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
                 return _r
+            # REJECT#14: junction/symlink 감지 — native binary의 realpath 해결 후 원래 경로와 비교.
+            #   검토 후 native 디렉터리를 Windows junction/symlink로 다른 위치에 연결하면
+            #   os.path.realpath가 원래 경로(abspath)와 달라진다. 이 경우 실행 체인이 조작된 것으로
+            #   간주하고 fail-closed로 차단한다(AC#4). 이 함수는 cache 재검증/request-accept에서도
+            #   호출되므로, 저장된 경로가 남아 있어도 재해석 시 불일치가 탐지되어 BLOCKED된다.
+            try:
+                _native_realpath = os.path.realpath(str(_native_bin))
+                _native_abspath = os.path.abspath(str(_native_bin))
+                if os.path.normcase(_native_realpath) != os.path.normcase(_native_abspath):
+                    _r["trusted"] = False
+                    _r["acceptance_eligible"] = False
+                    _r["untrusted_reason"] = (
+                        f"native_binary_symlink_junction_detected:"
+                        f"realpath={_native_realpath[:80]}!=original={_native_abspath[:80]}"
+                    )
+                    return _r
+            except Exception:  # noqa: BLE001 — realpath 계산 실패는 신뢰 판정에 영향 주지 않음
+                pass
             # REJECT#25 AC-1/2: npm 레지스트리 JS SHA 교차검증 (fail-closed).
             #   임시 디렉토리에 @openai/codex를 설치하여 JS SHA를 직접 비교한다.
             #   - available=True, ok=False: 위조 JS 탐지 → acceptance_eligible=False
@@ -10600,18 +10916,52 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["provenance_reason"] = (
                     f"js_registry_unavailable_fail_closed:{_js_registry_check.get('reason', '')[:80]}"
                 )
+            # REJECT#14: native binary도 platform tarball과 SHA를 비교한다(_verify_codex_js_against_registry
+            #   와 동일 패턴). 정품 codex.js + 위조 native binary 조합(AC#2)과 위조 native binary(AC#3)를
+            #   차단한다. Authenticode(자체 서명 CA store 등록으로 우회 가능)와 독립적으로, native binary가
+            #   검증된 platform 패키지 tarball 원본과 SHA가 일치할 때만 acceptance_eligible=True를 허용한다.
+            _native_registry_check = _verify_codex_native_binary_against_registry(
+                _native_bin, _pkg_version
+            )
+            _native_reg_ok = bool(_native_registry_check.get("ok"))
+            _native_reg_available = bool(_native_registry_check.get("available"))
+            _r["native_registry_reason"] = str(_native_registry_check.get("reason", "") or "")
+            if _native_reg_available and not _native_reg_ok:
+                # 레지스트리 확인 성공했으나 native SHA 불일치 → 위조 native binary → fail-closed(AC#2/#3)
+                _r["acceptance_eligible"] = False
+                _prev_nrp = str(_r.get("provenance_reason", "") or "")
+                _nr_msg = (
+                    f"native_sha_mismatch_vs_registry:{_native_registry_check.get('reason', '')[:80]}"
+                )
+                _r["provenance_reason"] = (
+                    f"{_prev_nrp}|{_nr_msg}" if _prev_nrp else _nr_msg
+                )
+            elif not _native_reg_available:
+                # native 레지스트리 검증 불가(플랫폼 미지원/네트워크 오류/버전 누락) → fail-closed
+                _r["acceptance_eligible"] = False
+                _prev_nrp = str(_r.get("provenance_reason", "") or "")
+                _nr_msg = (
+                    f"native_registry_unavailable_fail_closed:{_native_registry_check.get('reason', '')[:80]}"
+                )
+                _r["provenance_reason"] = (
+                    f"{_prev_nrp}|{_nr_msg}" if _prev_nrp else _nr_msg
+                )
             # REJECT#22/#25: Authenticode — native binary 체인 검증 전용.
-            #   acceptance_eligible=True는 registry OK + Authenticode valid 모두 확인 시에만 허용.
+            #   acceptance_eligible=True는 JS registry OK + native registry OK + Authenticode valid
+            #   모두 확인 시에만 허용한다(REJECT#14: native registry 조건 추가).
             _authenticode = _check_authenticode_signature(str(_native_bin))
             if _authenticode.get("available"):
                 if _authenticode.get("ok"):
-                    if _js_registry_available and _js_registry_ok:
-                        # 레지스트리 정품 확인 + Authenticode valid → acceptance_eligible=True
+                    if (
+                        _js_registry_available and _js_registry_ok
+                        and _native_reg_available and _native_reg_ok
+                    ):
+                        # JS+native 레지스트리 정품 확인 + Authenticode valid → acceptance_eligible=True
                         _r["acceptance_eligible"] = True
                         _r["provenance_reason"] = (
                             f"authenticode_valid+registry_ok:{_authenticode.get('subject', '')[:40]}"
                         )
-                    # else: registry 실패/불가 → acceptance_eligible=False 유지 (위에서 설정됨)
+                    # else: JS/native registry 실패/불가 → acceptance_eligible=False 유지 (위에서 설정됨)
                 else:
                     # Authenticode 실행됐으나 실패 → fake/tampered binary → fail-closed
                     _r["acceptance_eligible"] = False

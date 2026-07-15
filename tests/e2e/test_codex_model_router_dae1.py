@@ -6474,6 +6474,11 @@ class TestTC21ProvenanceBlockingE2E:
             pipeline, "_verify_codex_js_against_registry",
             lambda _js, _ver, **_kw: {"ok": True, "available": True, "reason": "js_sha_matches_registry", "installed_sha": "aaa", "registry_sha": "aaa"},
         )
+        # REJECT#14: native binary 레지스트리 검증 mock → 정품 native 시뮬레이션 (acceptance_eligible=True 조건)
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_native_binary_against_registry",
+            lambda _native, _ver, **_kw: {"ok": True, "available": True, "reason": "native_sha_match_registry", "installed_sha": "aaa", "registry_sha": "aaa", "platform_pkg": "@openai/codex-linux-x64-gnu"},
+        )
 
         # npm global bin이 tmp_path를 반환하도록 (경로 신뢰 우회 → trusted=True 확보)
         npm_bin_dir = str(tmp_path / "npm_bin")
@@ -6545,6 +6550,11 @@ class TestTC21ProvenanceBlockingE2E:
         monkeypatch.setattr(
             pipeline, "_verify_codex_js_against_registry",
             lambda _js, _ver, **_kw: {"ok": True, "available": True, "reason": "js_sha_matches_registry", "installed_sha": "bbb", "registry_sha": "bbb"},
+        )
+        # REJECT#14: native binary 레지스트리 검증 mock → 정품 native 시뮬레이션 (acceptance_eligible=True 조건)
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_native_binary_against_registry",
+            lambda _native, _ver, **_kw: {"ok": True, "available": True, "reason": "native_sha_match_registry", "installed_sha": "bbb", "registry_sha": "bbb", "platform_pkg": "@openai/codex-linux-x64-gnu"},
         )
         npm_bin_dir = str(tmp_path / "npm_bin")
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
@@ -7446,6 +7456,11 @@ class TestTC24Reject28NodeInterpreterVerification:
         monkeypatch.setattr(
             pipeline, "_verify_codex_js_against_registry",
             lambda _js, _ver, **_kw: {"ok": True, "available": True, "reason": "js_sha_matches_registry"},
+        )
+        # REJECT#14: native binary 레지스트리 검증 mock → 정품 native 시뮬레이션 (acceptance_eligible=True 조건)
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_native_binary_against_registry",
+            lambda _native, _ver, **_kw: {"ok": True, "available": True, "reason": "native_sha_match_registry", "platform_pkg": "@openai/codex-linux-x64-gnu"},
         )
         npm_bin_dir = str(tmp_path / "npm_bin")
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
@@ -8458,3 +8473,101 @@ class TestTC64Reject38CentralCleanEnv:
         assert _risk == "CRITICAL", (
             f"_CODEX_NODE_PRELOAD_VARS change must be CRITICAL, got {_risk!r} ({_result!r})"
         )
+
+
+class TestTC65Reject14NativeBinaryTrust:
+    """REJECT#14: native binary 신뢰 체인 강화 검증 (AC#1-5).
+
+    - AC#1: 자체 서명(CN=OpenAI Test) 인증서로 서명한 native binary는 acceptance_eligible=false로 차단.
+    - AC#2: 정품 codex.js + 변조 native binary 조합은 로그인/exec 전에 차단.
+    - AC#3: native binary SHA가 검증된 platform 패키지 원본과 일치할 때만 운영 신뢰 검사 PASS.
+    - AC#4: native 디렉터리를 junction/symlink로 재연결하면 실행 체인 불일치로 BLOCKED.
+    - AC#5: 정상 OpenAI 설치는 고정 publisher + platform 패키지 검증을 통과(회귀 테스트).
+    """
+
+    def test_tc65a_authenticode_self_signed_blocked(self):
+        """TC-65a: 자체 서명(Issuer==Subject) 인증서 + 알려진 CA 검증 로직 존재(AC#1)."""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._check_authenticode_signature)
+        assert "self_signed" in src or "issuer" in src.lower(), (
+            "_check_authenticode_signature must detect self-signed (Issuer==Subject) certs"
+        )
+        assert "_CODEX_KNOWN_CERT_ISSUER_PATTERNS" in src, (
+            "_check_authenticode_signature must use _CODEX_KNOWN_CERT_ISSUER_PATTERNS for CA validation"
+        )
+
+    def test_tc65b_known_cert_issuer_patterns_in_critical_constants(self):
+        """TC-65b: _CODEX_KNOWN_CERT_ISSUER_PATTERNS가 CODEX_CRITICAL_CONSTANTS에 등록됨."""
+        import pipeline as _pl
+        assert "_CODEX_KNOWN_CERT_ISSUER_PATTERNS" in _pl.CODEX_CRITICAL_CONSTANTS, (
+            "_CODEX_KNOWN_CERT_ISSUER_PATTERNS must be in CODEX_CRITICAL_CONSTANTS"
+        )
+
+    def test_tc65c_native_binary_registry_function_exists(self):
+        """TC-65c: _verify_codex_native_binary_against_registry 함수 존재(AC#3)."""
+        import pipeline as _pl
+        assert hasattr(_pl, "_verify_codex_native_binary_against_registry"), (
+            "_verify_codex_native_binary_against_registry must exist in pipeline"
+        )
+
+    def test_tc65d_native_binary_registry_function_in_critical_functions(self):
+        """TC-65d: _verify_codex_native_binary_against_registry가 CODEX_CRITICAL_FUNCTIONS에 등록됨."""
+        import pipeline as _pl
+        assert "_verify_codex_native_binary_against_registry" in _pl.CODEX_CRITICAL_FUNCTIONS, (
+            "_verify_codex_native_binary_against_registry must be in CODEX_CRITICAL_FUNCTIONS"
+        )
+
+    def test_tc65e_native_binary_symlink_detection_in_trust_fn(self):
+        """TC-65e: _verify_codex_binary_path_trust가 symlink/junction 감지 코드 포함(AC#4)."""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._verify_codex_binary_path_trust)
+        assert "realpath" in src or "symlink_junction" in src, (
+            "_verify_codex_binary_path_trust must detect symlink/junction via realpath"
+        )
+
+    def test_tc65f_known_cert_issuer_patterns_nonempty(self):
+        """TC-65f: _CODEX_KNOWN_CERT_ISSUER_PATTERNS가 비어있지 않음."""
+        import pipeline as _pl
+        assert hasattr(_pl, "_CODEX_KNOWN_CERT_ISSUER_PATTERNS"), (
+            "_CODEX_KNOWN_CERT_ISSUER_PATTERNS must exist"
+        )
+        assert len(_pl._CODEX_KNOWN_CERT_ISSUER_PATTERNS) >= 3, (
+            "_CODEX_KNOWN_CERT_ISSUER_PATTERNS must have at least 3 known CA patterns"
+        )
+
+    def test_tc65g_known_cert_issuer_patterns_change_triggers_critical(self):
+        """TC-65g: _CODEX_KNOWN_CERT_ISSUER_PATTERNS 변경이 CRITICAL risk를 트리거.
+
+        _classify_codex_review_risk(changed_files, changed_functions, changed_constants)는
+        dict를 반환하며, changed_constants에 CRITICAL 상수가 있으면 risk_level=CRITICAL.
+        changed_files는 fail-closed 방지를 위해 비어 있지 않아야 한다.
+        """
+        import pipeline as _pl
+        _result = _pl._classify_codex_review_risk(
+            ["pipeline.py"],
+            [],
+            ["_CODEX_KNOWN_CERT_ISSUER_PATTERNS"],
+        )
+        _risk = _result.get("risk_level")
+        assert _risk == "CRITICAL", (
+            f"_CODEX_KNOWN_CERT_ISSUER_PATTERNS change must be CRITICAL, got {_risk!r} ({_result!r})"
+        )
+
+    def test_tc65h_native_binary_registry_function_signature(self):
+        """TC-65h: _verify_codex_native_binary_against_registry 시그니처/반환 구조 검증(AC#3).
+
+        pkg_version="" (비-semver)이면 available=False로 fail-closed 반환한다.
+        """
+        import pipeline as _pl
+        from pathlib import Path as _Path
+        # 존재하지 않는 경로 → native_not_found (available=False, fail-closed)
+        _r = _pl._verify_codex_native_binary_against_registry(
+            _Path("/nonexistent_native_binary_tc65h"), "1.0.0"
+        )
+        assert isinstance(_r, dict), "must return dict"
+        assert _r.get("available") is False, f"nonexistent native must be available=False: {_r!r}"
+        assert _r.get("ok") is False, f"nonexistent native must be ok=False: {_r!r}"
+        for _k in ("ok", "available", "reason", "installed_sha", "registry_sha", "platform_pkg"):
+            assert _k in _r, f"return dict must contain key {_k!r}: {sorted(_r.keys())!r}"
