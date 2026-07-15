@@ -5761,8 +5761,9 @@ class TestTC18CapabilityTOCTOUAndCoverage:
 
     def test_detect_capability_without_param_falls_back_to_codex(self) -> None:
         """verified_bin_path가 빈 문자열이면 'codex' PATH fallback을 사용하고, env=None이면
-        현재 환경을 상속한다(레거시 호환)."""
+        REJECT#37에 따라 _codex_clean_env()로 정제된 환경(NODE_OPTIONS/NODE_PATH 제거)을 사용한다."""
         from unittest.mock import patch, MagicMock
+        import os
 
         captured: dict = {}
 
@@ -5775,17 +5776,31 @@ class TestTC18CapabilityTOCTOUAndCoverage:
             m.stderr = ""
             return m
 
-        with patch("pipeline.subprocess.run", side_effect=_mock_run):
-            # 파라미터 없이 호출(레거시 호환 경로) — verified_bin_path="" , env=None.
-            result = pipeline._detect_codex_cli_capability()
+        old_env = os.environ.copy()
+        os.environ["NODE_OPTIONS"] = "--require=/tmp/evil.js"
+        try:
+            with patch("pipeline.subprocess.run", side_effect=_mock_run):
+                # 파라미터 없이 호출(레거시 호환 경로) — verified_bin_path="" , env=None.
+                result = pipeline._detect_codex_cli_capability()
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
 
         assert captured["cmd"][0] == "codex", (
             f"REJECT#16 결함A: 빈 verified_bin_path에서 'codex' fallback 미적용 — "
             f"got {captured['cmd']!r}"
         )
         assert captured["cmd"][1] == "--version"
-        assert captured["env"] is None, (
-            f"REJECT#16 결함A: env 미지정 시 None(현재 환경 상속)이어야 함 — got {captured['env']!r}"
+        # REJECT#37 AC#2: env 미지정 시 None(전체 환경 상속)이 아니라 정제 env여야 하며,
+        #   NODE_OPTIONS/NODE_PATH가 제거되어 있어야 한다(임의 JS preload 차단).
+        assert captured["env"] is not None, (
+            "REJECT#37 AC#2: env 미지정 시 None(전체 환경 상속)이면 NODE_OPTIONS가 전달됨 — 취약"
+        )
+        assert "NODE_OPTIONS" not in captured["env"], (
+            f"REJECT#37 AC#2: version 경로 env에 NODE_OPTIONS가 남아 있음 — got {captured['env'].get('NODE_OPTIONS')!r}"
+        )
+        assert "NODE_PATH" not in captured["env"], (
+            "REJECT#37 AC#2: version 경로 env에 NODE_PATH가 남아 있음"
         )
         assert result["available"] is True
 
@@ -8271,4 +8286,102 @@ class TestTC62Reject36EnvVarTrustRemoval:
         )
         assert '"NVM_SYMLINK"' not in src, (
             "REJECT#36 AC#3: _verify_npm_global_bin_allowed가 여전히 NVM_SYMLINK 환경변수를 신뢰함"
+        )
+
+
+class TestTC63Reject37NodeOptionsAndNoProfile:
+    """REJECT#37: NODE_OPTIONS/NODE_PATH 환경변수 제거 + Authenticode -NoProfile 강제.
+    capability/login/exec/version 모든 경로에서 단일 _codex_clean_env() 사용."""
+
+    def test_tc63a_codex_clean_env_removes_node_options(self) -> None:
+        """REJECT#37 AC#2: _codex_clean_env()가 NODE_OPTIONS를 제거한다."""
+        import os
+        old_env = os.environ.copy()
+        os.environ["NODE_OPTIONS"] = "--require=/tmp/evil.js"
+        os.environ["node_options"] = "--require=/tmp/evil2.js"
+        try:
+            env = pipeline._codex_clean_env()
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
+        assert "NODE_OPTIONS" not in env, (
+            "REJECT#37 AC#2: _codex_clean_env()가 NODE_OPTIONS를 제거하지 않음"
+        )
+        assert "node_options" not in env, (
+            "REJECT#37 AC#2: _codex_clean_env()가 소문자 node_options를 제거하지 않음"
+        )
+
+    def test_tc63b_codex_clean_env_removes_node_path(self) -> None:
+        """REJECT#37 AC#2: _codex_clean_env()가 NODE_PATH를 제거한다."""
+        import os
+        old_env = os.environ.copy()
+        os.environ["NODE_PATH"] = "/tmp/evil/modules"
+        try:
+            env = pipeline._codex_clean_env()
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
+        assert "NODE_PATH" not in env, (
+            "REJECT#37 AC#2: _codex_clean_env()가 NODE_PATH를 제거하지 않음"
+        )
+
+    def test_tc63c_codex_clean_env_still_removes_openai_api_key(self) -> None:
+        """REJECT#37: _codex_clean_env()가 기존대로 OPENAI_API_KEY도 제거한다 (회귀 없음)."""
+        import os
+        old_env = os.environ.copy()
+        os.environ["OPENAI_API_KEY"] = "sk-" + "EXAMPLE_DUMMY_" + "A" * 8  # noqa: S105
+        try:
+            env = pipeline._codex_clean_env()
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
+        assert "OPENAI_API_KEY" not in env, (
+            "REJECT#37: _codex_clean_env()가 OPENAI_API_KEY를 제거하지 않음 — 회귀"
+        )
+
+    def test_tc63d_node_preload_vars_constant_exists(self) -> None:
+        """REJECT#37 AC#2: _CODEX_NODE_PRELOAD_VARS 상수가 존재하고 NODE_OPTIONS/NODE_PATH를 포함한다."""
+        assert hasattr(pipeline, "_CODEX_NODE_PRELOAD_VARS"), (
+            "REJECT#37 AC#2: _CODEX_NODE_PRELOAD_VARS 상수가 없음"
+        )
+        assert "NODE_OPTIONS" in pipeline._CODEX_NODE_PRELOAD_VARS, (
+            "REJECT#37 AC#2: _CODEX_NODE_PRELOAD_VARS에 NODE_OPTIONS 없음"
+        )
+        assert "NODE_PATH" in pipeline._CODEX_NODE_PRELOAD_VARS, (
+            "REJECT#37 AC#2: _CODEX_NODE_PRELOAD_VARS에 NODE_PATH 없음"
+        )
+
+    def test_tc63e_invoke_codex_exec_uses_codex_clean_env_in_source(self) -> None:
+        """REJECT#37 AC#2: _invoke_codex_exec 소스에서 _codex_clean_env()를 사용한다."""
+        import inspect
+        src = inspect.getsource(pipeline._invoke_codex_exec)
+        assert "_codex_clean_env()" in src, (
+            "REJECT#37 AC#2: _invoke_codex_exec가 _codex_clean_env()를 사용하지 않음 — "
+            "인라인 env 정제는 NODE_OPTIONS를 제거하지 않는다"
+        )
+
+    def test_tc63f_check_codex_chatgpt_auth_uses_codex_clean_env_in_source(self) -> None:
+        """REJECT#37 AC#2: _check_codex_chatgpt_auth 소스에서 _codex_clean_env()를 사용한다."""
+        import inspect
+        src = inspect.getsource(pipeline._check_codex_chatgpt_auth)
+        assert "_codex_clean_env()" in src, (
+            "REJECT#37 AC#2: _check_codex_chatgpt_auth가 _codex_clean_env()를 사용하지 않음"
+        )
+
+    def test_tc63g_authenticode_uses_noprofile_in_source(self) -> None:
+        """REJECT#37 AC#3: _check_authenticode_signature 소스에 -NoProfile이 있다."""
+        import inspect
+        src = inspect.getsource(pipeline._check_authenticode_signature)
+        assert "-NoProfile" in src, (
+            "REJECT#37 AC#3: _check_authenticode_signature powershell 호출에 -NoProfile 없음 — "
+            "사용자 프로필에서 Get-AuthenticodeSignature 재정의 가능"
+        )
+
+    def test_tc63h_authenticode_uses_fully_qualified_cmdlet_in_source(self) -> None:
+        """REJECT#37 AC#3: _check_authenticode_signature가 완전 한정 cmdlet을 사용한다."""
+        import inspect
+        src = inspect.getsource(pipeline._check_authenticode_signature)
+        assert "Microsoft.PowerShell.Security" in src, (
+            "REJECT#37 AC#3: _check_authenticode_signature가 비한정 Get-AuthenticodeSignature를 사용함 — "
+            "사용자 모듈에서 재정의 가능"
         )

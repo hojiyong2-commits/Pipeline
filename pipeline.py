@@ -8647,10 +8647,13 @@ def _detect_codex_cli_capability(
     else:
         _cap_cmd = [_cap_bin, "--version"]
     try:
+        # REJECT#37: env가 None이면 _codex_clean_env()로 NODE_OPTIONS/NODE_PATH를 제거한다
+        #   (version 경로가 현재 프로세스 환경을 그대로 상속해 임의 JS를 preload하는 것을 차단).
+        _cap_env = env if env is not None else _codex_clean_env()
         result = subprocess.run(
             _cap_cmd,
             capture_output=True, text=True, timeout=5,
-            env=env,  # None이면 현재 환경 상속(레거시), 주어지면 OPENAI_API_KEY 제거 env 전달
+            env=_cap_env,
         )
         if result.returncode == 0:
             # CLI는 있으나 모델명을 결정적으로 확인할 수 없으므로 unknown으로 남긴다(허위 기록 금지).
@@ -8761,9 +8764,9 @@ def _invoke_codex_exec(
         f"-c model_reasoning_effort={_cli_effort} "
         "--sandbox read-only --ephemeral --json -C <repo-root> -"
     )
-    # 요구3: ChatGPT Plus 인증만 사용하도록 OPENAI_API_KEY를 subprocess 환경에서 제거한다.
-    codex_env = os.environ.copy()
-    codex_env.pop("OPENAI_API_KEY", None)
+    # REJECT#37: 단일 정제 함수 사용 — OPENAI_API_KEY와 함께 NODE_OPTIONS/NODE_PATH 등
+    #   Node 선행 로딩 변수도 제거한다(exec 경로의 임의 JS preload 차단).
+    codex_env = _codex_clean_env()
     base = {
         "available": False,
         "exit_code": -1,
@@ -10155,7 +10158,7 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
         _safe_path = native_binary_path.replace("'", "").replace('"', "")
         _ps_script = (
             "$ErrorActionPreference = 'Stop';"
-            + f"$sig = Get-AuthenticodeSignature -FilePath '{_safe_path}';"
+            + f"$sig = Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -FilePath '{_safe_path}';"
             + "$subj = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { '' };"
             + "@{status=$sig.Status.ToString();subject=$subj} | ConvertTo-Json -Compress"
         )
@@ -10171,8 +10174,11 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
             else:
                 _r["reason"] = "powershell_not_found_at_system32"
                 return _r
+        # REJECT#37: -NoProfile로 사용자 프로필 로드를 차단하고, 완전 한정 cmdlet
+        #   (Microsoft.PowerShell.Security\Get-AuthenticodeSignature)을 호출해 사용자 모듈이
+        #   Get-AuthenticodeSignature를 재정의해 서명 결과를 위조하는 것을 막는다.
         _proc = subprocess.run(
-            [_ps_exe, "-NonInteractive", "-Command", _ps_script],
+            [_ps_exe, "-NoProfile", "-NonInteractive", "-Command", _ps_script],
             capture_output=True, text=True, timeout=20,
         )
         if _proc.returncode != 0:
@@ -10216,21 +10222,51 @@ def _is_valid_sha256_hex(sha: Any) -> bool:
     return re.fullmatch(r"[0-9a-f]{64}", sha) is not None
 
 
-# [Purpose]: REJECT#28 AC-5 — 모든 Codex subprocess(login/exec/capability/--version)에 전달할
-#            환경에서 OPENAI_API_KEY를 제거한다(ChatGPT Plus 인증만 사용, API key 인증 차단).
-# [Assumptions]: 환경변수 키는 대소문자를 구분하나, 방어적으로 두 형태 모두 제거한다.
-# [Vulnerability & Risks]: env를 전달하지 않는 subprocess는 현재 프로세스의 OPENAI_API_KEY를
-#            상속하여 API key 인증으로 우회될 수 있으므로, 모든 Codex 호출에 이 env를 전달해야 한다.
+# REJECT#37: Node 선행 로딩 관련 환경변수 제거 목록 (SSoT).
+#   NODE_OPTIONS(--require/--loader로 임의 JS를 codex.js보다 먼저 로드), NODE_PATH(모듈 경로 재정의)
+#   등을 공격자가 설정하면 codex.js 실행 전에 임의 JS를 로드해 인증·모델·APPROVE 출력을 위조할 수
+#   있다. 환경변수 키는 대소문자를 구분하므로 각 항목을 대/소문자 두 형태로 제거한다.
+_CODEX_NODE_PRELOAD_VARS: List[str] = [
+    "NODE_OPTIONS",
+    "NODE_PATH",
+    "NODE_EXTRA_CA_CERTS",
+    "NODE_REPL_HISTORY",
+    "NODE_NO_WARNINGS",
+    "NODE_PENDING_DEPRECATION",
+    "NODE_DISABLE_COLORS",
+    "NODE_TLS_REJECT_UNAUTHORIZED",
+    "NODE_DEBUG",
+    "NODE_PRESERVE_SYMLINKS",
+    "ELECTRON_RUN_AS_NODE",
+]
+
+
+# [Purpose]: REJECT#28 AC-5 + REJECT#37 — 모든 Codex/Node subprocess(login/exec/capability/--version)에
+#            전달할 단일 정제 환경을 반환한다(SSoT). OPENAI_API_KEY 제거(API key 인증 차단) +
+#            NODE_OPTIONS/NODE_PATH 등 Node 선행 로딩 변수 제거(임의 JS preload 차단).
+# [Assumptions]: 환경변수 키는 대소문자를 구분하나, 방어적으로 대/소문자 두 형태 모두 제거한다.
+# [Vulnerability & Risks]: env를 전달하지 않는 subprocess는 현재 프로세스의 OPENAI_API_KEY와
+#            NODE_OPTIONS를 상속하여 우회될 수 있으므로, 모든 Codex/Node 호출에 이 env를 전달해야 한다.
 # [Improvement]: 향후 다른 민감 변수(예: CODEX_TOKEN)도 제거 대상에 추가할 수 있다.
 def _codex_clean_env() -> Dict[str, str]:
-    """OPENAI_API_KEY를 제거한 Codex subprocess용 환경 dict를 반환한다(REJECT#28 AC-5).
+    """REJECT#28 AC-5 + REJECT#37: Codex/Node subprocess용 정제 환경을 반환한다.
+
+    REJECT#28: OPENAI_API_KEY를 제거하여 API key 인증 경로를 차단한다.
+    REJECT#37: NODE_OPTIONS/NODE_PATH 등 Node 선행 로딩 관련 변수를 대소문자 구분 없이 제거하여
+      공격자가 --require=<preload.js>로 임의 JS를 codex.js보다 먼저 로드하는 공격 벡터를 차단한다.
+      capability/login/exec/version 모든 경로에서 이 함수를 단일하게 사용한다(SSoT).
 
     Returns:
-        os.environ 복사본에서 OPENAI_API_KEY(대/소문자)를 제거한 dict.
+        os.environ 복사본에서 OPENAI_API_KEY와 NODE 선행 로딩 변수를 제거한 dict.
     """
     _e = os.environ.copy()
+    # REJECT#28: API key 인증 경로 차단
     _e.pop("OPENAI_API_KEY", None)
     _e.pop("openai_api_key", None)
+    # REJECT#37: Node 선행 로딩 변수 대/소문자 무관 제거
+    for _var in _CODEX_NODE_PRELOAD_VARS:
+        _e.pop(_var, None)
+        _e.pop(_var.lower(), None)
     return _e
 
 
@@ -10747,9 +10783,9 @@ def _check_codex_chatgpt_auth(
         _login_cmd = [_auth_node_bin, _auth_codex_js, "login", "status"]
     else:
         _login_cmd = [_bin, "login", "status"]
-    # 인증 상태 확인 subprocess에도 OPENAI_API_KEY를 제거한다(API key 인증 경로 차단).
-    _env = os.environ.copy()
-    _env.pop("OPENAI_API_KEY", None)
+    # REJECT#37: 단일 정제 함수 사용 — OPENAI_API_KEY와 함께 NODE_OPTIONS/NODE_PATH 등
+    #   Node 선행 로딩 변수도 제거한다(login 경로의 임의 JS preload 차단).
+    _env = _codex_clean_env()
     try:
         _res = subprocess.run(
             _login_cmd,
