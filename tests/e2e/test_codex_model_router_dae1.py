@@ -7329,6 +7329,11 @@ class TestTC23Reject26FailOpenDefense:
         assert "--no-userconfig" in _call_args, (
             f"TC-23d: --no-userconfig 없음. args: {_npm_calls[0]!r}"
         )
+        # REJECT#27 AC-1: bare "npm" 사용 금지 — 검증된 절대 경로만 허용
+        _first_arg = _npm_calls[0][0] if isinstance(_npm_calls[0], list) else str(_npm_calls[0]).split()[0]
+        assert _first_arg != "npm", (
+            f"TC-23d: bare 'npm' 사용 금지 (PATH 재해석 공격). args[0]: {_first_arg!r}"
+        )
 
     def test_tc23e_package_json_absent_still_non_blocking(self, tmp_path: "Path") -> None:
         """AC-3 역방향: package.json이 존재하지 않으면 available=False, ok=True (기존 동작 유지)."""

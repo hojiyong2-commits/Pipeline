@@ -9861,26 +9861,41 @@ def _verify_codex_js_against_registry(
         if _npm_user_writable:
             _r["reason"] = f"npm_in_user_writable_path:{_npm_exe_norm[:80]}"
             return _r
-        # Windows에서 .CMD/.BAT 파일: shell=True 필요 (cmd.exe를 통해 실행)
-        _use_shell = _sys_reg.platform == "win32" and str(_npm_exe).lower().endswith((".cmd", ".bat"))
+        # REJECT#27: shell=True + bare "npm"은 PATH를 재해석하여 가짜 npm 실행 허용.
+        #   검증된 _npm_exe 절대 경로를 직접 사용하고 shell=True를 제거한다.
+        #   Windows .CMD: System32 절대 cmd.exe /c + 검증된 npm 절대 경로.
+        _is_win_cmd = _sys_reg.platform == "win32" and str(_npm_exe).lower().endswith((".cmd", ".bat"))
+        if _is_win_cmd:
+            # cmd.exe 절대 경로 고정 (PATH 재조회 방지)
+            _cmd_exe_path = r"C:\Windows\System32\cmd.exe"
+            if not os.path.isfile(_cmd_exe_path):
+                _r["reason"] = "cmd_exe_not_found_at_system32"
+                return _r
         try:
             with _tf_reg.TemporaryDirectory(prefix="codex_reg_verify_") as _tmpdir:
-                # REJECT#26 AC-2: NPM_CONFIG_* 및 사용자 설정을 제거하여 레지스트리 리다이렉션 공격 차단.
-                #   공식 registry.npmjs.org를 명시적으로 고정한다.
+                # REJECT#26 AC-2/REJECT#27: NPM_CONFIG_* 및 사용자 설정 제거로 레지스트리 리다이렉션 차단.
+                #   PATH도 정리하여 자식 프로세스가 가짜 npm을 호출하지 못하도록 한다.
                 _npm_env = {k: v for k, v in os.environ.items()
                             if not k.upper().startswith("NPM_CONFIG_")}
                 _npm_env.pop("npm_config_registry", None)
                 _npm_env.pop("NPM_CONFIG_REGISTRY", None)
+                # 검증된 _npm_exe만 사용: PATH의 가짜 npm 우선순위 공격 차단
+                _npm_install_args = [
+                    "--prefix", _tmpdir,
+                    "--no-save", "--ignore-scripts", "--prefer-offline=false",
+                    "--registry", "https://registry.npmjs.org",
+                    "--no-userconfig",
+                    f"@openai/codex@{pkg_version.strip()}",
+                ]
+                if _is_win_cmd:
+                    # Windows .CMD: System32 cmd.exe /c + 검증된 npm 절대 경로 (shell=False)
+                    _npm_cmd_list = [_cmd_exe_path, "/c", _npm_exe, "install"] + _npm_install_args
+                else:
+                    # POSIX: 검증된 npm 절대 경로를 직접 실행 (shell=False)
+                    _npm_cmd_list = [_npm_exe, "install"] + _npm_install_args
                 _proc = subprocess.run(
-                    [
-                        "npm", "install",
-                        "--prefix", _tmpdir,
-                        "--no-save", "--ignore-scripts", "--prefer-offline=false",
-                        "--registry", "https://registry.npmjs.org",
-                        "--no-userconfig",
-                        f"@openai/codex@{pkg_version.strip()}",
-                    ],
-                    shell=_use_shell, capture_output=True, text=True, timeout=timeout,
+                    _npm_cmd_list,
+                    shell=False, capture_output=True, text=True, timeout=timeout,
                     env=_npm_env,
                 )
                 if _proc.returncode != 0:
