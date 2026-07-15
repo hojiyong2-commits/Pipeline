@@ -6364,12 +6364,14 @@ class TestTC21ProvenanceBlockingE2E:
         )
         return wrapper
 
-    def test_tc21a_provenance_absent_all_sources_sets_acceptance_not_eligible(
+    def test_tc21a_provenance_absent_all_sources_acceptance_eligible_true(
         self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
     ) -> None:
-        """AC-2: lockfile·package.json·npm ls 세 소스 모두 absent → acceptance_eligible=False.
+        """AC-2 (REJECT#20 재조정): lockfile·package.json·npm ls 세 소스 모두 absent → acceptance_eligible=True.
 
-        trust_result["trusted"]=True이지만 acceptance_eligible=False이어야 한다.
+        npm 7+ 글로벌 설치 환경에서는 세 provenance 소스가 모두 부재인 것이 정상이다.
+        "부재"는 non-blocking — acceptance_eligible=True(trusted=True)이어야 한다.
+        "조작 양성(available=True, ok=False)"만 trusted=False로 차단한다.
         """
         import pytest
         import tempfile as _tf_mod
@@ -6435,13 +6437,13 @@ class TestTC21ProvenanceBlockingE2E:
         wrapper = self._make_fake_npm_wrapper(tmp_path)
         _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
 
-        # 체인 구조는 OK이지만 provenance absent → acceptance_eligible=False
-        assert _r.get("acceptance_eligible") is False, (
-            f"AC-2 실패: 세 provenance 소스 모두 absent인데 acceptance_eligible={_r.get('acceptance_eligible')!r}. "
-            f"결과: {_r!r}"
+        # REJECT#20 재조정: npm 7+ 정상 설치 → provenance 부재 → acceptance_eligible=True(non-blocking)
+        assert _r.get("trusted") is True, (
+            f"AC-2 실패: 정상 체인인데 trusted=False: {_r!r}"
         )
-        assert _r.get("provenance_reason") == "provenance_absent_all_sources", (
-            f"AC-2 실패: provenance_reason={_r.get('provenance_reason')!r} (예상: 'provenance_absent_all_sources')"
+        assert _r.get("acceptance_eligible") is True, (
+            f"AC-2 실패: provenance 부재(npm 7+ 정상)인데 acceptance_eligible=False — "
+            f"부재는 non-blocking이어야 함. 결과: {_r!r}"
         )
 
     def test_tc21b_npm_ls_integrity_ok_acceptance_eligible_true(
@@ -6752,18 +6754,28 @@ class TestTC22Reject20ExactHostnameAndExplicitBinE2E:
             f"(예상: 'codex_binary_untrusted_path')"
         )
 
-    def test_tc22e_explicit_codex_bin_provenance_absent_blocked(
+    def test_tc22e_explicit_codex_bin_provenance_absent_not_blocked_in_auth(
         self, monkeypatch: "pytest.MonkeyPatch"
     ) -> None:
-        """AC-5: codex_bin 명시 + trust=True, acceptance_eligible=False → BLOCKED.
+        """AC-5 (REJECT#20 설계 재조정): codex_bin 명시 + trust=True, acceptance_eligible=False
+        → _check_codex_chatgpt_auth는 더 이상 acceptance_eligible을 체크하지 않는다.
 
-        failure_code=codex_binary_provenance_absent.
+        REJECT#20 이전 설계: 명시적 codex_bin도 _verify_codex_binary_path_trust를 재호출하여
+          acceptance_eligible=False이면 차단했다. 그러나 이 동작은 npm 7+ 정상 설치에서
+          "provenance 부재" 상태(acceptance_eligible=False)가 항상 발생하므로 production
+          flow를 영구 차단하는 오탐을 유발했다.
+
+        REJECT#20 재조정: acceptance_eligible 검사는 _cmd_gates_codex_review에서 직접 수행하며,
+          _check_codex_chatgpt_auth 명시 경로에서는 신뢰 체인(trusted)만 확인한다.
+          따라서 acceptance_eligible=False여도 _check_codex_chatgpt_auth는 BLOCKED를 반환하지 않는다.
+          (실제 auth 검사 결과로 codex_not_chatgpt_authenticated 또는 codex_auth_check_failed 반환)
         """
         import pytest
 
         _FAKE_BIN = "/fake/npm/bin/codex" if pipeline.sys.platform != "win32" else r"C:\fake\npm\bin\codex"
 
-        # _verify_codex_binary_path_trust가 trusted=True, acceptance_eligible=False를 반환
+        # _verify_codex_binary_path_trust가 trusted=True, acceptance_eligible=False를 반환 (가정)
+        # 하지만 _check_codex_chatgpt_auth는 이 값을 더 이상 검사하지 않는다.
         monkeypatch.setattr(
             pipeline, "_verify_codex_binary_path_trust",
             lambda _p: {
@@ -6783,10 +6795,13 @@ class TestTC22Reject20ExactHostnameAndExplicitBinE2E:
         )
 
         _result = pipeline._check_codex_chatgpt_auth(codex_bin=_FAKE_BIN)
-        assert _result.get("result") == "BLOCKED", (
-            f"TC-22e: acceptance_eligible=False인데 BLOCKED가 아님: {_result!r}"
+        # 재조정 후: codex_binary_provenance_absent가 아닌 다른 failure_code 반환.
+        # 존재하지 않는 경로이므로 codex_auth_check_failed 예상.
+        assert _result.get("failure_code") != "codex_binary_provenance_absent", (
+            f"TC-22e: 재조정 후에도 codex_binary_provenance_absent가 반환됨 — "
+            f"명시적 codex_bin에서 acceptance_eligible 체크가 아직 남아있음: {_result!r}"
         )
-        assert _result.get("failure_code") == "codex_binary_provenance_absent", (
-            f"TC-22e: failure_code={_result.get('failure_code')!r} "
-            f"(예상: 'codex_binary_provenance_absent')"
+        # 결과는 BLOCKED이어야 하지만 failure_code는 auth 관련이어야 한다 (path/binary 없음 또는 auth 실패)
+        assert _result.get("result") == "BLOCKED", (
+            f"TC-22e: BLOCKED가 아님 (FAKE_BIN이 실행 불가이므로 BLOCKED 예상): {_result!r}"
         )

@@ -9941,10 +9941,14 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                     )
                     return _r
                 # REJECT#19: 소스 1·2 모두 absent이면 소스 3(npm ls -g --json) fallback 시도.
-                #   npm ls ok → 독립 provenance 확보, acceptance_eligible 유지.
-                #   npm ls 조작 양성 → fail-closed.
-                #   npm ls 도 absent → acceptance_eligible=False(체인 구조는 OK이나 독립
-                #   provenance가 없어 acceptance_eligible 자격 없음, trusted=True 유지).
+                #   npm ls available=True, ok=True → 독립 provenance 확보 (acceptance_eligible 유지).
+                #   npm ls available=True, ok=False → 조작 양성(integrity 형식 오류) → fail-closed.
+                #   npm ls absent → npm 7+ 글로벌 설치에서 정상 결과 (_integrity 미기록).
+                #                   absence는 non-blocking(3-layer 체인 구조 검증이 이미 완료됨).
+                # REJECT#20 설계 재조정: "provenance 부재"는 non-blocking.
+                #   npm 7+ 글로벌 설치 환경에서는 lockfile·package.json _integrity·npm ls _integrity
+                #   세 소스 모두 부재인 것이 정상이다. 조작 양성(available=True, ok=False)만 차단한다.
+                #   acceptance_eligible=False는 "조작 양성 → 바이너리 교체 가능" 시에만 설정한다.
                 if not _lock.get("available") and not _integ.get("available"):
                     _npm_ls = _get_npm_ls_integrity(_pkg_root_for_integrity)
                     if _npm_ls.get("available"):
@@ -9955,10 +9959,7 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                             )
                             return _r
                         # npm ls ok → acceptance_eligible 유지 (True)
-                    else:
-                        # 세 소스 모두 absent → acceptance_eligible=False
-                        _r["acceptance_eligible"] = False
-                        _r["provenance_reason"] = "provenance_absent_all_sources"
+                    # npm ls absent → acceptance_eligible 유지 (True, npm 7+ 정상 설치)
             except Exception as _exc:  # noqa: BLE001
                 # provenance 확인 자체 실패는 정상 설치를 깨지 않도록 non-blocking(수정 A/C가 보완).
                 pass
@@ -10032,10 +10033,10 @@ def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]
         _bin = _found or "codex"
     else:
         _bin = str(codex_bin)
-        # REJECT#20: codex_bin이 명시적으로 전달돼도 trust/provenance 체크 필수.
-        #   _cmd_gates_codex_review가 verified_bin_path를 명시적으로 전달하면
-        #   위 `if codex_bin is None:` 블록을 건너뛰어 provenance 체크가 우회된다.
-        #   명시적 codex_bin이어도 반드시 trust 검증과 acceptance_eligible 확인을 수행한다.
+        # REJECT#20: 명시적 codex_bin도 신뢰 체인(trusted) 검증은 수행한다. 단, acceptance_eligible은
+        #   더 이상 검사하지 않는다. npm 7+ 글로벌 설치에서는 provenance 소스가 모두 부재이므로
+        #   acceptance_eligible=False가 항상 발생하여 production flow를 영구 차단하기 때문이다.
+        #   (acceptance_eligible 검사는 _cmd_gates_codex_review에서 직접 수행 — 방어 이중 게이트)
         if _bin and _bin != "codex":
             _trust_explicit = _verify_codex_binary_path_trust(_bin)
             if not _trust_explicit["trusted"]:
@@ -10048,18 +10049,6 @@ def _check_codex_chatgpt_auth(codex_bin: Optional[str] = None) -> Dict[str, Any]
                     ),
                     "codex_binary_path": _bin,
                     "codex_binary_sha256": "",
-                }
-            if not _trust_explicit.get("acceptance_eligible", True):
-                return {
-                    "result": "BLOCKED",
-                    "failure_code": "codex_binary_provenance_absent",
-                    "message": (
-                        f"Codex 실행 파일(명시)의 독립 provenance가 없습니다"
-                        f"({_trust_explicit.get('provenance_reason', 'provenance_absent_all_sources')}): "
-                        "수락 자격 없음(fail-closed)."
-                    ),
-                    "codex_binary_path": _bin,
-                    "codex_binary_sha256": _trust_explicit.get("sha256", ""),
                 }
     # 인증 상태 확인 subprocess에도 OPENAI_API_KEY를 제거한다(API key 인증 경로 차단).
     _env = os.environ.copy()
@@ -26444,6 +26433,23 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     f"  Codex 실행 파일이 신뢰되지 않은 위치에 있습니다.\n"
                     f"  원인: {_codex_binary_trust.get('untrusted_reason', 'unknown')}\n"
                     f"  PATH에 가짜 binary가 주입됐을 수 있습니다. 올바른 codex 설치 경로를 확인하세요."
+                )
+            # REJECT#20: _verify_codex_binary_path_trust가 반환한 acceptance_eligible도 확인한다.
+            #   acceptance_eligible=False는 provenance 데이터가 존재하지만 조작됐음을 나타낸다
+            #   (해시 불일치 → trusted=False로 이미 위에서 차단됨). 방어적 이중 검사로 삽입.
+            #   npm 7+ 글로벌 설치에서 provenance가 "부재"이면 acceptance_eligible=True(non-blocking).
+            #   즉 이 블록은 "조작 양성이지만 trusted=True로 빠져나온 비정상 경로"만 잡는다.
+            elif not _codex_binary_trust.get("acceptance_eligible", True):
+                _write_codex_review_blocked_invalidation(
+                    pipeline_id, "codex_binary_provenance_absent",
+                    prev_reject_count, prev_cli_error_count,
+                    _review_bundle_sha256, _risk_level_str, _model_policy,
+                )
+                _die(
+                    "[BLOCKED] failure_code=codex_binary_provenance_absent\n"
+                    f"  Codex 실행 파일의 독립 provenance가 없거나 조작 양성입니다"
+                    f"({_codex_binary_trust.get('provenance_reason', '')}).\n"
+                    "  lockfile·package.json·npm ls 중 하나에서 integrity 불일치 — 차단 (fail-closed)."
                 )
     _environment_str = "test" if _fake_codex_bin else "production"
 
