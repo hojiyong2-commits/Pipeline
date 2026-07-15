@@ -28278,7 +28278,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _finding_categories = [
         str(c) for c in (_cli.get("root_cause_categories") or []) if str(c).strip()
     ]
-    _findings_list = _cli.get("findings") if isinstance(_cli.get("findings"), list) else []
+    _raw_findings = _cli.get("findings")
+    _findings_list: list = list(_raw_findings) if isinstance(_raw_findings, list) else []
     if review_status == "REJECTED":
         _reject_delta = int(_cli.get("reject_count_delta", 1) or 0) if _findings_present else 1
     else:
@@ -28689,7 +28690,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     if _non_converging:
         print(RED(f"  NON_CONVERGING: {_non_converging_reason} — 사용자 결정(contract migration) 필요"))
     if _finding_diagnostic_only:
-        print(f"  diagnostic_only: OUT_OF_SCOPE_DIAGNOSTIC findings — reject_count 미증가")
+        print("  diagnostic_only: OUT_OF_SCOPE_DIAGNOSTIC findings — reject_count 미증가")
     print(f"  packet_sha256: {packet_sha}")
     print(f"  reject_count: {new_reject_count}  cli_error_count: {new_cli_error_count}")
     print(f"  result: {_display_path(result_path)}\n")

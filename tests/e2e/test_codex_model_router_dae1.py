@@ -20,6 +20,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import pipeline  # noqa: E402
+import pytest  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -5934,8 +5935,8 @@ class TestTC18CapabilityTOCTOUAndCoverage:
             f"got {sem['truncated_critical_hunks']}"
         )
         assert sem["evidence_complete"] is False, (
-            f"REJECT#16 결함B 회귀: CRITICAL hunk 절단인데 evidence_complete=True — "
-            f"결함B 완화가 CRITICAL 완전성 검사를 약화시켰음"
+            "REJECT#16 결함B 회귀: CRITICAL hunk 절단인데 evidence_complete=True — "
+            "결함B 완화가 CRITICAL 완전성 검사를 약화시켰음"
         )
 
 
@@ -6125,7 +6126,8 @@ class TestTC20Reject18NpmOutputBoundAndLockfileProvenance:
     # ---- 문제 2: npm global bin 허용 루트 bound ---- #
     def test_tc20a_allowed_root_real_npm_bin_is_allowed(self) -> None:
         """문제 2: 허용 루트 내의 npm global bin은 통과한다 (mock 경로 — CI 환경 독립적)."""
-        import sys, os
+        import sys
+        import os
         # 환경별 실제 npm 경로는 CI 러너에 따라 달라지므로 허용 루트의 대표 mock 경로로 테스트.
         if sys.platform == "win32":
             appdata = os.environ.get("APPDATA", "C:\\Users\\Default\\AppData\\Roaming")
@@ -6340,7 +6342,6 @@ class TestTC21ProvenanceBlockingE2E:
         self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
     ) -> None:
         """AC-4: npm ls _integrity 형식 오류(조작 양성) → trusted=False fail-closed."""
-        import pytest
         import tempfile as _tf_mod
 
         pkg_dir = tmp_path / "node_modules" / "@openai" / "codex"
@@ -6412,8 +6413,6 @@ class TestTC21ProvenanceBlockingE2E:
 
         가짜 체인이 trusted=True이더라도 provenance absent → auth 단계에서 차단.
         """
-        import pytest
-
         # shutil.which가 가짜 codex 경로 반환
         _FAKE_PATH = "/fake/npm/bin/codex" if pipeline.sys.platform != "win32" else r"C:\fake\npm\bin\codex.cmd"
 
@@ -6450,7 +6449,6 @@ class TestTC21ProvenanceBlockingE2E:
     ) -> None:
         """_get_npm_ls_integrity가 npm ls --json 출력에서 _integrity를 올바르게 파싱한다."""
         import json as _json
-        import pytest
 
         _VALID_INTEGRITY = "sha512-" + "B" * 88 + "="
         _mock_output = _json.dumps({
@@ -6562,8 +6560,6 @@ class TestTC22Reject20ExactHostnameAndExplicitBinE2E:
         이전(REJECT#20 수정 전)에는 명시적 codex_bin이 trust 검증을 건너뛰었다.
         수정 후에는 명시적 경로도 _verify_codex_binary_path_trust를 거쳐야 한다.
         """
-        import pytest
-
         _FAKE_BIN = "/fake/npm/bin/codex" if pipeline.sys.platform != "win32" else r"C:\fake\npm\bin\codex"
 
         # _verify_codex_binary_path_trust가 trusted=False를 반환하도록 monkeypatch
@@ -6610,8 +6606,6 @@ class TestTC22Reject20ExactHostnameAndExplicitBinE2E:
           따라서 acceptance_eligible=False여도 _check_codex_chatgpt_auth는 BLOCKED를 반환하지 않는다.
           (실제 auth 검사 결과로 codex_not_chatgpt_authenticated 또는 codex_auth_check_failed 반환)
         """
-        import pytest
-
         _FAKE_BIN = "/fake/npm/bin/codex" if pipeline.sys.platform != "win32" else r"C:\fake\npm\bin\codex"
 
         # _verify_codex_binary_path_trust가 trusted=True, acceptance_eligible=False를 반환 (가정)
@@ -6755,7 +6749,6 @@ class TestTC24Reject28NodeInterpreterVerification:
         self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
     ) -> None:
         """AC2: POSIX PATH의 node가 홈 디렉토리 하위이면 node_interpreter_trusted=False (BLOCKED)."""
-        import pytest
         if pipeline.sys.platform == "win32":
             pytest.skip("POSIX shebang PATH node 검증 전용 (win32 제외)")
         # 홈 디렉토리 하위의 악성 node를 PATH가 반환하도록 mock.
@@ -7325,7 +7318,8 @@ class TestTC62Reject36EnvVarTrustRemoval:
 
     def test_tc62a_programfiles_env_manipulation_blocked(self, monkeypatch) -> None:
         """REJECT#36 AC#1: ProgramFiles 환경변수를 사용자 경로로 조작해도 가짜 npm이 차단된다."""
-        import tempfile, os
+        import tempfile
+        import os
         with tempfile.TemporaryDirectory() as tmpdir:
             fake_npm = os.path.join(tmpdir, "nodejs", "npm.cmd")
             os.makedirs(os.path.dirname(fake_npm), exist_ok=True)
@@ -7342,7 +7336,8 @@ class TestTC62Reject36EnvVarTrustRemoval:
 
     def test_tc62b_nvm_home_env_manipulation_blocked(self, monkeypatch) -> None:
         """REJECT#36 AC#1: NVM_HOME 환경변수를 사용자 경로로 조작해도 가짜 npm이 차단된다."""
-        import tempfile, os
+        import tempfile
+        import os
         with tempfile.TemporaryDirectory() as tmpdir:
             fake_npm = os.path.join(tmpdir, "npm.cmd")
             open(fake_npm, "w").close()
@@ -7429,7 +7424,7 @@ class TestTC63Reject37NodeOptionsAndNoProfile:
         """REJECT#37 AC#2: _codex_clean_env()가 NODE_PATH를 제거한다."""
         import os
         old_env = os.environ.copy()
-        os.environ["NODE_PATH"] = "/tmp/evil/modules"
+        os.environ["NODE_PATH"] = "/tmp/evil/modules"  # nosec B108
         try:
             env = pipeline._codex_clean_env()
         finally:
