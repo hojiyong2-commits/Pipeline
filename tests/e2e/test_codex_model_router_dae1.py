@@ -7895,3 +7895,45 @@ class TestBoundedTrustModelV2:
         assert "authenticode_not_valid" in src
         assert "authenticode_subject_no_openai" in src
         assert "self_signed" in src
+
+    def test_reject35a_approve_with_in_scope_finding_blocks_acceptance(self):
+        """REJECT#LATEST Case 1: APPROVE_TO_USER + IN_SCOPE P0/P1 finding → in_scope_count > 0 반환.
+        _cmd_gates_codex_review는 이 in_scope_count > 0을 보고 acceptance_eligible=False로 강제한다."""
+        import json
+        pv = pipeline._parse_json_verdict(json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": [
+                {"severity": "P0", "scope": "IN_SCOPE",
+                 "root_cause_category": "fake_codex_exec"},
+            ],
+        }))
+        assert pv is not None
+        assert pv["verdict"] == "APPROVED"  # 원본 verdict는 APPROVED이지만
+        assert pv["in_scope_count"] > 0     # IN_SCOPE finding 있음 → acceptance_eligible=False 트리거
+        assert pv["reject_count_delta"] == 1  # IN_SCOPE P0 → reject_count도 증가
+
+    def test_reject35b_reject_with_out_of_scope_only_no_acceptance_block(self):
+        """REJECT#LATEST Case 2: REJECT + OUT_OF_SCOPE_DIAGNOSTIC-only → diagnostic_only=True, reject 미계수.
+        _cmd_gates_codex_review는 diagnostic_only=True이면 acceptance_eligible=True로 허용한다."""
+        import json
+        pv = pipeline._parse_json_verdict(json.dumps({
+            "verdict": "REJECT",
+            "findings": [
+                {"severity": "P1", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+                 "root_cause_category": "npm_tarball_supply_chain_proof"},
+            ],
+        }))
+        assert pv is not None
+        assert pv["verdict"] == "REJECTED"     # 원본 verdict는 REJECTED이지만
+        assert pv["diagnostic_only"] is True   # OUT_OF_SCOPE만 → acceptance 차단 안 함
+        assert pv["reject_count_delta"] == 0   # reject_count 미증가
+        assert pv["in_scope_count"] == 0
+
+    def test_reject35c_scope_override_in_cmd_source(self):
+        """REJECT#LATEST: _cmd_gates_codex_review 소스에 두 방향 override 로직이 모두 존재한다."""
+        import inspect
+        src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        # Case 1: APPROVE_TO_USER + IN_SCOPE → acceptance_eligible=False 강제
+        assert "_finding_in_scope > 0" in src
+        # Case 2: REJECT + OUT_OF_SCOPE_DIAGNOSTIC-only → acceptance_eligible=True 허용
+        assert "_finding_diagnostic_only" in src

@@ -28335,6 +28335,17 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     acceptance_eligible = (
         review_status == "APPROVED" and not _non_converging and not _env_untrusted_blocked
     )
+    # REJECT#LATEST(IMP-20260712-DAE1): findings scope가 effective verdict의 SSoT.
+    # Case 1: APPROVE_TO_USER + IN_SCOPE P0/P1 finding → fail-closed(acceptance_eligible=false).
+    #   bounded trust v2 규칙: 승인 verdict라도 IN_SCOPE 취약점 finding이 있으면 승인 자격 박탈.
+    #   (예: Codex가 APPROVE_TO_USER를 내렸지만 찾아낸 fake_codex_exec IN_SCOPE P0 finding 존재)
+    if _finding_in_scope > 0:
+        acceptance_eligible = False
+    # Case 2: REJECT + OUT_OF_SCOPE_DIAGNOSTIC-only findings → acceptance를 차단하지 않음.
+    #   diagnostic_only=True이면 reject_count도 미증가(_reject_delta 계산 시 이미 처리) 이고
+    #   acceptance_eligible도 True로 허용한다. non-converging/env-untrusted 보안 게이트는 여전히 우선.
+    if _finding_diagnostic_only and not _non_converging and not _env_untrusted_blocked:
+        acceptance_eligible = True
     # REJECT#21 deadlock fix: CRITICAL+actual_model=unknown → acceptance_eligible=false 강제(fail-closed 안전망).
     #   AC#2: "동일 결과를 캐시하거나 acceptance_eligible=true로 기록하지 않습니다."
     if _capability_blocked_failure_code:
