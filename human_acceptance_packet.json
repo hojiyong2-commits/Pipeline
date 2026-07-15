@@ -2,11 +2,11 @@
   "schema_version": 1,
   "packet_type": "final_acceptance_evidence",
   "pipeline_id": "IMP-20260712-DAE1",
-  "generated_at": "2026-07-15T00:09:20Z",
+  "generated_at": "2026-07-15T00:13:08Z",
   "pr": {
     "url": "https://github.com/hojiyong2-commits/Pipeline/pull/891",
     "number": "891",
-    "head_sha": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+    "head_sha": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
     "base_branch": "main",
     "head_branch": ""
   },
@@ -19,6 +19,8 @@
   "changed_files": [
     ".claude/agents/pipeline-manager-agent.md",
     "codex_model_router_report.md",
+    "human_acceptance_packet.json",
+    "human_acceptance_packet.md",
     "pipeline.py",
     "pyproject.toml",
     "tests/e2e/test_ac_tracking_1abe.py",
@@ -37,7 +39,7 @@
     "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/expected.json",
     "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/input.json"
   ],
-  "changed_files_count": 19,
+  "changed_files_count": 21,
   "gates": {
     "technical": "PASS",
     "oracle": "PASS",
@@ -235,11 +237,13 @@
     "repository": "hojiyong2-commits/Pipeline",
     "acceptance_pr": {
       "number": "#891",
-      "head_sha": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+      "head_sha": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
       "title": "[IMP-20260712-DAE1] Codex Review 모델/사고레벨 자동 라우터 trust-chain risk 기반 SSoT 구현",
       "changed_files": [
         ".claude/agents/pipeline-manager-agent.md",
         "codex_model_router_report.md",
+        "human_acceptance_packet.json",
+        "human_acceptance_packet.md",
         "pipeline.py",
         "pyproject.toml",
         "tests/e2e/test_ac_tracking_1abe.py",
@@ -262,13 +266,15 @@
     },
     "acceptance_pr_note": "acceptance_pr은 현재 User Acceptance 승인 대상인 오픈 PR입니다. impl_prs(이력)와 구분하세요.",
     "target_main_commit": "d7672c4609163b079890e1d6d3376cd93eed44db",
-    "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+    "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
     "target_commit_note": "PR head SHA — origin/main이 아닌 현재 PR의 최신 commit",
     "impl_prs": [],
     "impl_prs_note": "pipeline_id로 검색한 이미 머지된 PR 이력입니다. 승인 대상은 acceptance_pr을 확인하세요.",
     "changed_files": [
       ".claude/agents/pipeline-manager-agent.md",
       "codex_model_router_report.md",
+      "human_acceptance_packet.json",
+      "human_acceptance_packet.md",
       "pipeline.py",
       "pyproject.toml",
       "tests/e2e/test_ac_tracking_1abe.py",
@@ -293,7 +299,7 @@
         "kind": "oracle_input",
         "inventory_sha256": "29a90d7345253c7b7ad7c0589cfd1ed9a114f58ab26136c5d91bc326f254ee00",
         "target_blob_sha256": "29a90d7345253c7b7ad7c0589cfd1ed9a114f58ab26136c5d91bc326f254ee00",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": true,
         "status": "MATCH"
       },
@@ -302,7 +308,7 @@
         "kind": "oracle_expected",
         "inventory_sha256": "dc326b2ef6ea2e69742ebacde584c706d5fe047f3a43c54750d8ffa5babadea6",
         "target_blob_sha256": "dc326b2ef6ea2e69742ebacde584c706d5fe047f3a43c54750d8ffa5babadea6",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": true,
         "status": "MATCH"
       },
@@ -311,7 +317,7 @@
         "kind": "oracle_input",
         "inventory_sha256": "3b87b4eb107098c550a2a5a79e92a246a6c3c05594638064e32ff2c68551d0a5",
         "target_blob_sha256": "ebfd6eadb43ce7a7b26fec4f6060ca99e0237d76ed10a87927468537370f51d7",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": false,
         "status": "MISMATCH"
       },
@@ -320,7 +326,7 @@
         "kind": "oracle_expected",
         "inventory_sha256": "8bcebcdd5fda3c44a7aec6749b3c44f51cbdcb595b0c74f464f0cda7bf85f95a",
         "target_blob_sha256": "8bcebcdd5fda3c44a7aec6749b3c44f51cbdcb595b0c74f464f0cda7bf85f95a",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": true,
         "status": "MATCH"
       },
@@ -329,7 +335,7 @@
         "kind": "oracle_input",
         "inventory_sha256": "0df59af51e19760756337209d4c371ce856fff79bc5e464092ae43d30b65934c",
         "target_blob_sha256": "0df59af51e19760756337209d4c371ce856fff79bc5e464092ae43d30b65934c",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": true,
         "status": "MATCH"
       },
@@ -338,7 +344,7 @@
         "kind": "oracle_expected",
         "inventory_sha256": "b051994f1247cdd340bb8f78bf2fb3dc8c96a3be7892fc61b32e2f7ebc154a65",
         "target_blob_sha256": "b051994f1247cdd340bb8f78bf2fb3dc8c96a3be7892fc61b32e2f7ebc154a65",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": true,
         "status": "MATCH"
       },
@@ -347,7 +353,7 @@
         "kind": "oracle_input",
         "inventory_sha256": "78d0f7ac4055f34d8ec98116e64117f0a6092b87258d3e80c70c91bd06bde9a7",
         "target_blob_sha256": "78d0f7ac4055f34d8ec98116e64117f0a6092b87258d3e80c70c91bd06bde9a7",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": true,
         "status": "MATCH"
       },
@@ -356,7 +362,7 @@
         "kind": "oracle_expected",
         "inventory_sha256": "4b892a17cede6eeed65942dda5919e9cd0787b474cdc89abf6a7ff83682e8658",
         "target_blob_sha256": "4b892a17cede6eeed65942dda5919e9cd0787b474cdc89abf6a7ff83682e8658",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": true,
         "status": "MATCH"
       },
@@ -365,7 +371,7 @@
         "kind": "oracle_input",
         "inventory_sha256": "a34131a35e0ab89fc431932f98f3af66017081bfce2ce75b673b8084fe694c7f",
         "target_blob_sha256": "a34131a35e0ab89fc431932f98f3af66017081bfce2ce75b673b8084fe694c7f",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": true,
         "status": "MATCH"
       },
@@ -374,7 +380,7 @@
         "kind": "oracle_expected",
         "inventory_sha256": "f61cd38451aa7be84f0044b3ae036b2c8a4710ce9f9acb32f91f042fcb3588e0",
         "target_blob_sha256": "551bdf92d4e0f058b60ddac107be3db21253f80250178f8cc38740785100a107",
-        "target_commit": "e28a853fe39bd12067c75db42e37eb5183c9075f",
+        "target_commit": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
         "sha_match": false,
         "status": "MISMATCH"
       }
@@ -385,9 +391,9 @@
   "blocked_reasons": [],
   "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/891",
   "pr_number": "891",
-  "pr_head_sha": "e28a853fe39bd12067c75db42e37eb5183c9075f",
-  "ci_run_id": "29378235531",
-  "actions_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/29378235531",
+  "pr_head_sha": "26ca6eae17e48ee2034ec377f7c74f08257f60db",
+  "ci_run_id": "29378421179",
+  "actions_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/29378421179",
   "gate_status": {
     "technical": "PASS",
     "oracle": "PASS",

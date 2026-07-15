@@ -1,13 +1,13 @@
 [검증용 메타데이터]
 pipeline_id: IMP-20260712-DAE1
 pr_url: https://github.com/hojiyong2-commits/Pipeline/pull/891
-pr_head_sha: e28a853fe39bd12067c75db42e37eb5183c9075f
-ci_run_id: 29378235531
-ci_head_sha: 19524440e99f841ea9d2924d1c8fc90669457aef
-changed_files_count: 19
-changed_files: .claude/agents/pipeline-manager-agent.md, codex_model_router_report.md, pipeline.py, pyproject.toml,
-tests/e2e/test_ac_tracking_1abe.py... (총 19개)
-verification_json_sha256: 15778644416d71901dcf016681ce5726c2144b7a95b1ff1c6740c7f7a64e0c8a
+pr_head_sha: 26ca6eae17e48ee2034ec377f7c74f08257f60db
+ci_run_id: 29378421179
+ci_head_sha: (없음)
+changed_files_count: 21
+changed_files: .claude/agents/pipeline-manager-agent.md, codex_model_router_report.md, human_acceptance_packet.json,
+human_acceptance_packet.md, pipeline.py... (총 21개)
+verification_json_sha256: ea3a3d945dd6fbb451ea2f9633dc0eac554080ef68b1f2215147c5f9af7b431d
 technical: PASS
 oracle: PASS
 github_ci: PASS
@@ -24,7 +24,7 @@ verification_json: human_acceptance_packet.json
 
 파이프라인: IMP-20260712-DAE1
 PR: https://github.com/hojiyong2-commits/Pipeline/pull/891
-GitHub Actions: https://github.com/hojiyong2-commits/Pipeline/actions/runs/29378235531
+GitHub Actions: https://github.com/hojiyong2-commits/Pipeline/actions/runs/29378421179
 승인 표시 상태: PENDING
 
 게이트 상태:
@@ -33,9 +33,11 @@ Oracle: PASS
 GitHub CI: PASS
 User Acceptance: PENDING
 
-변경 파일: 총 19건
+변경 파일: 총 21건
   .claude/agents/pipeline-manager-agent.md
   codex_model_router_report.md
+  human_acceptance_packet.json
+  human_acceptance_packet.md
   pipeline.py
   pyproject.toml
   tests/e2e/test_ac_tracking_1abe.py
