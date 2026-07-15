@@ -390,5 +390,262 @@ def test_10_supply_chain_findings_unchanged() -> None:
     assert not (_in & _out) and not (_in & _env) and not (_out & _env)
 
 
+# ================================================================== #
+# IMP-20260712-DAE1 REJECT#LATEST rework: _check_codex_review_gate 강화 회귀 테스트 (15개)
+#   결함1(acceptance_eligible 필수) / 결함2(pr_body_sha256 필수) / 결함3(schema·status·verdict·
+#   source 동시 요구) / 결함4(pipeline_id·review_epoch·contract_sha256·acceptance PENDING 불변식) /
+#   결함5(start-epoch가 struct SHA 사용)를 직접 함수 호출 + subprocess로 검증한다.
+# ================================================================== #
+_GATE_EPOCH = "epoch_20260712_gate"
+_HEAD_SHA = "a" * 40
+_PACKET_SHA = "packet" + "0" * 58
+_BODY_SHA = "body0" + "0" * 59
+
+
+def _gate_state(epoch: str = _GATE_EPOCH) -> Dict[str, object]:
+    """review_epoch를 담은 최소 state dict."""
+    return {
+        "pipeline_id": _PID,
+        "current_phase": 7,
+        "codex_review_contract_migration": {"review_epoch": epoch},
+    }
+
+
+def _valid_result(drop: Tuple[str, ...] = (), **overrides: object) -> Dict[str, object]:
+    """모든 불변식을 통과해 head SHA 검증 직전까지 도달하는 완전한 result dict.
+
+    drop에 나열된 키는 제거하여 '필드 누락' 상황을 시뮬레이션한다.
+    """
+    r: Dict[str, object] = {
+        "schema_version": pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+        "pipeline_id": _PID,
+        "status": "APPROVED",
+        "verdict": "APPROVE_TO_USER",
+        "acceptance_eligible": True,
+        "verdict_source": "codex_cli",
+        "review_epoch": _GATE_EPOCH,
+        "contract_sha256": pipeline._compute_codex_contract_sha256(),
+        "pr_head_sha": _HEAD_SHA,
+        "packet_sha256": _PACKET_SHA,
+        "pr_body_sha256": _BODY_SHA,
+    }
+    r.update(overrides)
+    for k in drop:
+        r.pop(k, None)
+    return r
+
+
+def _valid_request(drop: Tuple[str, ...] = (), **overrides: object) -> Dict[str, object]:
+    """result와 일치하는 PENDING acceptance_request."""
+    req: Dict[str, object] = {
+        "pipeline_id": _PID,
+        "status": "PENDING",
+        "packet_sha256": _PACKET_SHA,
+        "pr_body_sha256": _BODY_SHA,
+    }
+    req.update(overrides)
+    for k in drop:
+        req.pop(k, None)
+    return req
+
+
+def _call_gate(
+    tmp_path: Path,
+    monkeypatch,
+    result: Dict[str, object],
+    request: Optional[Dict[str, object]] = None,
+    state: Optional[Dict[str, object]] = None,
+    head_sha: Optional[str] = None,
+) -> Dict[str, object]:
+    """격리 환경에서 _check_codex_review_gate를 직접 호출한다.
+
+    PIPELINE_STATE_PATH로 result 경로를 격리하고, cwd를 tmp_path로 바꿔
+    acceptance_request.json(상대경로 SSoT)을 격리한다. head SHA는 monkeypatch로 결정적으로 만든다.
+    """
+    st = state if state is not None else _gate_state()
+    state_path = tmp_path / "pipeline_state.json"
+    state_path.write_text(json.dumps(st), encoding="utf-8")
+    pdir = tmp_path / ".pipeline"
+    pdir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+    monkeypatch.chdir(tmp_path)
+    (pdir / "codex_review_result.json").write_text(json.dumps(result), encoding="utf-8")
+    if request is not None:
+        (tmp_path / "acceptance_request.json").write_text(
+            json.dumps(request), encoding="utf-8"
+        )
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: head_sha)
+    return pipeline._check_codex_review_gate(_PID, st)
+
+
+# --- 결함1: acceptance_eligible 필수화 ------------------------------- #
+def test_acceptance_eligible_missing_blocked(tmp_path: Path, monkeypatch) -> None:
+    """acceptance_eligible 필드 없음 → codex_review_not_eligible BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(drop=("acceptance_eligible",)))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_not_eligible", res
+
+
+def test_acceptance_eligible_false_blocked(tmp_path: Path, monkeypatch) -> None:
+    """acceptance_eligible=False → codex_review_not_eligible BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(acceptance_eligible=False))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_not_eligible", res
+
+
+def test_acceptance_eligible_string_true_blocked(tmp_path: Path, monkeypatch) -> None:
+    """acceptance_eligible='true'(문자열) → bool True 아님 → BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(acceptance_eligible="true"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_not_eligible", res
+
+
+# --- 결함3: status/verdict/source/schema 동시 요구 ------------------- #
+def test_status_approved_no_verdict_blocked(tmp_path: Path, monkeypatch) -> None:
+    """status=APPROVED이지만 verdict 누락 → codex_review_verdict_mismatch BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(drop=("verdict",)))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_verdict_mismatch", res
+
+
+def test_verdict_approve_to_user_no_status_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict=APPROVE_TO_USER이지만 status 누락 → codex_review_not_approved BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(drop=("status",)))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_not_approved", res
+
+
+def test_verdict_source_external_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='external' → codex_review_untrusted_source BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="external"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+
+
+def test_verdict_source_manual_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='manual' → codex_review_untrusted_source BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="manual"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+
+
+def test_schema_version_mismatch_blocked(tmp_path: Path, monkeypatch) -> None:
+    """schema_version 불일치 → codex_review_schema_mismatch BLOCKED (결함3 보강)."""
+    bad = pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION + 99
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(schema_version=bad))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_schema_mismatch", res
+
+
+# --- 결함2: pr_body_sha256 필수화 ----------------------------------- #
+def test_body_sha_both_absent_blocked(tmp_path: Path, monkeypatch) -> None:
+    """result/request 양쪽 body SHA 없음 → pr_body_sha256_required_but_absent BLOCKED."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(drop=("pr_body_sha256",)),
+        request=_valid_request(drop=("pr_body_sha256",)),
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "pr_body_sha256_required_but_absent", res
+
+
+def test_body_sha_mismatch_blocked(tmp_path: Path, monkeypatch) -> None:
+    """result/request body SHA 불일치 → pr_body_sha256_mismatch BLOCKED."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(),  # pr_body_sha256 = _BODY_SHA
+        request=_valid_request(pr_body_sha256="deadbeef" * 8),
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "pr_body_sha256_mismatch", res
+
+
+# --- 결함4: review_epoch / contract_sha256 불변식 ------------------- #
+def test_review_epoch_mismatch_blocked(tmp_path: Path, monkeypatch) -> None:
+    """result.review_epoch != state epoch → codex_review_stale_epoch BLOCKED."""
+    res = _call_gate(
+        tmp_path, monkeypatch, _valid_result(review_epoch="epoch_other_999")
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_stale_epoch", res
+
+
+def test_contract_sha_mismatch_blocked(tmp_path: Path, monkeypatch) -> None:
+    """result.contract_sha256 != struct SHA → codex_review_stale_contract BLOCKED."""
+    res = _call_gate(
+        tmp_path, monkeypatch, _valid_result(contract_sha256="0" * 64)
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_stale_contract", res
+
+
+# --- 결함6: struct SHA는 계약 struct에만 의존(비계약 코드 변경 무관) --- #
+def test_pipeline_py_change_no_contract_sha_change() -> None:
+    """_compute_codex_contract_sha256는 CODEX_REVIEW_CONTRACT_STRUCT만 해시한다.
+
+    struct에 포함되지 않은 상수(예: 번들 예산 문자수)는 SHA 입력(canonical JSON)에 없으므로,
+    그런 비계약 값이 바뀌어도 contract SHA는 변하지 않는다.
+    """
+    canonical = json.dumps(
+        pipeline.CODEX_REVIEW_CONTRACT_STRUCT, sort_keys=True, ensure_ascii=True
+    )
+    expected = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    assert pipeline._compute_codex_contract_sha256() == expected
+    # 비계약 상수 값은 canonical 입력에 포함되지 않는다(그 값을 바꿔도 SHA 불변).
+    assert str(pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS) not in canonical
+    # 결정적: 반복 호출해도 동일.
+    assert pipeline._compute_codex_contract_sha256() == expected
+
+
+# --- 결함5: start-epoch가 struct SHA를 기록 ------------------------- #
+def test_start_epoch_uses_contract_sha(tmp_path: Path) -> None:
+    """--start-epoch가 migration.new_contract_sha256을 struct SHA로 기록한다(subprocess)."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli; final_state asserted via state file.
+    state_path, _ = _setup_state(tmp_path, {"pipeline_id": _PID, "current_phase": 7})
+    r = _run_cli(
+        state_path,
+        ["gates", "codex-review", "--start-epoch", "회귀 테스트: struct SHA 검증"],
+        extra_env={"CODEX_START_EPOCH_USER_CONFIRMED": "1"},
+    )
+    combined = r.stdout + r.stderr
+    assert r.returncode == 0, combined[:600]
+    assert "contract migration 기록 완료" in combined, combined[:600]
+    new_state = json.loads(state_path.read_text(encoding="utf-8"))
+    migration = new_state.get("codex_review_contract_migration") or {}
+    assert migration.get("new_contract_sha256") == pipeline._compute_codex_contract_sha256(), (
+        migration
+    )
+    # pipeline.py 전체 파일 SHA와는 다르다(비계약 코드 변경에 흔들리지 않음).
+    assert migration.get("new_contract_sha256") != pipeline._sha256_file(
+        pipeline.BASE_DIR / "pipeline.py"
+    )
+
+
+# --- 기존 검증 유지: head SHA / packet SHA -------------------------- #
+def test_existing_head_sha_check_maintained(tmp_path: Path, monkeypatch) -> None:
+    """모든 불변식 통과 후 head SHA 불일치 → codex_review_stale BLOCKED (head 검증 유지)."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(),
+        request=_valid_request(),
+        head_sha="b" * 40,  # result.pr_head_sha(_HEAD_SHA='a'*40)와 다름
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_stale", res
+    assert "pr_head_sha" in res["message"], res
+
+
+def test_existing_packet_sha_check_maintained(tmp_path: Path, monkeypatch) -> None:
+    """packet SHA 불일치 → codex_review_stale BLOCKED (packet 검증 유지)."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(),  # packet_sha256 = _PACKET_SHA
+        request=_valid_request(packet_sha256="f" * 64),
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_stale", res
+    assert "packet_sha256" in res["message"], res
+
+
 if __name__ == "__main__":
     sys.exit(subprocess.call([sys.executable, "-m", "pytest", __file__, "-v"]))

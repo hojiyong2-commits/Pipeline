@@ -2600,6 +2600,17 @@ CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
 # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: v6 — findings[] scope 분류 스키마 추가.
 CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 6
 
+# IMP-20260712-DAE1 REJECT#LATEST rework 결함3: _check_codex_review_gate가 신뢰하는 verdict_source
+#   집합. 직접 Codex CLI 실행("codex_cli")과 검증된 캐시 결과("verified_cache")만 승인으로 인정한다.
+#   codex_cli_cached/cache_hit은 하위/상위 호환용 캐시 alias로 함께 허용한다. external/external_verdict/
+#   manual/agent_generated 등 신뢰 불가 출처는 이 집합에 없으므로 codex_review_untrusted_source로 BLOCKED된다.
+CODEX_REVIEW_TRUSTED_VERDICT_SOURCES: "frozenset[str]" = frozenset({
+    "codex_cli",         # 이번 실행에서 직접 codex exec를 호출해 도출한 판정.
+    "verified_cache",    # critical-file SHA 검증을 통과한 캐시 재사용(실제 코드에서 기록되는 값).
+    "codex_cli_cached",  # 캐시 alias(계약 호환).
+    "cache_hit",         # 캐시 alias(계약 호환).
+})
+
 # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: bounded trust model v2.
 #   사용자가 직접 Codex Review Contract를 bounded trust model v2로 교체하기로 결정했다.
 #   16회 REJECT 루프의 근본 원인은 npm/OpenAI/registry 공급망의 절대적 암호학적 증명을 요구한
@@ -13163,8 +13174,10 @@ def _check_codex_circuit_breaker(
 # [Purpose]: IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION — 사용자가 직접 결정한 Codex Review
 #            Contract 전환(bounded trust model v2)을 pipeline state에 기록한다. agent는 사용자 결정
 #            없이 contract/review_epoch를 임의 변경할 수 없으며, migration flag는 1회만 소비된다.
-# [Assumptions]: state는 dict이며 호출자가 _save(state)로 영속화한다. old/new contract SHA는 계약
-#            문서(예: .claude/codex_review_contract.md)의 SHA256이다.
+# [Assumptions]: state는 dict이며 호출자가 _save(state)로 영속화한다. IMP-20260712-DAE1 REJECT#LATEST
+#            rework 결함5/7: new_contract_sha256은 구조화된 계약 상수(CODEX_REVIEW_CONTRACT_STRUCT)의
+#            SHA256(_compute_codex_contract_sha256)이다. 과거 .claude/codex_review_contract.md 문서 SHA를
+#            쓰던 방식은 폐기됐고 해당 stale 문서도 삭제됐다.
 # [Vulnerability & Risks]: 이미 동일 new_contract_sha256으로 migration이 기록됐으면(소비됨) 중복
 #            기록하지 않는다(idempotent). scope_decision_source는 항상 "user"로 고정한다.
 # [Improvement]: 서명된 사용자 승인 토큰을 추가로 결속하면 위조를 더 강하게 막을 수 있다.
@@ -13336,34 +13349,52 @@ def _check_codex_rate_limit(
     }
 
 
+def _get_current_review_epoch_from_state(state: Dict[str, Any]) -> str:
+    """state의 현재 Codex Review epoch(review_epoch)를 반환한다(없으면 빈 문자열).
+
+    IMP-20260712-DAE1 REJECT#LATEST rework 결함4: _check_codex_review_gate의 review_epoch
+    불변식 검증에 사용한다. codex_review_contract_migration.review_epoch가 SSoT다.
+
+    Args:
+        state: pipeline_state dict.
+    Returns:
+        현재 review_epoch 문자열. migration 정보가 없으면 "".
+    """
+    migration = state.get("codex_review_contract_migration") if isinstance(state, dict) else None
+    if isinstance(migration, dict):
+        return str(migration.get("review_epoch", "") or "")
+    return ""
+
+
 def _check_codex_review_gate(
     pipeline_id: str, state: Dict[str, Any]
 ) -> Dict[str, Any]:
     """gates accept --result ACCEPT 전 Codex Review 승인 여부를 검증 (fail-closed).
 
-    .pipeline/codex_review_result.json(Codex Review SSoT)을 로드하여 다음을 검사한다:
-      - 파일 없음/파싱 오류 → codex_review_not_approved BLOCKED (fail-closed)
-      - status/verdict가 APPROVED/APPROVE_TO_USER/APPROVE가 아님
-        → codex_review_not_approved BLOCKED
-      - acceptance_eligible이 명시적으로 False → codex_review_not_eligible BLOCKED
-      - APPROVED이지만 3개 필수 필드(pipeline_id, pr_head_sha, packet_sha256)
-        중 하나라도 없거나 빔 → codex_review_stale BLOCKED
-      - APPROVED이지만 pipeline_id가 현재 파이프라인과 다름 → codex_review_stale BLOCKED
-      - APPROVED이지만 gh CLI로 head SHA를 못 얻음 → codex_review_stale BLOCKED (fail-closed)
-      - APPROVED이지만 pr_head_sha가 현재 PR head SHA와 다름 → codex_review_stale BLOCKED
-      - acceptance_request.json이 없거나 packet_sha256이 빔
-        → codex_review_stale BLOCKED (fail-closed)
-      - APPROVED이지만 packet_sha256이 acceptance_request.json과 다름
-        → codex_review_stale BLOCKED
-      - pr_body_sha256/pr_body_candidate_sha256이 result에 있고
-        acceptance_request.json과 다름 → codex_review_stale BLOCKED
-        (result에 body SHA가 없으면 선택적 필드로 SKIP)
-      - 모두 존재하고 일치 → PASS
+    .pipeline/codex_review_result.json(Codex Review SSoT)을 로드하여 다음을 검사한다.
+    IMP-20260712-DAE1 REJECT#LATEST rework로 7개 결함을 fail-closed로 강화했다:
 
-    MT-11(IMP-20260712-DAE1) 버그 수정: 이전 구현은 쓰는 코드가 없는
-    codex_review_loop_state.json을 읽어 항상 codex_review_not_approved로
-    BLOCKED되었다. gates codex-review가 실제로 쓰는 SSoT인
-    codex_review_result.json을 읽도록 경로/필드/status 판정을 정정한다.
+      - 파일 없음/파싱 오류 → codex_review_not_approved BLOCKED (fail-closed)
+      - 결함3: schema_version이 계약 버전과 다름 → codex_review_schema_mismatch BLOCKED
+      - 결함3: status가 정확히 "APPROVED"가 아님 → codex_review_not_approved BLOCKED
+      - 결함3: verdict가 정확히 "APPROVE_TO_USER"가 아님 → codex_review_verdict_mismatch BLOCKED
+      - 결함1: acceptance_eligible이 bool True가 아님(None/False/"true" 문자열 포함)
+        → codex_review_not_eligible BLOCKED
+      - 결함3: verdict_source가 신뢰 집합(CODEX_REVIEW_TRUSTED_VERDICT_SOURCES)에 없음
+        → codex_review_untrusted_source BLOCKED
+      - 결함4: pipeline_id 불일치 → codex_review_stale_pipeline_id BLOCKED
+      - 결함4: review_epoch가 없거나 현재 epoch와 다름 → codex_review_stale_epoch BLOCKED
+      - 결함4: contract_sha256이 실시간 재계산값과 다름 → codex_review_stale_contract BLOCKED
+      - 필수 필드(pr_head_sha, packet_sha256) 부재 → codex_review_stale BLOCKED
+      - acceptance_request.json 부재 → codex_review_stale BLOCKED (fail-closed)
+      - 결함4: acceptance_request.status가 PENDING이 아님(소비/무효화됨)
+        → codex_review_acceptance_already_consumed BLOCKED
+      - packet_sha256이 acceptance_request.json과 다름 → codex_review_stale BLOCKED
+      - 결함2: pr_body_sha256이 result 또는 acceptance_request.json에 없음
+        → pr_body_sha256_required_but_absent BLOCKED (더 이상 선택 필드 아님)
+      - 결함2: pr_body_sha256 불일치 → pr_body_sha256_mismatch BLOCKED
+      - gh CLI head SHA 확인 불가/불일치 → codex_review_stale BLOCKED (fail-closed)
+      - 모두 존재하고 일치 → PASS
 
     기존 provenance/replay/nonce 검증을 대체하지 않으며, 그 이전 선검사로만 동작한다.
 
@@ -13411,44 +13442,115 @@ def _check_codex_review_gate(
             ),
         }
 
-    # status/verdict 판정 — result.json은 status(APPROVED)와 verdict(APPROVE_TO_USER)
-    # 중 하나 또는 둘 다를 기록할 수 있으므로 양쪽을 모두 허용한다.
-    _cx_val = str(
-        result_data.get("status", "") or result_data.get("verdict", "") or ""
-    ).upper()
-    _cx_ok = _cx_val in {"APPROVED", "APPROVE_TO_USER", "APPROVE"}
-    if not _cx_ok:
+    # ------------------------------------------------------------------ #
+    # 결함3(IMP-20260712-DAE1 REJECT#LATEST rework): schema/status/verdict/eligible/source를
+    #   동시에 요구한다. 이전 구현은 status 또는 verdict 중 하나만 APPROVED/APPROVE/APPROVE_TO_USER
+    #   이면 통과시켰고(느슨한 별칭), acceptance_eligible이 None이면 통과시켰다. 이제 5개 조건이
+    #   모두 정확히 일치해야 하며, 하나라도 어긋나면 별도 failure_code로 fail-closed BLOCKED한다.
+    # ------------------------------------------------------------------ #
+    # (3-1) schema_version 정확 일치(int 비교) — 계약 버전 불일치 result 차단.
+    if result_data.get("schema_version") != CODEX_REVIEW_RESULT_SCHEMA_VERSION:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_schema_mismatch",
+            "message": (
+                "codex_review_result.json의 schema_version이 현재 계약 버전과 다릅니다"
+                f" (기대={CODEX_REVIEW_RESULT_SCHEMA_VERSION}, "
+                f"실제={result_data.get('schema_version')!r}). "
+                "gates request-accept를 다시 실행하세요."
+            ),
+        }
+    # (3-2) status는 정확히 "APPROVED"만 허용(대소문자/별칭 불허).
+    if result_data.get("status") != "APPROVED":
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_not_approved",
             "message": (
-                "Codex 검토가 아직 APPROVE되지 않았습니다. "
+                "Codex 검토 status가 정확히 'APPROVED'가 아닙니다"
+                f" (실제={result_data.get('status')!r}). "
                 "gates request-accept를 먼저 실행하세요."
             ),
         }
-
-    # acceptance_eligible 검증 — 명시적으로 False이면 acceptance 조건 미충족.
-    # 필드가 없으면(None) 하위 호환을 위해 통과시킨다(선택적 필드).
-    _ae = result_data.get("acceptance_eligible")
-    if _ae is not None and _ae is not True:
+    # (3-3) verdict는 정확히 "APPROVE_TO_USER"만 허용(느슨한 별칭 "APPROVE" 불허).
+    if result_data.get("verdict") != "APPROVE_TO_USER":
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_verdict_mismatch",
+            "message": (
+                "Codex 검토 verdict가 정확히 'APPROVE_TO_USER'가 아닙니다"
+                f" (실제={result_data.get('verdict')!r}). 느슨한 별칭은 허용되지 않습니다."
+            ),
+        }
+    # (3-4) 결함1: acceptance_eligible은 bool True만 허용.
+    #   None(필드 없음)/False/"true" 문자열은 모두 fail-closed BLOCKED (is True 정체성 비교).
+    if result_data.get("acceptance_eligible") is not True:
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_not_eligible",
             "message": (
-                "codex_review_result.json의 acceptance_eligible이 False입니다. "
+                "codex_review_result.json의 acceptance_eligible이 bool True가 아닙니다"
+                f" (실제={result_data.get('acceptance_eligible')!r}). "
                 "이 결과는 acceptance 조건을 충족하지 않습니다."
             ),
         }
+    # (3-5) verdict_source는 신뢰 집합(직접 실행/검증된 캐시)만 허용.
+    #   external/external_verdict/manual/agent_generated 등 신뢰 불가 출처는 BLOCKED.
+    if str(result_data.get("verdict_source", "") or "") not in CODEX_REVIEW_TRUSTED_VERDICT_SOURCES:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_untrusted_source",
+            "message": (
+                "codex_review_result.json의 verdict_source가 신뢰 집합에 없습니다"
+                f" (실제={result_data.get('verdict_source')!r}). "
+                "직접 Codex CLI 실행 또는 검증된 캐시 결과만 승인으로 인정됩니다."
+            ),
+        }
 
-    # APPROVED — fail-closed 필수 필드 존재 검증. 아래 3개 필드가 하나라도
-    # 비어 있으면 비교 자체를 SKIP하지 않고 즉시 codex_review_stale BLOCKED.
-    # result.json에는 accept_code 필드가 없으므로 제외한다.
-    required_fields = [
-        "pipeline_id",
-        "pr_head_sha",
-        "packet_sha256",
-    ]
-    for field in required_fields:
+    # ------------------------------------------------------------------ #
+    # 결함4(IMP-20260712-DAE1 REJECT#LATEST rework): 필수 불변식 — 실시간 값과 대조.
+    #   pipeline_id / review_epoch / contract_sha256을 stale 방지 목적으로 재검증한다.
+    # ------------------------------------------------------------------ #
+    # (4-1) pipeline_id 일치 — 다른 파이프라인 승인 상태 재사용 차단(빈 값 포함).
+    if str(result_data.get("pipeline_id", "") or "") != pipeline_id:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_stale_pipeline_id",
+            "message": (
+                "Codex 승인 상태의 pipeline_id가 현재 파이프라인과 다릅니다"
+                f" (기대={pipeline_id!r}, 실제={result_data.get('pipeline_id')!r}). "
+                "현재 파이프라인에서 gates request-accept를 다시 실행하세요."
+            ),
+        }
+    # (4-2) review_epoch 일치 — state의 현재 review_epoch와 대조. result에 없거나 다르면 BLOCKED.
+    _current_review_epoch = _get_current_review_epoch_from_state(state)
+    _result_review_epoch = str(result_data.get("review_epoch", "") or "")
+    if not _result_review_epoch or _result_review_epoch != _current_review_epoch:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_stale_epoch",
+            "message": (
+                "Codex 승인 상태의 review_epoch가 현재 epoch와 다릅니다"
+                f" (기대={_current_review_epoch!r}, 실제={_result_review_epoch!r}). "
+                "새 epoch에서 gates codex-review를 다시 실행하세요."
+            ),
+        }
+    # (4-3) contract_sha256 일치 — 구조화된 계약 상수(CODEX_REVIEW_CONTRACT_STRUCT)의 실시간
+    #   재계산값과 대조한다. 계약이 변경되면 이전 승인은 stale로 간주하여 BLOCKED한다.
+    _expected_contract_sha = _compute_codex_contract_sha256()
+    if str(result_data.get("contract_sha256", "") or "") != _expected_contract_sha:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_stale_contract",
+            "message": (
+                "Codex 승인 상태의 contract_sha256이 현재 계약 SHA와 다릅니다. "
+                "계약이 변경되었습니다 — gates codex-review를 다시 실행하세요."
+            ),
+        }
+
+    # ------------------------------------------------------------------ #
+    # 필수 필드(pr_head_sha, packet_sha256) 존재 검증(기존 유지). pipeline_id는 위에서 대조 완료.
+    # ------------------------------------------------------------------ #
+    for field in ("pr_head_sha", "packet_sha256"):
         if not str(result_data.get(field, "") or "").strip():
             return {
                 "status": "BLOCKED",
@@ -13459,42 +13561,9 @@ def _check_codex_review_gate(
                 ),
             }
 
-    # pipeline_id 일치 검증 (다른 파이프라인의 승인 상태 재사용 차단).
-    # 빈 값 체크는 위 required_fields 루프에서 이미 완료.
-    if str(result_data["pipeline_id"]) != pipeline_id:
-        return {
-            "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
-            "message": (
-                "Codex APPROVED 상태의 pipeline_id가 현재 파이프라인과 다릅니다. "
-                "이전 파이프라인의 승인 상태가 남아 있습니다. "
-                "현재 파이프라인에서 gates request-accept를 다시 실행하세요."
-            ),
-        }
-
-    # head SHA 일치 검증 — gh CLI 실패 시 SKIP이 아니라 fail-closed BLOCKED.
-    current_head_sha = _get_current_pr_head_sha()
-    if not current_head_sha:
-        return {
-            "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
-            "message": (
-                "PR head SHA를 확인할 수 없습니다 (gh CLI 없음/실패). "
-                "fail-closed — gates request-accept를 다시 실행하세요."
-            ),
-        }
-    if str(result_data["pr_head_sha"]).lower() != str(current_head_sha).lower():
-        return {
-            "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
-            "message": (
-                "Codex APPROVED 상태의 pr_head_sha가 현재 PR head SHA와 다릅니다. "
-                "PR에 새 커밋이 push되었습니다. gates request-accept를 다시 실행하세요."
-            ),
-        }
-
-    # packet_sha256 / pr_body_sha256 일치 검증 — acceptance_request.json 기준.
-    # acceptance_request.json이 없거나 필드가 비면 fail-closed BLOCKED.
+    # ------------------------------------------------------------------ #
+    # acceptance_request.json 기반 검증 — 없거나 비면 fail-closed BLOCKED.
+    # ------------------------------------------------------------------ #
     _req = _load_acceptance_request()
     if _req is None:
         return {
@@ -13505,7 +13574,20 @@ def _check_codex_review_gate(
                 "gates request-accept를 먼저 실행하세요."
             ),
         }
+    # 결함4-7: 이미 소비/무효화된(비 PENDING) acceptance 코드는 재사용 차단(fail-closed).
+    _req_status = str(_req.get("status", "") or "").upper()
+    if _req_status != "PENDING":
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_acceptance_already_consumed",
+            "message": (
+                "acceptance_request.json의 status가 PENDING이 아닙니다"
+                f" (현재={_req_status or '(없음)'}). 이미 소비/무효화된 승인 코드입니다 — "
+                "gates request-accept를 다시 실행하세요."
+            ),
+        }
 
+    # packet_sha256 일치(기존 유지).
     req_packet_sha = str(_req.get("packet_sha256", "") or "")
     if not req_packet_sha:
         return {
@@ -13516,35 +13598,69 @@ def _check_codex_review_gate(
                 "fail-closed — gates request-accept를 다시 실행하세요."
             ),
         }
-    if req_packet_sha != str(result_data["packet_sha256"]):
+    if req_packet_sha != str(result_data.get("packet_sha256", "") or ""):
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_stale",
             "message": (
-                "Codex APPROVED 상태의 packet_sha256이 현재 acceptance_request.json과 "
+                "Codex 승인 상태의 packet_sha256이 현재 acceptance_request.json과 "
                 "다릅니다. packet이 갱신되었습니다. gates request-accept를 다시 실행하세요."
             ),
         }
 
-    # pr_body_sha256 검증 — result.json의 pr_body_sha256(우선) 또는
-    # pr_body_candidate_sha256을 acceptance_request.json과 비교한다. result에
-    # 두 필드 모두 없으면 선택적 필드로 간주하고 SKIP한다.
+    # ------------------------------------------------------------------ #
+    # 결함2(IMP-20260712-DAE1 REJECT#LATEST rework): pr_body_sha256 필수화.
+    #   gates accept 시점에는 acceptance_request.json이 존재하므로 body SHA를 선택 필드로
+    #   두지 않는다. result와 acceptance_request 양쪽에 값이 있고 일치해야 한다.
+    #   result: pr_body_sha256(우선) 또는 pr_body_candidate_sha256. request: pr_body_sha256.
+    # ------------------------------------------------------------------ #
     req_body_sha = str(_req.get("pr_body_sha256", "") or "")
     _body_sha_from_result = (
         str(result_data.get("pr_body_sha256") or "")
         or str(result_data.get("pr_body_candidate_sha256") or "")
     )
-    if _body_sha_from_result:
-        if req_body_sha != _body_sha_from_result:
-            return {
-                "status": "BLOCKED",
-                "failure_code": "codex_review_stale",
-                "message": (
-                    "Codex APPROVED 상태의 pr_body_sha256이 현재 acceptance_request.json과 "
-                    "다릅니다. PR 본문이 갱신되었습니다. gates request-accept를 다시 실행하세요."
-                ),
-            }
-    # pr_body_sha256이 result.json에 없으면 SKIP (선택적 필드)
+    if not req_body_sha or not _body_sha_from_result:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_body_sha256_required_but_absent",
+            "message": (
+                "pr_body_sha256이 result 또는 acceptance_request.json에 없습니다 (fail-closed). "
+                f"result_present={bool(_body_sha_from_result)}, "
+                f"request_present={bool(req_body_sha)}. gates request-accept를 다시 실행하세요."
+            ),
+        }
+    if req_body_sha != _body_sha_from_result:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_body_sha256_mismatch",
+            "message": (
+                "Codex 승인 상태의 pr_body_sha256이 현재 acceptance_request.json과 "
+                "다릅니다. PR 본문이 갱신되었습니다. gates request-accept를 다시 실행하세요."
+            ),
+        }
+
+    # ------------------------------------------------------------------ #
+    # head SHA 일치 검증(기존 유지) — gh CLI 실패 시 fail-closed BLOCKED. 외부 의존이라 마지막.
+    # ------------------------------------------------------------------ #
+    current_head_sha = _get_current_pr_head_sha()
+    if not current_head_sha:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_stale",
+            "message": (
+                "PR head SHA를 확인할 수 없습니다 (gh CLI 없음/실패). "
+                "fail-closed — gates request-accept를 다시 실행하세요."
+            ),
+        }
+    if str(result_data.get("pr_head_sha", "") or "").lower() != str(current_head_sha).lower():
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_stale",
+            "message": (
+                "Codex 승인 상태의 pr_head_sha가 현재 PR head SHA와 다릅니다. "
+                "PR에 새 커밋이 push되었습니다. gates request-accept를 다시 실행하세요."
+            ),
+        }
 
     return {"status": "PASS"}
 
@@ -27363,11 +27479,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   _record_user_authorized_contract_migration을 호출하여 새 review_epoch를 시작한다.
     _start_epoch_reason = str(getattr(args, "start_epoch", None) or "").strip()
     if _start_epoch_reason:
-        # 결함7(IMP-20260712-DAE1): --start-epoch 자동 실행 금지 guard.
+        # 결함7(IMP-20260712-DAE1) rework: --start-epoch 자동 실행 금지 guard.
         #   --start-epoch은 사용자가 직접 터미널에서 실행하는 유일한 운영 진입점이다. 에이전트/자동
         #   흐름이 circuit breaker NON_CONVERGING을 우회하려 자동으로 새 epoch를 시작하는 것을 코드
         #   레벨에서 차단한다. 환경변수 CODEX_START_EPOCH_USER_CONFIRMED=1 이 없으면 fail-closed BLOCKED.
-        #   이 환경변수는 사용자가 직접 설정해야 하며, 에이전트가 자동으로 설정해선 안 된다.
+        #   이 환경변수는 사용자 직접 실행을 유도하는 operational ceremony이며 cryptographic provenance가
+        #   아니다. 동일 OS 사용자 권한의 에이전트도 설정 가능하다. 실제 auto-run 금지는 코드 레벨에서
+        #   별도로 강제되며, 환경변수 존재만으로 사용자 직접 실행을 보장할 수 없음을 인지하고 사용해야 한다.
         _user_confirmed_env = str(
             os.environ.get("CODEX_START_EPOCH_USER_CONFIRMED", "") or ""
         ).strip()
@@ -27383,9 +27501,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         _migration_old_sha = str(
             (state.get("codex_review_contract_migration") or {}).get("new_contract_sha256", "") or ""
         )
+        # 결함5(IMP-20260712-DAE1) rework: migration이 기록하는 new_contract_sha256을 pipeline.py
+        #   전체 SHA가 아닌 구조화된 계약 상수(CODEX_REVIEW_CONTRACT_STRUCT) SHA로 계산한다.
+        #   이렇게 하면 계약과 무관한 코드 변경이 contract SHA를 바꾸지 않아, _check_codex_review_gate의
+        #   contract_sha256 불변식 및 캐시 무효화가 실제 계약 변경에만 반응한다.
         _migration_new_sha = ""
         try:
-            _migration_new_sha = _sha256_file(BASE_DIR / "pipeline.py")
+            _migration_new_sha = _compute_codex_contract_sha256()
         except Exception:  # noqa: BLE001
             _migration_new_sha = ""
         if not _migration_new_sha:
@@ -28939,7 +29061,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "pr_body_sha256": pr_body_sha,  # backward compat (= candidate, 절대 canonical 아님)
         "pr_head_sha": pr_head_sha,
         "staging_id": snapshot_identity["staging_id"] or None,
-        "contract_sha256": snapshot_identity["contract_sha256"],
+        # 결함4(IMP-20260712-DAE1 REJECT#LATEST rework): top-level contract_sha256은 구조화된
+        #   계약 상수(CODEX_REVIEW_CONTRACT_STRUCT) SHA로 기록한다. _check_codex_review_gate의
+        #   contract_sha256 불변식이 이 값을 실시간 재계산값과 대조하므로, 계약과 무관한 코드 변경에
+        #   흔들리지 않는 struct SHA를 SSoT로 사용한다. 중첩 snapshot_identity.contract_sha256은
+        #   retry-snapshot 재도출(_codex_snapshot_identity)과의 일관성을 위해 기존 값(task_contract SHA)을
+        #   유지한다(_extract_snapshot_identity는 중첩 dict를 읽으므로 drift 없음).
+        "contract_sha256": _compute_codex_contract_sha256(),
         "review_bundle_sha256": snapshot_identity["review_bundle_sha256"],
         "snapshot_identity": snapshot_identity,
         "acceptance_eligible": acceptance_eligible,
