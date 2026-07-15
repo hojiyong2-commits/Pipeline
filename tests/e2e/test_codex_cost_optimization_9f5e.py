@@ -675,7 +675,7 @@ def test_tc15_approved_records_attempt_and_snapshot_identity(isolated_pipeline):
     # attempt 단위 상태 모델: attempt_id + effective 포인터.
     assert final.get("attempt_id", "").startswith("cr-"), final
     assert final.get("effective") is True, "APPROVED result는 effective=true여야 함"
-    assert final.get("schema_version") == 5, "attempt-model은 schema_version 5 (IMP-20260712-DAE1)"
+    assert final.get("schema_version") == 6, "bounded trust v2는 schema_version 6 (IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION)"
     # snapshot_identity 중첩 dict가 6개 차원을 포함해야 한다.
     ident = final.get("snapshot_identity")
     assert isinstance(ident, dict), final

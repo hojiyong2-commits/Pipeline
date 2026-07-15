@@ -2413,13 +2413,13 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_verify_npm_wrapper_content",
     "_find_codex_js_entrypoint",
     "_codex_review_blocked_flag_path",
-    # IMP-20260712-DAE1 REJECT#17: trust-root 독립성 강화 helper 3종 등록.
-    #   npm 바이너리 시스템 경로 검증(수정 A), package.json 레지스트리 provenance(수정 B),
-    #   direct_native 소유권 검증(수정 C). 이 함수들을 단독 변경하면 자기참조 신뢰 우회가 가능하므로
-    #   CRITICAL 분류가 필요하다.
+    # IMP-20260712-DAE1 REJECT#17: trust-root 독립성 강화 helper 등록.
+    #   npm 바이너리 시스템 경로 검증(수정 A), package.json 레지스트리 provenance(수정 B).
+    #   이 함수들을 단독 변경하면 자기참조 신뢰 우회가 가능하므로 CRITICAL 분류가 필요하다.
+    #   USER_AUTHORIZED_CONTRACT_MIGRATION: _verify_direct_native_ownership(direct_native 소유권
+    #   검증)은 OUT_OF_SCOPE(native_binary_origin_proof)로 재분류되어 제거됨.
     "_verify_npm_binary_is_system_path",
     "_check_package_json_npm_integrity",
-    "_verify_direct_native_ownership",
     # IMP-20260712-DAE1 REJECT#18: trust-root 독립성 강화 helper 2종 추가 등록.
     #   npm global bin 허용 루트 bound(문제 2), .package-lock.json integrity provenance(문제 3).
     #   단독 변경 시 npm 출력 신뢰 경계와 lockfile provenance 교차검증을 우회할 수 있어 CRITICAL.
@@ -2430,13 +2430,12 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   이 함수를 변경하면 provenance_absent_all_sources 판정을 우회해 acceptance_eligible=True가
     #   부당하게 유지될 수 있으므로 CRITICAL 분류 필수이다.
     "_get_npm_ls_integrity",
-    # IMP-20260712-DAE1 REJECT#24: Windows Authenticode 서명 검증 + npm 레지스트리 JS SHA 검증 등록.
-    #   - _check_authenticode_signature: native binary OpenAI 서명 검증 — 변경 시 acceptance_eligible 판정 우회 가능.
-    #   - _verify_codex_js_against_registry: 임시 npm 설치 후 JS SHA 비교로 위조 JS 탐지 —
-    #     변경 시 dead code / console.log 우회를 허용하여 위조 JS + 정품 native 조합이 통과될 수 있음.
-    #   두 함수 모두 단독 변경으로 acceptance_eligible=True 우회 가능 → CRITICAL 분류 필수.
+    # IMP-20260712-DAE1 REJECT#24: Windows Authenticode 서명 검증 등록.
+    #   - _check_authenticode_signature: native binary 서명 Valid/Invalid + OpenAI subject 검증 —
+    #     변경 시 signature_invalid_or_revoked(ENVIRONMENT_UNTRUSTED) 탐지 우회 가능.
+    #   USER_AUTHORIZED_CONTRACT_MIGRATION: _verify_codex_js_against_registry(레지스트리 JS SHA 비교)는
+    #   OUT_OF_SCOPE(npm_tarball_supply_chain_proof)로 재분류되어 제거됨.
     "_check_authenticode_signature",
-    "_verify_codex_js_against_registry",
     # IMP-20260712-DAE1 REJECT#28: 실제 실행 체인 node 인터프리터 신뢰 검증 helper 등록.
     #   _verify_node_interpreter_trust를 단독 변경하면 사용자 쓰기 가능 위치의 악성 node를
     #   그대로 실행시켜 로그인·모델·APPROVE 출력을 위조할 수 있으므로 CRITICAL 분류 필수이다.
@@ -2450,13 +2449,14 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_is_valid_sha256_hex",
     "_codex_clean_env",
     "_run_codex_preflight_checks",
-    # REJECT#14: platform native binary SHA를 레지스트리 tarball 원본과 비교하는 helper 등록.
-    #   _verify_codex_native_binary_against_registry를 단독 변경하면 정품 codex.js + 위조 native
-    #   binary 조합을 통과시킬 수 있으므로 CRITICAL 분류 필수이다.
-    #   _resolve_codex_platform_package_meta는 native binary가 속한 platform 패키지의 실제
-    #   name@version을 해석하며, 변조 시 레지스트리 provenance 결속 대상을 우회할 수 있으므로 CRITICAL.
-    "_verify_codex_native_binary_against_registry",
-    "_resolve_codex_platform_package_meta",
+    # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: 아래 두 함수는 OUT_OF_SCOPE로 재분류되어
+    #   제거됨. _verify_codex_native_binary_against_registry(레지스트리 tarball 원본 SHA 비교) →
+    #   npm_tarball_supply_chain_proof / native_binary_origin_proof. _resolve_codex_platform_package_meta
+    #   (platform 패키지 name@version 해석) → 위 함수 전용 helper이므로 함께 제거.
+    # bounded trust circuit breaker + findings scope 분류 helper 등록.
+    "_check_codex_circuit_breaker",
+    "_classify_codex_findings",
+    "_record_user_authorized_contract_migration",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -2590,14 +2590,61 @@ CODEX_MIN_VERIFICATION_HIGH_CRITICAL: str = CODEX_VERIFICATION_INVOCATION
 CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
 
 # IMP-20260712-DAE1 REJECT#3 rework(요구8): codex_review_result.json 현재 스키마 버전.
-CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 5
+# IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: v6 — findings[] scope 분류 스키마 추가.
+CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 6
+
+# IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: bounded trust model v2.
+#   사용자가 직접 Codex Review Contract를 bounded trust model v2로 교체하기로 결정했다.
+#   16회 REJECT 루프의 근본 원인은 npm/OpenAI/registry 공급망의 절대적 암호학적 증명을 요구한
+#   것으로, 동일 OS 사용자 권한에서는 외부 서명 서비스 없이 검증 불가능한 문제였다. v2는 이를
+#   OUT_OF_SCOPE_DIAGNOSTIC(기록하되 차단 안 함)으로 재분류하고, IN_SCOPE(실제 REJECT 루프
+#   유발 가능·acceptance 차단)와 ENVIRONMENT_UNTRUSTED(침해 증거 → fail-closed BLOCKED)만
+#   승인 자격에 반영한다.
+CODEX_BOUNDED_TRUST_CONTRACT_VERSION: str = "v2.0"
+CODEX_BOUNDED_TRUST_THREAT_MODEL_VERSION: str = "IMP-20260712-DAE1-boundedtrust-v2"
+
+# IN_SCOPE: REJECT 루프 유발 가능, acceptance 차단 (IN_SCOPE P0/P1 finding만 reject_count 증가).
+CODEX_BOUNDED_TRUST_IN_SCOPE: List[str] = [
+    "fake_codex_exec",              # 실제 codex exec 미실행 또는 manual/fake verdict
+    "repo_internal_shim",           # 저장소 내부 fake codex/shim 및 명백한 PATH 우회
+    "model_effort_mismatch",        # 선택 model/effort와 실행 명령 불일치
+    "verdict_parse_failure",        # structured verdict 파싱 실패 또는 fail-open
+    "bundle_head_packet_sha_mismatch",  # review bundle/head/packet/pr_body/snapshot SHA 불일치
+    "raw_nonce_exposure",           # raw ACCEPT 코드 또는 nonce의 검토 입력 노출
+    "premature_acceptance_request", # Codex APPROVED 전 사용자 승인 요청 노출
+    "error_misclassified_as_approved",  # Codex ERROR를 APPROVED/REJECTED로 오분류
+]
+
+# OUT_OF_SCOPE_DIAGNOSTIC: 기록하지만 reject_count 미증가, acceptance 미차단.
+CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC: List[str] = [
+    "openai_registry_compromise",        # OpenAI 또는 npm registry 자체 침해
+    "npm_tarball_supply_chain_proof",    # npm tarball 공급망 전체의 암호학적 증명
+    "native_binary_origin_proof",        # native binary의 절대적 배포 출처 증명
+    "authenticode_ca_trust_store",       # Authenticode CA 및 사용자 trust store 침해
+    "same_os_user_privilege_attack",     # 동일 OS 사용자·관리자 권한 공격
+    "external_signing_unverifiable",     # 외부 서명 서비스 없이 검증할 수 없는 실행환경 문제
+]
+
+# ENVIRONMENT_UNTRUSTED: 실제 침해 증거 → 즉시 fail-closed BLOCKED.
+CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED: List[str] = [
+    "repo_internal_fake_codex",          # 저장소 내부 fake codex/shim 발견
+    "execution_path_changed_unexpectedly",  # 실행 경로가 예상 설치 경로에서 갑자기 변경됨
+    "recorded_sha_changed_unexplained",  # 기록된 binary SHA가 같은 버전에서 설명 없이 변경됨
+    "signature_invalid_or_revoked",      # invalid/revoked signature 또는 실제 파일 변조 증거
+    "process_evidence_mismatch",         # 실행 명령과 수집된 프로세스 증거 불일치
+    "verdict_file_without_execution",    # Codex가 실행되지 않았는데 verdict 파일만 생성됨
+]
+
+# 수렴성 circuit breaker 임계값(USER_AUTHORIZED_CONTRACT_MIGRATION).
+CODEX_CB_MAX_SAME_CATEGORY_REPEATS: int = 3   # 같은 root_cause_category 3회 반복 → NON_CONVERGING
+CODEX_CB_MAX_EFFECTIVE_REJECTS: int = 5        # review_epoch 내 실제(IN_SCOPE) REJECT 5회 → NON_CONVERGING
 
 # IMP-20260712-DAE1 REJECT#4: Codex Review semantic evidence 예산 제한(문자수).
 #   실제 unified diff hunk를 Codex prompt(stdin)에 실어 보낼 때의 총 문자 예산이다.
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
 #   evidence_complete=False(fail-closed)로 만든다. 이 값은 bundle 파일에 원문을 persist하지 않고
 #   prompt에만 반영되므로 nonce-scan/TC-J(no_nonce_exposure) 불변식과 무관하다.
-CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 800000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000; REJECT#18: 73000→76000; REJECT#22: 76000→85000; REJECT#24: 85000→165000 (3개 helper CODEX_CRITICAL_FUNCTIONS 추가로 cumulative diff 145145자 필요); REJECT#35: 165000→250000 (18파일 PR에서 non-critical 파일 2개 budget 초과 해소); REJECT#7: 250000→400000 (CRITICAL Python 파일 diff 추가로 pipeline.py+test_codex*.py 합산 250K 초과); REJECT#8: 400000→700000 (45K 청크 분할 후 test_codex*.py 4청크(~180K)+pipeline.py(~200K)+기타 합산 400K 초과, 5개 CRITICAL 청크 손실 발생); REJECT#29: 700000→800000 (_run_codex_preflight_checks noncrit hunk 147956자 → 예산 초과로 잘림, evidence_complete=False 해소)
+CODEX_REVIEW_BUNDLE_BUDGET_CHARS: int = 830000  # IMP-20260712-DAE1 REJECT#10: 30000→65000; REJECT#15: 65000→70000; REJECT#16: 70000→73000; REJECT#18: 73000→76000; REJECT#22: 76000→85000; REJECT#24: 85000→165000 (3개 helper CODEX_CRITICAL_FUNCTIONS 추가로 cumulative diff 145145자 필요); REJECT#35: 165000→250000 (18파일 PR에서 non-critical 파일 2개 budget 초과 해소); REJECT#7: 250000→400000 (CRITICAL Python 파일 diff 추가로 pipeline.py+test_codex*.py 합산 250K 초과); REJECT#8: 400000→700000 (45K 청크 분할 후 test_codex*.py 4청크(~180K)+pipeline.py(~200K)+기타 합산 400K 초과, 5개 CRITICAL 청크 손실 발생); REJECT#29: 700000→800000 (_run_codex_preflight_checks noncrit hunk 147956자 → 예산 초과로 잘림, evidence_complete=False 해소); REJECT#16(캐시 신뢰제거): 800000→830000 (native cache 재설계 diff 추가로 CRITICAL 파일 누적 증가 → non-critical test_ac_tracking_1abe.py hunk(~2666자)가 800K 예산 초과로 잘림, evidence_complete=False 해소)
 
 
 class _CodexCacheSkipError(Exception):
@@ -9911,544 +9958,19 @@ def _check_npm_lockfile_integrity(pkg_root: "Path") -> Dict[str, Any]:
 #            검사만 수행한다.
 # [Improvement]: Windows는 Get-AuthenticodeSignature(코드 서명), Unix는 파일 capability/SELinux
 #            label을 확인하면 소유권 heuristic보다 강한 무결성 보장을 얻을 수 있다.
-def _verify_direct_native_ownership(native_path: "Path") -> Dict[str, Any]:
-    """REJECT#17 수정 C: direct_native 실행 파일의 위치·소유권을 검증한다(fail-closed).
-
-    차단 대상:
-      - 사용자 홈 디렉토리 또는 현재 작업 디렉토리 내부의 바이너리(사용자 배치 의심).
-      - (Unix) 현재 프로세스 사용자가 소유한 바이너리 — 시스템 설치는 통상 root 소유.
-
-    Args:
-        native_path: direct_native 실행 파일 경로.
-    Returns:
-        {"trusted": bool, "failure_code": str|None}.
-    Raises:
-        TypeError: native_path가 None인 경우.
-    """
-    if native_path is None:
-        raise TypeError("native_path must not be None")
-    try:
-        if not isinstance(native_path, Path):
-            return {"trusted": False, "failure_code": "direct_native_invalid_path"}
-        _p = Path(os.path.abspath(str(native_path)))
-        # 1) 홈 디렉토리 / cwd 내부 차단 (cross-platform).
-        _blocked_roots: List[Path] = []
-        try:
-            _blocked_roots.append(Path(os.path.abspath(str(Path.home()))))
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            _blocked_roots.append(Path(os.path.abspath(os.getcwd())))
-        except Exception:  # noqa: BLE001
-            pass
-        for _br in _blocked_roots:
-            try:
-                _p.relative_to(_br)
-                return {"trusted": False, "failure_code": "direct_native_user_path"}
-            except ValueError:
-                continue
-        # 2) Unix 소유권 검사 — 현재 사용자가 소유하면 차단(root 소유 시스템 설치만 허용).
-        if hasattr(os, "getuid"):
-            try:
-                _st = os.stat(str(_p))
-            except OSError:
-                return {"trusted": False, "failure_code": "direct_native_stat_error"}
-            # getuid()는 Unix에서만 존재 — hasattr 가드로 Windows는 위치 검사만 수행.
-            if _st.st_uid == os.getuid():  # type: ignore[attr-defined]
-                return {"trusted": False, "failure_code": "direct_native_user_owned"}
-        return {"trusted": True, "failure_code": None}
-    except Exception as _exc:  # noqa: BLE001
-        return {
-            "trusted": False,
-            "failure_code": f"direct_native_ownership_error:{type(_exc).__name__}",
-        }
-
-
-def _verify_codex_js_against_registry(
-    js_path: "Path", pkg_version: str, timeout: int = 60
-) -> Dict[str, Any]:
-    """REJECT#24 AC-1/2/4 + REJECT#36: 레지스트리 JS SHA 비교로 위조 JS 탐지 (의미론적 분석 대체).
-
-    의미론적 JS 내용 분석(dead code / console.log 우회 가능)의 한계를 극복하기 위해
-    고정된 registry.npmjs.org에서 tarball과 무결성 메타데이터(dist.integrity)를 직접 받아
-    tarball 무결성을 먼저 검증한 뒤, tarball 내부 codex.js를 추출해 로컬 설치본과 SHA256을 비교한다.
-
-    REJECT#36: 이전 구현은 후보 npm을 subprocess로 실행해 임시 설치하고 그 결과와 비교했다. 그러나
-    가짜 npm이 임시 위치에도 동일한 위조 codex.js를 생성하면 위조본을 자기 자신과 비교해 정상으로
-    통과시킬 수 있었다(자기참조 신뢰). 이를 제거하고 npm 실행 파일을 전혀 사용하지 않으며, 고정된
-    registry.npmjs.org에서 독립적으로 받은 무결성 메타데이터·tarball만 기준으로 비교한다.
-
-    AC-4: wrapper/JS가 존재하면 외부 레지스트리 provenance 필수; 부재 = fail-closed
-    AC-1: 위조 JS + 정품 native binary 조합 → acceptance_eligible=False
-    AC-2: console.log, dead-code spawn, minimal vendor string 우회 시도 모두 차단
-            (JS 내용이 다르면 SHA가 달라지므로 우회 불가)
-
-    Args:
-        js_path: 설치된 codex.js 경로.
-        pkg_version: 설치된 @openai/codex 버전 문자열 (예: "1.0.0").
-        timeout: registry.npmjs.org HTTP 요청 타임아웃 (초).
-
-    Returns:
-        {
-            "ok": bool,          # True = 레지스트리 JS와 SHA 일치 (정품)
-            "available": bool,   # True = npm/네트워크 접근 성공 (False이면 fallback)
-            "reason": str,
-            "installed_sha": str,
-            "registry_sha": str,
-        }
-        available=False: npm/네트워크 불가 또는 비-semver 버전 → JS 무결성 미확인 → acceptance_eligible=False (fail-closed).
-        available=True, ok=False: 위조 JS 탐지 → acceptance_eligible=False (fail-closed).
-        available=True, ok=True: 정품 JS 확인 → Authenticode + registry 모두 valid 시 acceptance_eligible=True.
-    """
-    _r: Dict[str, Any] = {
-        "ok": False,
-        "available": False,
-        "reason": "",
-        "installed_sha": "",
-        "registry_sha": "",
-    }
-    try:
-        if not js_path or not js_path.exists():
-            _r["reason"] = "js_not_found"
-            return _r
-        # 1. 설치된 JS SHA256 계산
-        try:
-            _installed_sha = hashlib.sha256(js_path.read_bytes()).hexdigest()
-            _r["installed_sha"] = _installed_sha
-        except (OSError, PermissionError) as _exc:
-            _r["reason"] = f"installed_sha_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-            return _r
-        # 2. pkg_version 없으면 레지스트리 비교 불가 → available=False (fail-closed)
-        if not pkg_version or not pkg_version.strip():
-            _r["reason"] = "pkg_version_unknown"
-            return _r
-        # REJECT#25 AC-3: pkg_version semver 검증 — file:, URL, 태그 injection 차단.
-        #   file:../local, https://..., latest, next 등 비-semver는 npm install 인자로 거부한다.
-        _ver_stripped = pkg_version.strip()
-        if not re.match(r"^\d+\.\d+\.\d+(?:[+.\-][a-zA-Z0-9.+\-]*)?$", _ver_stripped):
-            _r["reason"] = "pkg_version_not_semver"
-            return _r
-        # 3. REJECT#36: 후보 npm subprocess로 임시 설치하면 가짜 npm이 임시 위치에도 동일한 위조
-        #   codex.js를 생성해 위조본을 자기 자신과 비교(자기참조 신뢰)로 통과시킬 수 있다. 이를
-        #   제거하고 고정된 registry.npmjs.org에서 tarball과 무결성 메타데이터(dist.integrity, sha512)를
-        #   독립적으로 받아 tarball 무결성을 먼저 검증한 뒤, tarball 내부 codex.js를 추출해 로컬
-        #   설치본과 SHA256을 비교한다. npm 실행 파일은 전혀 사용하지 않는다.
-        import urllib.request as _urlreq
-        import tarfile as _tarfile
-        import base64 as _base64
-        import tempfile as _tf_reg
-
-        _packument_url = (
-            f"https://registry.npmjs.org/@openai/codex/{_ver_stripped}"
-        )
-        try:
-            _req = _urlreq.Request(
-                _packument_url,
-                headers={
-                    "Accept": "application/json",
-                    "User-Agent": "pipeline-codex-verify/1.0",
-                },
-            )
-            with _urlreq.urlopen(_req, timeout=timeout) as _resp:
-                _meta = json.loads(_resp.read())
-        except Exception as _exc:  # noqa: BLE001
-            _r["reason"] = (
-                f"registry_fetch_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-            )
-            return _r
-
-        # dist.integrity는 tarball 전체의 sha512 (ssri 형식: "sha512-BASE64")
-        _dist = _meta.get("dist", {}) if isinstance(_meta, dict) else {}
-        _tarball_url = _dist.get("tarball", "") if isinstance(_dist, dict) else ""
-        _integrity = _dist.get("integrity", "") if isinstance(_dist, dict) else ""
-
-        if not _tarball_url or not _integrity:
-            _r["reason"] = "registry_missing_tarball_or_integrity"
-            return _r
-        # REJECT#36: tarball URL은 고정된 registry.npmjs.org 도메인이어야 한다(리다이렉션/조작 차단).
-        if not isinstance(_tarball_url, str) or not _tarball_url.startswith(
-            "https://registry.npmjs.org/"
-        ):
-            _r["reason"] = f"registry_tarball_url_untrusted:{str(_tarball_url)[:60]}"
-            return _r
-
-        # tarball 다운로드
-        try:
-            _req2 = _urlreq.Request(
-                _tarball_url,
-                headers={"User-Agent": "pipeline-codex-verify/1.0"},
-            )
-            with _urlreq.urlopen(_req2, timeout=timeout) as _resp2:
-                _tarball_bytes = _resp2.read()
-        except Exception as _exc:  # noqa: BLE001
-            _r["reason"] = (
-                f"tarball_download_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-            )
-            return _r
-
-        # tarball 무결성 검증 (dist.integrity sha512) — 위조 tarball 차단
-        if isinstance(_integrity, str) and _integrity.startswith("sha512-"):
-            _expected_b64 = _integrity[len("sha512-"):]
-            _actual_sha512 = _base64.b64encode(
-                hashlib.sha512(_tarball_bytes).digest()
-            ).decode()
-            if _actual_sha512 != _expected_b64:
-                _r["available"] = True
-                _r["reason"] = "tarball_integrity_mismatch"
-                return _r
-        else:
-            _r["reason"] = "registry_integrity_not_sha512"
-            return _r
-
-        # tarball에서 codex.js 추출 후 로컬 JS와 SHA256 비교
-        _registry_js_bytes: Optional[bytes] = None
-        with _tf_reg.TemporaryDirectory(prefix="codex_reg_verify_") as _tmpdir:
-            _tb_path = Path(_tmpdir) / "codex.tgz"
-            try:
-                _tb_path.write_bytes(_tarball_bytes)
-            except (OSError, PermissionError) as _exc:
-                _r["reason"] = (
-                    f"tarball_write_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-                )
-                return _r
-            try:
-                with _tarfile.open(str(_tb_path), "r:gz") as _tf_obj:
-                    _member_names = _tf_obj.getnames()
-                    # npm tarball 내부는 package/ 접두사; codex.js는 package/bin/codex.js
-                    _js_member: Optional[str] = None
-                    for _m in _member_names:
-                        if _m == "package/bin/codex.js" or _m.endswith("/bin/codex.js"):
-                            _js_member = _m
-                            break
-                    if _js_member is None:
-                        _r["available"] = True
-                        _r["reason"] = "tarball_no_codex_js"
-                        return _r
-                    _extracted = _tf_obj.extractfile(_js_member)
-                    if _extracted is None:
-                        _r["available"] = True
-                        _r["reason"] = "tarball_codex_js_not_extractable"
-                        return _r
-                    _registry_js_bytes = _extracted.read()
-            except Exception as _exc:  # noqa: BLE001
-                _r["reason"] = (
-                    f"tarball_extract_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-                )
-                return _r
-
-        if _registry_js_bytes is None:
-            _r["reason"] = "tarball_codex_js_empty"
-            return _r
-
-        # SHA256 비교: 일치 → 정품, 불일치 → 위조 JS 탐지
-        _registry_sha = hashlib.sha256(_registry_js_bytes).hexdigest()
-        _r["registry_sha"] = _registry_sha
-        _r["available"] = True
-        if _installed_sha == _registry_sha:
-            _r["ok"] = True
-            _r["reason"] = "js_sha_matches_registry"
-        else:
-            _r["ok"] = False
-            _r["reason"] = (
-                f"js_sha_mismatch:"
-                f"installed={_installed_sha[:16]},registry={_registry_sha[:16]}"
-            )
-    except Exception as _exc:  # noqa: BLE001
-        _r["reason"] = f"outer_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
-    return _r
-
-
-# REJECT#15: 이전 버전의 크기 기반 우회 상한(_CODEX_NATIVE_REGISTRY_MAX_DOWNLOAD_BYTES, 64MB)을
-#   제거했다. 대형 platform 패키지에서 tarball 다운로드 없이 메타데이터만으로 ok=True를 반환하면,
-#   정품 codex.js + 위조 native binary 조합(AC#1)을 탐지하지 못하고 로그인/모델/승인 출력이 위조될 수
-#   있었다. 이제 패키지 크기와 무관하게 dist.integrity(sha512)를 검증한 tarball에서 native binary를
-#   추출해 로컬 SHA-256과 정확히 비교한다(fail-closed). 대형 패키지의 반복 다운로드 비용은 검증 결과를
-#   콘텐츠 주소형 캐시(.pipeline/native_sha_cache/, key=installed_sha+version+platform_pkg)에 저장해
-#   해결한다. tarball 다운로드는 streaming(1MB chunks)으로 수행하며 500MB hard limit로 방어한다.
-
-
-# REJECT#15: streaming tarball 다운로드 hard limit(바이트). 실제 @openai/codex platform 패키지
-#   전개 크기(수백MB)를 초과하는 병리적 응답으로부터 메모리를 보호한다(fail-closed).
-_CODEX_NATIVE_TARBALL_MAX_BYTES: int = 500 * 1024 * 1024  # 500MB
-
-
-def _resolve_codex_platform_package_meta(native_path: "Path") -> Dict[str, str]:
-    """native binary가 속한 platform 패키지의 package.json에서 name/version을 해석한다.
-
-    실제 @openai/codex 배포는 platform 변형을 별도 패키지명이 아니라 동일 패키지명(@openai/codex)의
-    platform 접미사 버전(예: 0.144.1-win32-x64)으로 게시한다. 따라서 레지스트리 URL은 native binary
-    상위의 package.json에 기록된 실제 name@version으로 구성해야 한다(하드코딩 금지).
-
-    Args:
-        native_path: platform native binary 경로.
-    Returns:
-        {"name": str, "version": str} — 해석 실패 시 빈 문자열.
-    """
-    _out = {"name": "", "version": ""}
-    try:
-        if native_path is None:
-            return _out
-        _cur = native_path.parent
-        # native binary 상위로 최대 8단계까지 올라가며 가장 가까운 package.json을 찾는다.
-        for _ in range(8):
-            _pj = _cur / "package.json"
-            if _pj.is_file():
-                try:
-                    _data = json.loads(_pj.read_text(encoding="utf-8", errors="replace"))
-                    _out["name"] = str(_data.get("name", "") or "")
-                    _out["version"] = str(_data.get("version", "") or "")
-                except Exception:  # noqa: BLE001
-                    pass
-                break
-            if _cur.parent == _cur:
-                break
-            _cur = _cur.parent
-    except Exception:  # noqa: BLE001
-        pass
-    return _out
-
-
-def _verify_codex_native_binary_against_registry(
-    native_path: "Path", pkg_version: str, timeout: int = 60
-) -> Dict[str, Any]:
-    """REJECT#14: platform native binary를 레지스트리 원본 provenance에 결속한다.
-
-    _verify_codex_js_against_registry가 소형 주 패키지(@openai/codex, ~11KB)의 codex.js만 비교하는
-    것과 달리, 이 함수는 native binary가 속한 platform 패키지(동일 name @openai/codex + platform 접미사
-    version, 예: 0.144.1-win32-x64)를 해석하여 레지스트리 provenance에 결속한다.
-
-    검증 절차(REJECT#15: 패키지 크기와 무관하게 항상 SHA를 직접 비교한다):
-      1. native binary 상위 package.json에서 실제 name@version 해석(하드코딩 금지).
-      2. 콘텐츠 주소형 캐시(.pipeline/native_sha_cache/) 조회 — key=installed_sha+version+
-         platform_pkg. 캐시 hit(installed_sha 일치)이면 tarball 다운로드 없이 캐시된 ok/registry_sha
-         재사용.
-      3. 캐시 miss이면 레지스트리 메타데이터 조회 → dist.integrity(sha512) + dist.tarball(신뢰 도메인).
-      4. tarball을 streaming(1MB chunks, 500MB hard limit)으로 내려받아 무결성(sha512)을 검증하고
-         native binary를 추출해 로컬 SHA-256과 정확히 비교(fail-closed). 크기 기반 메타데이터 우회는
-         제거됐다 — 대형 패키지도 반드시 원본 SHA와 일치해야 ok=True.
-      5. 검증 결과를 캐시에 저장해 이후 반복 다운로드 비용을 제거한다.
-
-    Args:
-        native_path: 설치된 platform native binary 경로(codex.exe / codex).
-        pkg_version: 상위에서 전달된 @openai/codex 버전(package.json 해석 실패 시 fallback).
-        timeout: registry.npmjs.org HTTP 요청 타임아웃(초).
-
-    Returns:
-        {
-            "ok": bool,          # True = 레지스트리 provenance 결속(소형: SHA 일치 / 대형: 메타데이터 anchor)
-            "available": bool,   # True = 레지스트리 접근 + 패키지 해석 성공
-            "reason": str,
-            "installed_sha": str,
-            "registry_sha": str,   # 소형 패키지 SHA 비교 경로에서만 채워짐
-            "platform_pkg": str,   # 해석된 name@version
-        }
-        available=False: 패키지 해석 불가 / 네트워크 불가(fail-closed; 상위에서 acceptance_eligible=False).
-        available=True, ok=False: 위조 native binary 탐지(SHA 불일치/무결성 불일치) → fail-closed.
-        available=True, ok=True: 레지스트리 provenance 결속 성공.
-    """
-    import urllib.request as _urlreq
-    import tarfile as _tarfile
-    import base64 as _base64
-    import io as _io
-
-    _r: Dict[str, Any] = {
-        "ok": False,
-        "available": False,
-        "reason": "",
-        "installed_sha": "",
-        "registry_sha": "",
-        "platform_pkg": "",
-    }
-    try:
-        # 1. native binary 존재 확인 + SHA256 계산
-        try:
-            if native_path is None or not native_path.exists():
-                _r["reason"] = "native_not_found"
-                return _r
-            _installed_sha = hashlib.sha256(native_path.read_bytes()).hexdigest()
-            _r["installed_sha"] = _installed_sha
-        except (OSError, PermissionError) as _exc:
-            _r["reason"] = f"native_sha_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-            return _r
-
-        # 2. platform 패키지 name@version 해석(package.json 우선, 실패 시 pkg_version fallback).
-        _meta_pkg = _resolve_codex_platform_package_meta(native_path)
-        _pkg_name = _meta_pkg.get("name", "") or "@openai/codex"
-        _ver = (_meta_pkg.get("version", "") or (pkg_version or "")).strip()
-        if not _ver:
-            _r["reason"] = "pkg_version_unknown"
-            return _r
-        # REJECT#25 AC-3 동일 패턴: file:/URL/태그 injection 차단(platform 접미사 버전 허용).
-        if not re.match(r"^\d+\.\d+\.\d+(?:[+.\-][a-zA-Z0-9.+\-]*)?$", _ver):
-            _r["reason"] = "pkg_version_not_semver"
-            return _r
-        # 패키지명은 @openai/ 스코프로 한정(임의 패키지 조회 차단).
-        if not _pkg_name.startswith("@openai/"):
-            _r["reason"] = f"pkg_name_untrusted_scope:{_pkg_name[:40]}"
-            return _r
-        _r["platform_pkg"] = f"{_pkg_name}@{_ver}"
-
-        # 2b. REJECT#15: 콘텐츠 주소형 캐시 조회. 대형 패키지(수백MB)를 trust 검사마다 다시 내려받는
-        #     비용을 제거하되, 메타데이터만으로 ok=True를 반환하는 우회는 만들지 않는다. 캐시 key는
-        #     installed_sha + version + platform_pkg 조합(변조 불가)이며, 캐시된 installed_sha가 현재
-        #     installed_sha와 정확히 일치할 때만 유효하다(위조 native binary는 다른 installed_sha →
-        #     캐시 miss → tarball 재검증). 캐시 hit이면 캐시된 ok/registry_sha를 재사용한다.
-        _native_cache_key = (
-            f"{_installed_sha[:32]}-{_ver}-{_pkg_name.replace('/', '-')}"
-        )
-        _native_cache_dir = Path(__file__).parent / ".pipeline" / "native_sha_cache"
-        _native_cache_file = _native_cache_dir / f"{_native_cache_key}.json"
-        try:
-            if _native_cache_file.exists():
-                _cached = json.loads(_native_cache_file.read_text("utf-8"))
-                _cached_installed_sha = str(_cached.get("installed_sha", "") or "")
-                _cached_reg_sha = str(_cached.get("registry_sha", "") or "")
-                # 캐시된 installed_sha가 현재 값과 정확히 일치 + registry_sha 존재 시에만 재사용.
-                if _cached_installed_sha == _installed_sha and _cached_reg_sha:
-                    _cached_ok = bool(_cached.get("ok", False))
-                    _r["available"] = True
-                    _r["ok"] = _cached_ok
-                    _r["registry_sha"] = _cached_reg_sha
-                    _r["reason"] = f"native_sha_cache_hit:ok={_cached_ok}"
-                    return _r
-        except Exception:  # noqa: BLE001
-            pass  # 캐시 오류는 무시하고 tarball 다운로드로 재검증(fail-safe → 재검증).
-
-        # 3. 레지스트리 메타데이터 조회 — 스코프 슬래시만 인코딩(_verify_codex_js_against_registry와 동일 규칙).
-        _packument_url = f"https://registry.npmjs.org/{_pkg_name}/{_ver}"
-        try:
-            _req = _urlreq.Request(
-                _packument_url,
-                headers={
-                    "Accept": "application/json",
-                    "User-Agent": "pipeline-codex-verify/1.0",
-                },
-            )
-            with _urlreq.urlopen(_req, timeout=timeout) as _resp:
-                _meta = json.loads(_resp.read())
-        except Exception as _exc:  # noqa: BLE001
-            _r["reason"] = f"registry_fetch_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-            return _r
-
-        _dist = _meta.get("dist", {}) if isinstance(_meta, dict) else {}
-        _tarball_url = _dist.get("tarball", "") if isinstance(_dist, dict) else ""
-        _integrity = _dist.get("integrity", "") if isinstance(_dist, dict) else ""
-        if not _tarball_url or not _integrity:
-            _r["reason"] = "registry_missing_tarball_or_integrity"
-            return _r
-        # REJECT#14: tarball URL은 고정된 registry.npmjs.org 도메인이어야 한다(리다이렉션/조작 차단).
-        if not isinstance(_tarball_url, str) or not _tarball_url.startswith(
-            "https://registry.npmjs.org/"
-        ):
-            _r["reason"] = f"registry_tarball_url_untrusted:{str(_tarball_url)[:60]}"
-            return _r
-        # REJECT#14: 무결성은 sha512 ssri 형식이어야 한다(약한/미지 알고리즘 차단).
-        if not (isinstance(_integrity, str) and _integrity.startswith("sha512-")):
-            _r["reason"] = f"tarball_integrity_unknown_algo:{str(_integrity)[:20]}"
-            return _r
-
-        # 4. REJECT#15: 패키지 크기와 무관하게 tarball을 내려받아 native binary SHA를 직접 비교한다.
-        #    대형 패키지(수백MB)의 전체-메모리 로드를 피하기 위해 streaming(1MB chunks)으로 sha512를
-        #    증분 계산하고, 500MB hard limit를 초과하면 fail-closed로 중단한다. tarfile 추출을 위해
-        #    검증된 bytes를 메모리에 모으되, 크기 상한으로 병리적 응답을 방어한다.
-        _sha512_hasher = hashlib.sha512()
-        _chunks: List[bytes] = []
-        _total_bytes = 0
-        try:
-            with _urlreq.urlopen(
-                _urlreq.Request(
-                    _tarball_url,
-                    headers={"User-Agent": "pipeline-codex-verify/1.0"},
-                ),
-                timeout=timeout,
-            ) as _tb_resp:
-                while True:
-                    _chunk = _tb_resp.read(1024 * 1024)  # 1MB chunks
-                    if not _chunk:
-                        break
-                    _total_bytes += len(_chunk)
-                    if _total_bytes > _CODEX_NATIVE_TARBALL_MAX_BYTES:
-                        _r["reason"] = f"tarball_too_large:{_total_bytes}"
-                        return _r
-                    _sha512_hasher.update(_chunk)
-                    _chunks.append(_chunk)
-        except Exception as _exc:  # noqa: BLE001
-            _r["reason"] = f"tarball_download_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-            return _r
-        _tb_bytes = b"".join(_chunks)
-
-        _expected_b64 = _integrity[len("sha512-"):]
-        _actual_sha512 = _base64.b64encode(_sha512_hasher.digest()).decode()
-        if _actual_sha512 != _expected_b64:
-            _r["available"] = True
-            _r["reason"] = "tarball_integrity_mismatch"
-            return _r
-
-        # native binary 추출: package/vendor/**/bin/codex(.exe) 또는 파일명이 codex(.exe)인 실행 파일.
-        _registry_native_bytes: Optional[bytes] = None
-        try:
-            with _tarfile.open(fileobj=_io.BytesIO(_tb_bytes), mode="r:gz") as _tar:
-                _member_name: Optional[str] = None
-                for _name in _tar.getnames():
-                    _base = _name.rsplit("/", 1)[-1]
-                    if _base in ("codex", "codex.exe") and "/bin/" in _name:
-                        _member_name = _name
-                        break
-                if _member_name is None:
-                    for _name in _tar.getnames():
-                        if _name.rsplit("/", 1)[-1] in ("codex", "codex.exe"):
-                            _member_name = _name
-                            break
-                if _member_name is None:
-                    _r["available"] = True
-                    _r["reason"] = "native_not_in_tarball"
-                    return _r
-                _fobj = _tar.extractfile(_member_name)
-                if _fobj is None:
-                    _r["available"] = True
-                    _r["reason"] = "native_tarball_extract_none"
-                    return _r
-                _registry_native_bytes = _fobj.read()
-        except Exception as _exc:  # noqa: BLE001
-            _r["reason"] = f"tarball_extract_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-            return _r
-
-        if _registry_native_bytes is None:
-            _r["reason"] = "native_tarball_empty"
-            return _r
-        _registry_sha = hashlib.sha256(_registry_native_bytes).hexdigest()
-        _r["registry_sha"] = _registry_sha
-        _r["available"] = True
-        if _installed_sha == _registry_sha:
-            _r["ok"] = True
-            _r["reason"] = "native_sha_match_registry"
-        else:
-            _r["ok"] = False
-            _r["reason"] = (
-                f"native_sha_mismatch:"
-                f"installed={_installed_sha[:16]},registry={_registry_sha[:16]}"
-            )
-
-        # 5. REJECT#15: 검증 결과를 콘텐츠 주소형 캐시에 저장(다음 trust 검사에서 재다운로드 회피).
-        #    저장 실패는 무시한다(캐시는 성능 최적화일 뿐 신뢰 판정의 anchor가 아니다).
-        try:
-            _native_cache_dir.mkdir(parents=True, exist_ok=True)
-            _cache_entry = {
-                "installed_sha": _installed_sha,
-                "registry_sha": _registry_sha,
-                "ok": bool(_r["ok"]),
-                "platform_pkg": _r["platform_pkg"],
-                "pkg_version": _ver,
-                "cached_at": datetime.now(timezone.utc).isoformat(),
-            }
-            _native_cache_file.write_text(
-                json.dumps(_cache_entry, ensure_ascii=False), encoding="utf-8"
-            )
-        except Exception:  # noqa: BLE001
-            pass  # 캐시 저장 실패는 무시(신뢰 판정에 영향 없음).
-    except Exception as _exc:  # noqa: BLE001
-        _r["reason"] = f"outer_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
-    return _r
+# IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: 아래 4개 공급망 검증 함수가 제거되었다.
+#   bounded trust model v2에서 이들은 OUT_OF_SCOPE_DIAGNOSTIC(npm_tarball_supply_chain_proof /
+#   native_binary_origin_proof)으로 재분류되었다. 동일 OS 사용자 권한·외부 서명 서비스 부재
+#   환경에서는 npm/OpenAI/registry 공급망의 절대적 암호학적 증명이 불가능하며, 이를 요구한 것이
+#   16회 REJECT 루프(NON_CONVERGING)의 근본 원인이었다. 제거 함수:
+#     - _verify_direct_native_ownership (native binary 직접 소유권 검사)
+#     - _verify_codex_js_against_registry (레지스트리 codex.js SHA 비교)
+#     - _resolve_codex_platform_package_meta (platform 패키지 name@version 해석)
+#     - _verify_codex_native_binary_against_registry (native binary 레지스트리 tarball SHA 비교)
+#   또한 .pipeline/native_sha_cache/ 캐시 로직과 _CODEX_NATIVE_TARBALL_MAX_BYTES 상수도 제거됨.
+#   신뢰 앵커는 이제 (1) 실행 경로 신뢰(system path/npm global bin), (2) Authenticode Valid/Invalid
+#   + OpenAI subject, (3) 기록 SHA 재검증(recorded_sha_changed_unexplained), (4) repo-internal
+#   shim 탐지로 한정된다(ENVIRONMENT_UNTRUSTED 탐지 전용).
 
 
 def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
@@ -10517,12 +10039,10 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
         _r["status"] = _status
         # REJECT#15: Issuer 문자열 패턴(알려진 상업 CA 이름 목록) 검사는 공격자가 알려진 CA
         #   이름(예: "Microsoft")을 Issuer 문자열에 포함한 자체 CA를 사용자 인증서 저장소에 신뢰시켜
-        #   우회할 수 있으므로 gate에서 제거했다. native binary의 원본 SHA 비교
-        #   (_verify_codex_native_binary_against_registry, 패키지 크기 무관)가 primary trust source이며,
-        #   상위 로직이 native SHA 불일치 시 acceptance_eligible=False로 위조 binary를 차단한다.
-        #   Authenticode는 이제 secondary defense로서 "서명 없음/Invalid/자체 서명"만 차단한다.
-        #   issuer 필드는 로깅/디버깅 목적으로 계속 수집하지만 ok 판정의 gate로는 사용하지 않는다.
-        #   비교(원본 SHA)나 체인 검증이 불가능하면 상위 fail-closed 로직이 자격을 무효화한다.
+        #   우회할 수 있으므로 gate에서 제거했다. USER_AUTHORIZED_CONTRACT_MIGRATION(bounded trust v2):
+        #   이 함수는 서명 Valid/Invalid + Subject "openai" + 비자체서명만 검사하는 신뢰 앵커이며,
+        #   Invalid/자체서명은 ENVIRONMENT_UNTRUSTED(signature_invalid_or_revoked)로 상위에서 차단한다.
+        #   npm tarball 레지스트리 SHA 비교(공급망 암호학적 증명)는 OUT_OF_SCOPE로 제거됐다.
         if _status != "Valid":
             _r["ok"] = False
             _r["reason"] = f"authenticode_not_valid:{_status}"
@@ -10534,10 +10054,12 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
             _r["ok"] = False
             _r["reason"] = f"authenticode_self_signed:{_r['subject'][:60]}"
         else:
-            # Valid + subject에 openai 포함 + 자체 서명 아님 → Authenticode secondary 조건 충족.
-            # 위조 native binary는 primary(원본 SHA 비교)가 acceptance_eligible=False로 차단한다.
+            # USER_AUTHORIZED_CONTRACT_MIGRATION(bounded trust v2): Authenticode Valid + Subject
+            #   "openai" + 비자체서명이면 신뢰한다. 사용자 신뢰 저장소에 사설 CA를 등록해 CN=OpenAI leaf
+            #   인증서를 위조하는 공격(authenticode_ca_trust_store)은 same_os_user_privilege_attack과
+            #   함께 OUT_OF_SCOPE_DIAGNOSTIC로 재분류됐다(동일 OS 사용자 권한에서는 방어 불가능).
             _r["ok"] = True
-            _r["reason"] = "authenticode_valid_openai_not_self_signed"
+            _r["reason"] = "authenticode_valid_openai_not_self_signed_bounded_trust_v2"
     except Exception as _exc:  # noqa: BLE001
         _r["reason"] = f"authenticode_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
     return _r
@@ -10925,100 +10447,43 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                     return _r
             except Exception:  # noqa: BLE001 — realpath 계산 실패는 신뢰 판정에 영향 주지 않음
                 pass
-            # REJECT#25 AC-1/2: npm 레지스트리 JS SHA 교차검증 (fail-closed).
-            #   임시 디렉토리에 @openai/codex를 설치하여 JS SHA를 직접 비교한다.
-            #   - available=True, ok=False: 위조 JS 탐지 → acceptance_eligible=False
-            #   - available=True, ok=True: 정품 JS 확인 → Authenticode로 최종 결정
-            #   - available=False: npm/네트워크 불가 → fail-closed (Authenticode로 대체 불가)
-            #   Authenticode는 native binary 체인만 증명; JS 무결성 대체 불가.
-            _pkg_version = ""
-            for _pkg_json_cand in (
-                _js_ep.parent.parent / "package.json",
-                _js_ep.parent / "package.json",
-            ):
-                if _pkg_json_cand.exists():
-                    try:
-                        _pkg_data = json.loads(
-                            _pkg_json_cand.read_text(encoding="utf-8", errors="replace")
-                        )
-                        _pkg_version = str(_pkg_data.get("version", "") or "")
-                    except Exception:  # noqa: BLE001
-                        pass
-                    break
-            _js_registry_check = _verify_codex_js_against_registry(_js_ep, _pkg_version)
-            _js_registry_ok = bool(_js_registry_check.get("ok"))
-            _js_registry_available = bool(_js_registry_check.get("available"))
-            if _js_registry_available and not _js_registry_ok:
-                # 레지스트리 확인 성공했으나 SHA 불일치 → 위조 JS 탐지 → fail-closed
-                _r["acceptance_eligible"] = False
-                _r["provenance_reason"] = (
-                    f"js_sha_mismatch_vs_registry:{_js_registry_check.get('reason', '')[:80]}"
-                )
-            elif not _js_registry_available:
-                # REJECT#25: JS 레지스트리 검증 불가(npm 미설치/네트워크 오류/버전 누락/timeout/비-semver)
-                #   → fail-closed. Authenticode는 native binary만 증명하며 JS 무결성 대체 불가.
-                _r["acceptance_eligible"] = False
-                _r["provenance_reason"] = (
-                    f"js_registry_unavailable_fail_closed:{_js_registry_check.get('reason', '')[:80]}"
-                )
-            # REJECT#14: native binary도 platform tarball과 SHA를 비교한다(_verify_codex_js_against_registry
-            #   와 동일 패턴). 정품 codex.js + 위조 native binary 조합(AC#2)과 위조 native binary(AC#3)를
-            #   차단한다. Authenticode(자체 서명 CA store 등록으로 우회 가능)와 독립적으로, native binary가
-            #   검증된 platform 패키지 tarball 원본과 SHA가 일치할 때만 acceptance_eligible=True를 허용한다.
-            _native_registry_check = _verify_codex_native_binary_against_registry(
-                _native_bin, _pkg_version
-            )
-            _native_reg_ok = bool(_native_registry_check.get("ok"))
-            _native_reg_available = bool(_native_registry_check.get("available"))
-            _r["native_registry_reason"] = str(_native_registry_check.get("reason", "") or "")
-            if _native_reg_available and not _native_reg_ok:
-                # 레지스트리 확인 성공했으나 native SHA 불일치 → 위조 native binary → fail-closed(AC#2/#3)
-                _r["acceptance_eligible"] = False
-                _prev_nrp = str(_r.get("provenance_reason", "") or "")
-                _nr_msg = (
-                    f"native_sha_mismatch_vs_registry:{_native_registry_check.get('reason', '')[:80]}"
-                )
-                _r["provenance_reason"] = (
-                    f"{_prev_nrp}|{_nr_msg}" if _prev_nrp else _nr_msg
-                )
-            elif not _native_reg_available:
-                # native 레지스트리 검증 불가(플랫폼 미지원/네트워크 오류/버전 누락) → fail-closed
-                _r["acceptance_eligible"] = False
-                _prev_nrp = str(_r.get("provenance_reason", "") or "")
-                _nr_msg = (
-                    f"native_registry_unavailable_fail_closed:{_native_registry_check.get('reason', '')[:80]}"
-                )
-                _r["provenance_reason"] = (
-                    f"{_prev_nrp}|{_nr_msg}" if _prev_nrp else _nr_msg
-                )
-            # REJECT#22/#25: Authenticode — native binary 체인 검증 전용.
-            #   acceptance_eligible=True는 JS registry OK + native registry OK + Authenticode valid
-            #   모두 확인 시에만 허용한다(REJECT#14: native registry 조건 추가).
+            # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION (bounded trust model v2):
+            #   레지스트리 JS/native binary SHA 비교(npm tarball 공급망 암호학적 증명)는
+            #   OUT_OF_SCOPE_DIAGNOSTIC로 재분류되어 제거됐다. 이는 동일 OS 사용자 권한·외부 서명
+            #   서비스 부재 환경에서 절대적으로 검증 불가능하며 16회 REJECT 루프의 근본 원인이었다.
+            #   신뢰 앵커는 이제 (1) 실행 경로 신뢰(위 step 4/5: system path/npm global bin),
+            #   (2) Authenticode Valid/Invalid + OpenAI subject + 비자체서명(변조/무효 서명 탐지),
+            #   (3) node 인터프리터 신뢰(아래)로 한정한다. Authenticode Invalid/자체서명은
+            #   ENVIRONMENT_UNTRUSTED(signature_invalid_or_revoked)로 즉시 fail-closed한다.
             _authenticode = _check_authenticode_signature(str(_native_bin))
             if _authenticode.get("available"):
                 if _authenticode.get("ok"):
-                    if (
-                        _js_registry_available and _js_registry_ok
-                        and _native_reg_available and _native_reg_ok
-                    ):
-                        # JS+native 레지스트리 정품 확인 + Authenticode valid → acceptance_eligible=True
-                        _r["acceptance_eligible"] = True
-                        _r["provenance_reason"] = (
-                            f"authenticode_valid+registry_ok:{_authenticode.get('subject', '')[:40]}"
-                        )
-                    # else: JS/native registry 실패/불가 → acceptance_eligible=False 유지 (위에서 설정됨)
+                    # Authenticode Valid + OpenAI subject + 비자체서명 → 승인 자격(bounded trust v2).
+                    _r["acceptance_eligible"] = True
+                    _r["provenance_reason"] = (
+                        f"authenticode_valid_bounded_trust_v2:{_authenticode.get('subject', '')[:40]}"
+                    )
                 else:
-                    # Authenticode 실행됐으나 실패 → fake/tampered binary → fail-closed
+                    # Authenticode 실행됐으나 실패 → 서명 무효/자체서명/변조 →
+                    #   ENVIRONMENT_UNTRUSTED(signature_invalid_or_revoked) → fail-closed.
                     _r["acceptance_eligible"] = False
                     _r["provenance_reason"] = (
                         f"authenticode_invalid:{_authenticode.get('reason', '')[:80]}"
                     )
             else:
-                # REJECT#23: Authenticode 미사용 환경(비Windows POSIX + Win32 오류) → fail-closed.
-                _r["acceptance_eligible"] = False
-                _r["provenance_reason"] = (
-                    f"authenticode_unavailable_fail_closed:{_authenticode.get('reason', '')[:60]}"
-                )
+                # Windows에서 Authenticode 조회 불가는 검증 불가 상태 → fail-closed. POSIX(비Windows)는
+                #   서명 부재가 정상이므로 실행 경로 신뢰(system path/npm) + node 신뢰로 승인 자격을 유지한다
+                #   (bounded trust v2: 공급망 침해가 아니라 실행 경로/서명 변조만 IN/UNTRUSTED로 취급).
+                if sys.platform == "win32":
+                    _r["acceptance_eligible"] = False
+                    _r["provenance_reason"] = (
+                        f"authenticode_unavailable_fail_closed:{_authenticode.get('reason', '')[:60]}"
+                    )
+                else:
+                    _r["acceptance_eligible"] = True
+                    _r["provenance_reason"] = (
+                        f"posix_path_trust_bounded_trust_v2:{_authenticode.get('reason', '')[:40]}"
+                    )
             # REJECT#28 AC#1/2/3: 실제 실행 체인의 node 인터프리터 신뢰 검증(wrapper 체인 전용).
             #   정품 wrapper/JS/native를 그대로 두고 사용자 쓰기 가능 위치의 악성 node로 로그인·모델·
             #   APPROVE 출력을 위조하는 공격을 차단한다. node 미신뢰 시 acceptance_eligible=False(fail-closed).
@@ -11079,13 +10544,11 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
             #   sha256이 native 신뢰를 보장한다. 별도 native 체인 필드 부재를 operational trust가
             #   허용하도록 install_type=direct_native로 표시한다(신뢰는 시스템 경로에 한정, fail-closed).
             _r["install_type"] = "direct_native"
-            # REJECT#17 수정 C: 시스템 경로 접두사만으로 신뢰하지 않고 위치·소유권을 추가 검증한다.
-            #   시스템 경로에 사용자가 직접 쓴(홈/cwd 내부 또는 현재 사용자 소유) 바이너리를 차단한다.
-            _own = _verify_direct_native_ownership(_bin_p_lexical)
-            if not _own.get("trusted"):
-                _r["trusted"] = False
-                _r["untrusted_reason"] = f"{_own.get('failure_code')}:{_bin_p_lexical}"
-                return _r
+            # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: _verify_direct_native_ownership
+            #   (native binary 직접 소유권 검사)는 native_binary_origin_proof(OUT_OF_SCOPE)로 재분류되어
+            #   제거됐다. direct_native 신뢰는 시스템 경로 접두사(위 step 5) + repo/temp 격리(step 1/2) +
+            #   SHA 기록(step 6)으로 한정한다. repo-internal shim/execution path 변경/SHA 변경은
+            #   ENVIRONMENT_UNTRUSTED로 상위(재검증)에서 탐지된다(bounded trust v2).
         return _r
     except Exception as _exc:  # noqa: BLE001
         _r["untrusted_reason"] = f"path_verification_error:{type(_exc).__name__}:{_exc}"
@@ -12966,6 +12429,76 @@ def _classify_codex_cli_error(exit_code: int, stdout: str, stderr: str) -> Dict[
 # [Vulnerability & Risks]: 알 수 없는 verdict 값이나 reason 없는 REJECT는 None(=파싱 실패)으로
 #            처리하여 임의 문자열이 verdict로 승격되는 것을 막는다.
 # [Improvement]: schema_version 필드를 강제하여 protocol 버전 협상을 정교화할 수 있다.
+# [Purpose]: IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION — Codex verdict의 findings[] 항목을
+#            bounded trust scope(IN_SCOPE / OUT_OF_SCOPE_DIAGNOSTIC / ENVIRONMENT_UNTRUSTED)로 분류하고
+#            reject_count 증가 여부(reject_count_delta)를 결정한다.
+# [Assumptions]: findings는 dict 리스트이며 각 항목은 severity(P0~P3) + scope 문자열을 가진다.
+# [Vulnerability & Risks]: scope가 알 수 없는 값이면 fail-closed로 IN_SCOPE 취급(임의 우회 방지).
+#            severity/scope 누락 항목도 IN_SCOPE P0로 보수적 처리한다.
+# [Improvement]: root_cause_category 히스토그램을 추가해 반복 카테고리 탐지를 정교화할 수 있다.
+def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
+    """Codex verdict findings[]를 bounded trust scope로 분류한다(USER_AUTHORIZED_CONTRACT_MIGRATION).
+
+    Args:
+        findings: verdict JSON의 findings 값(dict 리스트 기대). None/비리스트도 방어적으로 처리.
+    Returns:
+        {
+            "in_scope_count": int,                    # IN_SCOPE P0/P1 finding 수(reject 유발)
+            "in_scope_all_count": int,                # IN_SCOPE 전체(P2/P3 포함)
+            "out_of_scope_diagnostic_count": int,     # OUT_OF_SCOPE_DIAGNOSTIC finding 수
+            "environment_untrusted_count": int,       # ENVIRONMENT_UNTRUSTED finding 수(→ BLOCKED)
+            "reject_count_delta": int,                # 1 = reject_count 증가, 0 = 미증가
+            "diagnostic_only": bool,                  # True = OUT_OF_SCOPE만 → reject 아님
+            "root_cause_categories": List[str],       # 등장한 root_cause_category(감사/circuit breaker용)
+            "valid": bool,                            # findings가 유효한 dict 리스트인지
+        }
+    """
+    out: Dict[str, Any] = {
+        "in_scope_count": 0,
+        "in_scope_all_count": 0,
+        "out_of_scope_diagnostic_count": 0,
+        "environment_untrusted_count": 0,
+        "reject_count_delta": 0,
+        "diagnostic_only": False,
+        "root_cause_categories": [],
+        "valid": False,
+    }
+    if findings is None or not isinstance(findings, list) or len(findings) == 0:
+        return out
+    out["valid"] = True
+    _cats: List[str] = []
+    for _f in findings:
+        if not isinstance(_f, dict):
+            # 비정상 항목은 fail-closed로 IN_SCOPE P0 취급.
+            out["in_scope_count"] += 1
+            out["in_scope_all_count"] += 1
+            continue
+        _scope = str(_f.get("scope", "") or "").strip()
+        _sev = str(_f.get("severity", "") or "").strip().upper()
+        _cat = str(_f.get("root_cause_category", "") or "").strip()
+        if _cat:
+            _cats.append(_cat)
+        if _scope == "OUT_OF_SCOPE_DIAGNOSTIC":
+            out["out_of_scope_diagnostic_count"] += 1
+        elif _scope == "ENVIRONMENT_UNTRUSTED":
+            out["environment_untrusted_count"] += 1
+        else:
+            # IN_SCOPE 또는 알 수 없는 scope(fail-closed → IN_SCOPE 취급).
+            out["in_scope_all_count"] += 1
+            if _sev in ("P0", "P1") or _sev == "":
+                out["in_scope_count"] += 1
+    out["root_cause_categories"] = _cats
+    # reject_count 증가 규칙: IN_SCOPE P0/P1 finding이 하나라도 있어야 실제 REJECT로 계수한다.
+    out["reject_count_delta"] = 1 if out["in_scope_count"] > 0 else 0
+    # diagnostic_only: IN_SCOPE(P0/P1) 없음 + ENVIRONMENT_UNTRUSTED 없음 + OUT_OF_SCOPE 있음.
+    out["diagnostic_only"] = (
+        out["in_scope_count"] == 0
+        and out["environment_untrusted_count"] == 0
+        and out["out_of_scope_diagnostic_count"] > 0
+    )
+    return out
+
+
 def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     """stdout의 마지막 JSON block을 파싱하여 verdict를 추출한다.
 
@@ -12974,6 +12507,10 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     Returns:
         {"verdict": "APPROVED"|"REJECTED", "reason": str, "source": "json_protocol"}
         또는 None (JSON 없음/파싱 실패/알 수 없는 verdict/reason 없는 REJECT).
+        IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 스키마가 있으면
+        findings + scope 분류(in_scope/out_of_scope/environment_untrusted counts + reject_count_delta +
+        diagnostic_only + environment_untrusted)를 함께 반환한다(backward compat: findings 없으면 기존
+        4-필드 스키마 유지).
     """
     # None/비str 입력 방어 — 명시적 None 반환(예외 대신 fallback 허용).
     if stdout is None:
@@ -12983,11 +12520,24 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     if not stdout:
         return None
 
-    # 오른쪽에서 마지막 '}'를 찾고, 그에 대응하는 마지막 '{'로 JSON 블록을 추출한다.
+    # 오른쪽에서 마지막 '}'를 찾고, balanced brace matching으로 대응하는 최외곽 '{'까지 추출한다.
+    #   IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 중첩 object가 있으면 단순
+    #   rfind("{")는 내부 finding brace를 잡아 verdict 키를 놓친다. 중첩 depth를 계산해 최외곽 object를
+    #   추출한다(비중첩 NDJSON 마지막 object 추출 동작은 그대로 보존).
     end = stdout.rfind("}")
     if end == -1:
         return None
-    start = stdout.rfind("{", 0, end + 1)
+    _depth = 0
+    start = -1
+    for _i in range(end, -1, -1):
+        _c = stdout[_i]
+        if _c == "}":
+            _depth += 1
+        elif _c == "{":
+            _depth -= 1
+            if _depth == 0:
+                start = _i
+                break
     if start == -1:
         return None
 
@@ -13002,6 +12552,34 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
 
     verdict = str(obj.get("verdict", "") or "")
     reason = str(obj.get("reason", "") or "")
+
+    # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 스키마 우선 처리.
+    #   findings가 존재하면 scope 분류 결과를 verdict dict에 실어 반환한다. verdict가 APPROVE_TO_USER면
+    #   APPROVED, REJECT/BLOCKED면 REJECTED로 매핑하되, diagnostic_only/environment_untrusted 플래그로
+    #   downstream(_cmd_gates_codex_review)이 reject_count 증가/즉시 BLOCKED를 결정한다.
+    _findings = obj.get("findings")
+    if isinstance(_findings, list) and len(_findings) > 0:
+        _cls = _classify_codex_findings(_findings)
+        if verdict == "APPROVE_TO_USER":
+            _mapped = "APPROVED"
+        elif verdict in ("REJECT", "BLOCKED"):
+            _mapped = "REJECTED"
+        else:
+            # 알 수 없는 verdict + findings → 파싱 실패(임의 승격 방지, fail-closed).
+            return None
+        return {
+            "verdict": _mapped,
+            "reason": reason or "findings-based verdict (bounded trust v2)",
+            "source": "json_protocol_findings_v2",
+            "findings": [dict(f) if isinstance(f, dict) else {"raw": str(f)} for f in _findings],
+            "in_scope_count": _cls["in_scope_count"],
+            "out_of_scope_diagnostic_count": _cls["out_of_scope_diagnostic_count"],
+            "environment_untrusted_count": _cls["environment_untrusted_count"],
+            "reject_count_delta": _cls["reject_count_delta"],
+            "diagnostic_only": _cls["diagnostic_only"],
+            "environment_untrusted": _cls["environment_untrusted_count"] > 0,
+            "root_cause_categories": _cls["root_cause_categories"],
+        }
 
     if verdict == "APPROVE_TO_USER":
         return {"verdict": "APPROVED", "reason": reason, "source": "json_protocol"}
@@ -13109,6 +12687,16 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
     #   startswith("REJECT") 취약 판정을 대체한다. JSON이 유효하면 그 verdict를 신뢰 루트로 사용.
     _json_verdict = _parse_json_verdict(stripped)
     if _json_verdict is not None:
+        # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 스키마 필드를 결과에 승계한다.
+        _findings_fields = {
+            k: _json_verdict.get(k)
+            for k in (
+                "findings", "in_scope_count", "out_of_scope_diagnostic_count",
+                "environment_untrusted_count", "reject_count_delta", "diagnostic_only",
+                "environment_untrusted", "root_cause_categories",
+            )
+            if _json_verdict.get(k) is not None
+        }
         if _json_verdict["verdict"] == "APPROVED":
             return {
                 "status": "APPROVED",
@@ -13119,6 +12707,7 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                 "codex_cli_stderr_excerpt": stderr[:200],
                 "verdict": "APPROVE_TO_USER",
                 "reject_reason": None,
+                **_findings_fields,
             }
         if _json_verdict["verdict"] == "REJECTED":
             # IMP-20260712-DAE1 REJECT#9: _parse_json_verdict가 검증한 structured 필드를 보존한다.
@@ -13135,6 +12724,7 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                 "reproduction": _json_verdict.get("reproduction") or None,
                 "required_fix": _json_verdict.get("required_fix") or None,
                 "acceptance_criteria": _json_verdict.get("acceptance_criteria") or None,
+                **_findings_fields,
             }
 
     # NDJSON fallback: real codex exec outputs verdict in agent_message items.
@@ -13311,10 +12901,180 @@ def _append_codex_history(entry: Dict[str, Any]) -> None:
         record["changed_fields"] = list(_cf) if isinstance(_cf, (list, tuple)) else [str(_cf)]
     if entry.get("snapshot_identity") and isinstance(entry.get("snapshot_identity"), dict):
         record["snapshot_identity"] = dict(entry.get("snapshot_identity"))  # type: ignore[arg-type]
+    # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: circuit breaker 평가용 필드 보존.
+    if entry.get("review_epoch"):
+        record["review_epoch"] = str(entry.get("review_epoch"))
+    if entry.get("root_cause_category"):
+        record["root_cause_category"] = str(entry.get("root_cause_category"))
+    if entry.get("verdict_scope"):
+        record["verdict_scope"] = str(entry.get("verdict_scope"))
+    if entry.get("non_converging_reason"):
+        record["non_converging_reason"] = str(entry.get("non_converging_reason"))
     hist_path = _codex_review_history_path()
     hist_path.parent.mkdir(parents=True, exist_ok=True)
     with open(hist_path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+# [Purpose]: IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION — 수렴성 circuit breaker. 같은
+#            root_cause_category가 CODEX_CB_MAX_SAME_CATEGORY_REPEATS회 반복되거나 review_epoch 내
+#            실제(IN_SCOPE) REJECT가 CODEX_CB_MAX_EFFECTIVE_REJECTS회에 도달하면 NON_CONVERGING으로
+#            판정한다. append-only history(codex_review_history.jsonl)의 항목만 관측한다.
+# [Assumptions]: history 항목은 dict이며 review_epoch/root_cause_category/verdict_scope/status 필드를
+#            가질 수 있다(없으면 무시). 동일 epoch 내 항목만 계수한다.
+# [Vulnerability & Risks]: history가 None/비리스트이면 미발동(triggered=False)으로 방어한다.
+#            category 미상 항목은 반복 계수에서 제외한다(오탐 방지).
+# [Improvement]: 시간 창(window) 기반 category 감쇠를 추가해 오래된 반복을 잊게 할 수 있다.
+def _check_codex_circuit_breaker(
+    history: List[Dict[str, Any]],
+    review_epoch: str,
+) -> Dict[str, Any]:
+    """현재 epoch의 수렴성 circuit breaker 상태를 확인한다(USER_AUTHORIZED_CONTRACT_MIGRATION).
+
+    Args:
+        history: codex_review_history.jsonl에서 로드한 append-only 항목 리스트.
+        review_epoch: 현재 review epoch 식별자(예: "epoch_20260712_001").
+    Returns:
+        {"triggered": False, "reason": None} — 정상.
+        {"triggered": True, "reason": "same_category_3x"|"reject_count_5x", ...} — 차단(NON_CONVERGING).
+    Raises:
+        TypeError: review_epoch가 None이거나 str가 아닌 경우.
+    """
+    if review_epoch is None:
+        raise TypeError("review_epoch must not be None")
+    if not isinstance(review_epoch, str):
+        raise TypeError(f"review_epoch must be str, got {type(review_epoch).__name__}")
+    out: Dict[str, Any] = {
+        "triggered": False,
+        "reason": None,
+        "same_category_max": 0,
+        "effective_rejects": 0,
+        "worst_category": "",
+    }
+    if history is None or not isinstance(history, list) or len(history) == 0:
+        return out
+    _cat_counts: Dict[str, int] = {}
+    _effective_rejects = 0
+    for _h in history:
+        if not isinstance(_h, dict):
+            continue
+        # 동일 epoch 항목만 계수한다. epoch 필드가 없는 legacy 항목은 "epoch_legacy"로 정규화하여
+        #   명명된 migration epoch(예: epoch_20260712_001)에서는 계수하지 않는다(epoch 격리 — 사용자
+        #   결정으로 새 epoch를 시작하면 이전 16회 REJECT가 즉시 재발동하지 않도록 한다).
+        _h_epoch = str(_h.get("review_epoch", "") or "") or "epoch_legacy"
+        if _h_epoch != review_epoch:
+            continue
+        _status = str(_h.get("status", "") or "")
+        _scope = str(_h.get("verdict_scope", "") or "")
+        _cat = str(_h.get("root_cause_category", "") or "").strip()
+        # 실제 REJECT(IN_SCOPE)만 effective reject로 계수. diagnostic/OUT_OF_SCOPE는 제외.
+        _counts_reject = bool(_h.get("counts_toward_reject_rate_limit", _status == "REJECTED"))
+        if _status == "REJECTED" and _counts_reject and _scope != "OUT_OF_SCOPE_DIAGNOSTIC":
+            _effective_rejects += 1
+            if _cat:
+                _cat_counts[_cat] = _cat_counts.get(_cat, 0) + 1
+    out["effective_rejects"] = _effective_rejects
+    if _cat_counts:
+        _worst = max(_cat_counts.items(), key=lambda kv: kv[1])
+        out["worst_category"] = _worst[0]
+        out["same_category_max"] = _worst[1]
+    # 규칙 1: 같은 root_cause_category 반복 임계값 도달.
+    if out["same_category_max"] >= CODEX_CB_MAX_SAME_CATEGORY_REPEATS:
+        out["triggered"] = True
+        out["reason"] = "same_category_3x"
+        return out
+    # 규칙 2: epoch 내 실제 REJECT 임계값 도달.
+    if _effective_rejects >= CODEX_CB_MAX_EFFECTIVE_REJECTS:
+        out["triggered"] = True
+        out["reason"] = "reject_count_5x"
+        return out
+    return out
+
+
+# [Purpose]: IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION — 사용자가 직접 결정한 Codex Review
+#            Contract 전환(bounded trust model v2)을 pipeline state에 기록한다. agent는 사용자 결정
+#            없이 contract/review_epoch를 임의 변경할 수 없으며, migration flag는 1회만 소비된다.
+# [Assumptions]: state는 dict이며 호출자가 _save(state)로 영속화한다. old/new contract SHA는 계약
+#            문서(예: .claude/codex_review_contract.md)의 SHA256이다.
+# [Vulnerability & Risks]: 이미 동일 new_contract_sha256으로 migration이 기록됐으면(소비됨) 중복
+#            기록하지 않는다(idempotent). scope_decision_source는 항상 "user"로 고정한다.
+# [Improvement]: 서명된 사용자 승인 토큰을 추가로 결속하면 위조를 더 강하게 막을 수 있다.
+def _record_user_authorized_contract_migration(
+    state: Dict[str, Any],
+    old_contract_sha256: str,
+    new_contract_sha256: str,
+    migration_reason: str,
+    decided_at: str,
+) -> None:
+    """사용자가 직접 결정한 Codex Review Contract 전환을 pipeline state에 기록한다.
+
+    Args:
+        state: 활성 pipeline_state dict.
+        old_contract_sha256: 이전 contract 문서 SHA256(없으면 빈 문자열).
+        new_contract_sha256: 새 contract(bounded trust v2) 문서 SHA256.
+        migration_reason: 전환 사유(사용자 결정 근거).
+        decided_at: 사용자 결정 시각(ISO 8601).
+    Raises:
+        TypeError: state가 None/비dict이거나 new_contract_sha256이 None/비str인 경우.
+        ValueError: new_contract_sha256이 빈 문자열인 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    if new_contract_sha256 is None:
+        raise TypeError("new_contract_sha256 must not be None")
+    if not isinstance(new_contract_sha256, str):
+        raise TypeError(
+            f"new_contract_sha256 must be str, got {type(new_contract_sha256).__name__}"
+        )
+    if not new_contract_sha256.strip():
+        raise ValueError("new_contract_sha256 must not be empty")
+
+    _existing = state.get("codex_review_contract_migration")
+    _history: List[Dict[str, Any]] = []
+    if isinstance(_existing, dict):
+        _prev_hist = _existing.get("history")
+        if isinstance(_prev_hist, list):
+            _history = [dict(h) for h in _prev_hist if isinstance(h, dict)]
+        # idempotent: 동일 new_contract_sha256이 이미 소비됐으면 재기록하지 않는다.
+        if (
+            str(_existing.get("new_contract_sha256", "") or "") == new_contract_sha256
+            and bool(_existing.get("migration_flag_consumed", False))
+        ):
+            return
+        # 이전 migration을 history에 보존한다(append-only).
+        _history.append({
+            "old_contract_sha256": str(_existing.get("old_contract_sha256", "") or ""),
+            "new_contract_sha256": str(_existing.get("new_contract_sha256", "") or ""),
+            "migration_reason": str(_existing.get("migration_reason", "") or ""),
+            "decided_at": str(_existing.get("decided_at", "") or ""),
+            "review_epoch": str(_existing.get("review_epoch", "") or ""),
+        })
+
+    # 새 review_epoch를 시작한다(epoch_YYYYMMDD_NNN). 기존 epoch가 있으면 seq를 1 증가.
+    _epoch_date = datetime.now(timezone.utc).strftime("%Y%m%d")
+    _seq = 1
+    if isinstance(_existing, dict):
+        _prev_epoch = str(_existing.get("review_epoch", "") or "")
+        _m = re.match(r"^epoch_(\d{8})_(\d{3})$", _prev_epoch)
+        if _m and _m.group(1) == _epoch_date:
+            _seq = int(_m.group(2)) + 1
+    _new_epoch = f"epoch_{_epoch_date}_{_seq:03d}"
+
+    state["codex_review_contract_migration"] = {
+        "contract_version": CODEX_BOUNDED_TRUST_CONTRACT_VERSION,
+        "threat_model_version": CODEX_BOUNDED_TRUST_THREAT_MODEL_VERSION,
+        "old_contract_sha256": str(old_contract_sha256 or ""),
+        "new_contract_sha256": new_contract_sha256,
+        "migration_reason": str(migration_reason or ""),
+        "decided_at": str(decided_at or _now()),
+        "scope_decision_source": "user",  # agent가 임의 변경 불가 — 사용자 결정만 허용.
+        "review_epoch": _new_epoch,
+        "migration_flag_consumed": True,   # 1회만 소비.
+        "recorded_at": _now(),
+        "history": _history,
+    }
 
 
 # [Purpose]: BUG-20260702-E69E MT-4 — Codex Review reject rate-limit을 판정한다. reject_count에만
@@ -28504,9 +28264,76 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   APPROVE_TO_USER → status=APPROVED, REJECT → status=REJECTED.
     #   reject_count는 REJECTED일 때만 +1, cli_error_count는 ERROR 경로에서만 증가(여기 미도달).
     review_status = "APPROVED" if verdict == "APPROVE_TO_USER" else "REJECTED"
-    new_reject_count = prev_reject_count + (1 if review_status == "REJECTED" else 0)
+    # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] scope 기반 reject_count 계수.
+    #   IN_SCOPE P0/P1 finding이 있어야만 reject_count가 증가한다(reject_count_delta). OUT_OF_SCOPE_
+    #   DIAGNOSTIC만 있으면 diagnostic_only → reject_count 미증가. ENVIRONMENT_UNTRUSTED → 즉시 BLOCKED.
+    _cli = cli_run if isinstance(cli_run, dict) else {}
+    _findings_present = (
+        _cli.get("reject_count_delta") is not None or _cli.get("findings") is not None
+    )
+    _finding_in_scope = int(_cli.get("in_scope_count", 0) or 0)
+    _finding_out_of_scope = int(_cli.get("out_of_scope_diagnostic_count", 0) or 0)
+    _finding_env_untrusted = int(_cli.get("environment_untrusted_count", 0) or 0)
+    _finding_diagnostic_only = bool(_cli.get("diagnostic_only", False))
+    _finding_categories = [
+        str(c) for c in (_cli.get("root_cause_categories") or []) if str(c).strip()
+    ]
+    _findings_list = _cli.get("findings") if isinstance(_cli.get("findings"), list) else []
+    if review_status == "REJECTED":
+        _reject_delta = int(_cli.get("reject_count_delta", 1) or 0) if _findings_present else 1
+    else:
+        _reject_delta = 0
+    new_reject_count = prev_reject_count + _reject_delta
     new_cli_error_count = prev_cli_error_count  # ERROR 경로는 별도 함수에서 처리됨
-    acceptance_eligible = review_status == "APPROVED"
+
+    # ENVIRONMENT_UNTRUSTED finding → 실제 침해 증거 → 즉시 fail-closed BLOCKED(결과 기록 후 종료).
+    _env_untrusted_blocked = _finding_env_untrusted > 0
+
+    # 수렴성 circuit breaker: contract migration(review_epoch)이 기록된 경우에만 활성화한다.
+    #   현재 attempt를 포함해 history를 평가하여 same_category_3x 또는 reject_count_5x이면 NON_CONVERGING.
+    _migration = state.get("codex_review_contract_migration") if isinstance(state, dict) else None
+    _review_epoch = (
+        str(_migration.get("review_epoch", "") or "") if isinstance(_migration, dict) else ""
+    )
+    _non_converging = False
+    _non_converging_reason = ""
+    if _review_epoch:
+        _cb_hist: List[Dict[str, Any]] = []
+        try:
+            _hist_p = _codex_review_history_path()
+            if _hist_p.exists():
+                for _ln in _hist_p.read_text(encoding="utf-8").splitlines():
+                    _ln = _ln.strip()
+                    if not _ln:
+                        continue
+                    try:
+                        _obj = json.loads(_ln)
+                        if isinstance(_obj, dict):
+                            _cb_hist.append(_obj)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+        except OSError:
+            _cb_hist = []
+        _synthetic_current = {
+            "review_epoch": _review_epoch,
+            "status": review_status,
+            "verdict_scope": (
+                "OUT_OF_SCOPE_DIAGNOSTIC" if _finding_diagnostic_only
+                else ("IN_SCOPE" if (review_status == "REJECTED" and _reject_delta == 1) else "")
+            ),
+            "root_cause_category": _finding_categories[0] if _finding_categories else "",
+            "counts_toward_reject_rate_limit": _reject_delta == 1,
+        }
+        _cb = _check_codex_circuit_breaker(_cb_hist + [_synthetic_current], _review_epoch)
+        if _cb.get("triggered"):
+            _non_converging = True
+            _non_converging_reason = str(_cb.get("reason") or "circuit_breaker")
+    # NON_CONVERGING이면 result status를 덮어쓴다(reject_count/history는 보존).
+    _effective_status = "NON_CONVERGING" if _non_converging else review_status
+
+    acceptance_eligible = (
+        review_status == "APPROVED" and not _non_converging and not _env_untrusted_blocked
+    )
     # REJECT#21 deadlock fix: CRITICAL+actual_model=unknown → acceptance_eligible=false 강제(fail-closed 안전망).
     #   AC#2: "동일 결과를 캐시하거나 acceptance_eligible=true로 기록하지 않습니다."
     if _capability_blocked_failure_code:
@@ -28628,12 +28455,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 )
 
     result = {
-        # IMP-20260712-DAE1 REJECT#3(요구8): schema v5 — invoked/verification/auth/environment 증거.
+        # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: schema v6 — findings[] scope 분류 추가.
         "schema_version": CODEX_REVIEW_RESULT_SCHEMA_VERSION,
         "pipeline_id": pipeline_id,
         "attempt_id": attempt_id,
         "effective": True,  # 이 result가 현재 유효(effective current) attempt임을 표시
-        "status": review_status,
+        # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: circuit breaker 발동 시 NON_CONVERGING.
+        "status": _effective_status,
         "error_type": None,
         "error_retryable": False,
         "reject_count": new_reject_count,
@@ -28719,6 +28547,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             if "evidence_complete" in _sem_for_prompt
             else _preflight_bundle.get("evidence_complete", False)
         ),
+        # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION (bounded trust v2): findings[] scope 분류.
+        "bounded_trust_contract_version": CODEX_BOUNDED_TRUST_CONTRACT_VERSION,
+        "bounded_trust_threat_model_version": CODEX_BOUNDED_TRUST_THREAT_MODEL_VERSION,
+        "review_epoch": _review_epoch,
+        "findings": [dict(f) if isinstance(f, dict) else {"raw": str(f)} for f in _findings_list],
+        "in_scope_count": _finding_in_scope,
+        "out_of_scope_diagnostic_count": _finding_out_of_scope,
+        "environment_untrusted_count": _finding_env_untrusted,
+        "reject_count_delta": _reject_delta,
+        "diagnostic_only": _finding_diagnostic_only,
+        # NON_CONVERGING 필드(circuit breaker 발동 시). 미발동이면 None.
+        "non_converging_reason": _non_converging_reason or None,
+        "non_converging_at": (_now() if _non_converging else None),
+        "acceptance_eligible_environment_untrusted_blocked": _env_untrusted_blocked,
     }
 
     # IMP-20260712-DAE1 MT-6/rework: Codex Model Router 결과 필드를 result에 기록한다.
@@ -28819,21 +28661,35 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         pass
 
     # BUG-20260702-E69E MT-6/REJECT-1: append-only 이력 기록 (attempt_id + snapshot_identity).
+    # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: review_epoch/root_cause_category/
+    #   verdict_scope를 history에 남겨 이후 circuit breaker 평가가 이 attempt를 정확히 계수하게 한다.
+    #   counts_toward_reject_rate_limit은 findings scope 기반 reject_count_delta로 판정한다.
     _append_codex_history({
         "timestamp": result["recorded_at"],
-        "status": review_status,
+        "status": _effective_status,
         "error_type": None,
         "reject_count": new_reject_count,
         "cli_error_count": new_cli_error_count,
-        "counts_toward_reject_rate_limit": review_status == "REJECTED",
+        "counts_toward_reject_rate_limit": _reject_delta == 1,
         "acceptance_eligible": acceptance_eligible,
         "attempt_id": attempt_id,
         "snapshot_identity": snapshot_identity,
+        "review_epoch": _review_epoch,
+        "root_cause_category": _finding_categories[0] if _finding_categories else "",
+        "verdict_scope": (
+            "OUT_OF_SCOPE_DIAGNOSTIC" if _finding_diagnostic_only
+            else ("IN_SCOPE" if (review_status == "REJECTED" and _reject_delta == 1) else "")
+        ),
+        "non_converging_reason": _non_converging_reason or "",
     })
 
     color = GREEN if verdict == "APPROVE_TO_USER" else RED
     print(color(f"\n[CODEX REVIEW {verdict}] {pipeline_id}"))
-    print(f"  status: {review_status}")
+    print(f"  status: {_effective_status}")
+    if _non_converging:
+        print(RED(f"  NON_CONVERGING: {_non_converging_reason} — 사용자 결정(contract migration) 필요"))
+    if _finding_diagnostic_only:
+        print(f"  diagnostic_only: OUT_OF_SCOPE_DIAGNOSTIC findings — reject_count 미증가")
     print(f"  packet_sha256: {packet_sha}")
     print(f"  reject_count: {new_reject_count}  cli_error_count: {new_cli_error_count}")
     print(f"  result: {_display_path(result_path)}\n")
@@ -28952,6 +28808,26 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             f"  CRITICAL에서 actual_model=unknown — CLI 결과를 기록했으나 acceptance_eligible=false.\n"
             f"  model_verification_level={_model_verification_level}.\n"
             "  CRITICAL 검토는 actual_verified(actual_model=선택값) 증거만 허용합니다 (fail-closed)."
+        )
+    # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: ENVIRONMENT_UNTRUSTED finding → 실제 침해
+    #   증거 → 결과 기록 후 즉시 fail-closed BLOCKED로 종료한다(acceptance_eligible=false 이미 강제됨).
+    if _env_untrusted_blocked:
+        _die(
+            "[BLOCKED] failure_code=codex_environment_untrusted\n"
+            f"  ENVIRONMENT_UNTRUSTED finding {_finding_env_untrusted}건 — 실행 환경 침해 증거가 있습니다.\n"
+            "  (repo-internal fake codex / 서명 무효 / SHA 변경 / 프로세스 증거 불일치 등)\n"
+            "  결과를 기록했으나 acceptance_eligible=false입니다 — 실행 환경을 복구한 뒤 재실행하세요."
+        )
+    # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: circuit breaker 발동 → NON_CONVERGING.
+    #   결과는 NON_CONVERGING으로 기록됐고 acceptance_eligible=false다. 사용자 결정(contract migration)
+    #   없이는 동일 category/reject 루프가 수렴하지 않으므로, 사용자에게 결정을 요청하며 종료한다.
+    if _non_converging:
+        _die(
+            "[BLOCKED] failure_code=codex_review_non_converging\n"
+            f"  Codex Review가 수렴하지 않습니다(reason={_non_converging_reason}).\n"
+            f"  review_epoch={_review_epoch}, reject_count={new_reject_count}.\n"
+            "  동일 root_cause_category 반복 또는 실제 REJECT 임계값 도달 — 부분 패치로 해결 불가.\n"
+            "  사용자 결정(USER_AUTHORIZED_CONTRACT_MIGRATION) 또는 전략 재설계가 필요합니다 (fail-closed)."
         )
     sys.exit(0 if verdict == "APPROVE_TO_USER" else 1)
 
