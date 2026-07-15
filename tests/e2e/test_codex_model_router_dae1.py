@@ -592,27 +592,14 @@ def test_tc25a_diff_hunk_contains_sentinel_change() -> None:
 
 
 def test_tc25b_evidence_incomplete_blocks_prompt() -> None:
-    """evidence_complete=False + truncated_critical_hunks>0이면 prompt 생성 차단(ValueError).
+    """evidence_complete=False이면 prompt 생성 자체가 차단(ValueError)된다.
 
-    REJECT#28 대응: truncated_critical_hunks=0이면 비-critical 잘림만이므로 허용.
-    CRITICAL hunk 잘림(truncated_critical_hunks>0)이 실제 blind approval 위험이다."""
+    REJECT#29: evidence_complete=False는 diff hunk 누락(critical or noncrit) → 항상 BLOCKED.
+    예산 증가(REJECT#29)로 실제 실행 시 evidence_complete=True가 보장됨."""
     import pytest
-    # truncated_critical_hunks=1 → CRITICAL hunk 누락 → ValueError BLOCKED
-    bundle = _semantic_bundle(evidence_complete=False, truncated_critical_hunks=1, diff_hunks=[])
+    bundle = _semantic_bundle(evidence_complete=False, diff_hunks=[])
     with pytest.raises((ValueError, SystemExit)):
         pipeline._build_codex_prompt_for_review(bundle, "TEST")
-
-
-def test_tc25b2_evidence_incomplete_but_no_critical_truncation_allowed() -> None:
-    """evidence_complete=False + truncated_critical_hunks=0이면 prompt 생성 허용.
-
-    REJECT#28: pipeline.py 코드 증가로 전체 diff가 예산 초과하나,
-    truncated_critical_hunks=0이면 critical 파일 hunk는 모두 포함 → blind approval 위험 없음."""
-    # truncated_critical_hunks=0 → 비-critical 잘림만 → ValueError 없이 통과
-    bundle = _semantic_bundle(evidence_complete=False, truncated_critical_hunks=0)
-    # ValueError가 발생하지 않아야 함
-    result = pipeline._build_codex_prompt_for_review(bundle, "TEST")
-    assert isinstance(result, str) and len(result) > 0
 
 
 def test_tc25c_before_after_sha_differs_after_change() -> None:
@@ -1112,12 +1099,9 @@ def test_tc30b_cross_validation_resets_truncated_crit() -> None:
 
 
 def test_tc30c_evidence_complete_true_with_current_diff() -> None:
-    """REJECT#15: 현재 repo diff로 bundle을 빌드하면 critical 파일 hunk가 잘리면 안 된다.
-
-    REJECT#28 이후 pipeline.py 코드 추가로 인해 전체 diff가 번들 예산을 초과할 수 있다.
-    evidence_complete=False는 비-critical 파일 일부가 잘렸음을 의미하며 허용된다.
-    중요한 것은 critical 파일(pipeline.py/test/oracle 등)의 hunk가 잘리지 않는 것이다
-    (truncated_critical_hunks=0). Codex Review 품질은 이 조건으로 보장된다."""
+    """REJECT#15/REJECT#29: 현재 repo diff로 bundle을 빌드하면 evidence_complete=True여야 한다.
+    tc11 oracle 파일이 예산 내에 들어오고 cross-validation이 통과해야 한다.
+    REJECT#29: 예산 800000으로 증가 후 _run_codex_preflight_checks 포함 전체 noncrit 커버."""
     import json
     from pathlib import Path
 
@@ -1135,12 +1119,20 @@ def test_tc30c_evidence_complete_true_with_current_diff() -> None:
     _sha, _bundle_path = pipeline._build_codex_review_bundle(state, pid)
     bundle = json.loads(Path(_bundle_path).read_text(encoding="utf-8"))
 
-    # REJECT#28 이후 diff 증가로 evidence_complete가 False일 수 있음 (비-critical 잘림 허용).
-    # 실질 보안 요건: critical 파일 hunk 잘림 없음.
+    assert bundle.get("evidence_complete") is True, (
+        f"REJECT#15/REJECT#29: evidence_complete가 True가 아닙니다. "
+        f"truncated_critical_hunks={bundle.get('truncated_critical_hunks')}, "
+        f"truncated_noncrit_hunks={bundle.get('truncated_noncrit_hunks')}, "
+        f"budget_used={bundle.get('bundle_budget_chars')}, "
+        f"missing_noncrit_files={bundle.get('missing_noncrit_files')}"
+    )
     assert bundle.get("truncated_critical_hunks", 1) == 0, (
         f"REJECT#15: truncated_critical_hunks={bundle.get('truncated_critical_hunks')} != 0 "
-        f"(critical 파일 hunk 잘림 감지 — evidence_complete={bundle.get('evidence_complete')}, "
-        f"budget_used={bundle.get('bundle_budget_chars')})"
+        "(tc11 oracle 파일이 아직 예산 초과)"
+    )
+    assert bundle.get("truncated_noncrit_hunks", 1) == 0, (
+        f"REJECT#29: truncated_noncrit_hunks={bundle.get('truncated_noncrit_hunks')} != 0 "
+        f"(noncrit hunk 잘림 감지 — missing={bundle.get('missing_noncrit_files')})"
     )
 
 
@@ -2607,7 +2599,7 @@ def test_tc42e_unknown_hunk_budget_exceeded_evidence_incomplete() -> None:
     from unittest.mock import patch, MagicMock
 
     # 예산을 크게 초과하는 unknown-named hunk (@@에 함수명 없음)
-    big_content = "+" + "x" * 750_000  # 750KB — 실제 예산(700000)을 크게 초과 (REJECT#8: 400000→700000)
+    big_content = "+" + "x" * 850_000  # 850KB — 실제 예산(800000)을 크게 초과 (REJECT#29: 700000→800000)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
@@ -2998,7 +2990,7 @@ def test_tc44d_multihunk_same_critical_function_detected(tmp_path: Path) -> None
     crit_func = "_cmd_gates_accept"  # CODEX_CRITICAL_FUNCTIONS에 있는 함수
     # 동일 함수명, 예산 초과 크기의 두 번째 hunk
     hunk1_content = f"@@ -100,5 +100,5 @@ def {crit_func}():\n+    pass1\n"
-    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 750_000  # 예산 초과 (REJECT#8: budget 700K → 750K 필요)
+    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 850_000  # 예산 초과 (REJECT#29: budget 700K → 800K, 850K 필요)
 
     # 두 hunk 모두 동일 CRITICAL 함수에 귀속
     diff_output = (
@@ -3051,7 +3043,7 @@ def test_tc44e_new_critical_function_hunk_required(tmp_path: Path) -> None:
 
     new_func = "_canonicalize_effort"  # REJECT#30에서 추가된 CRITICAL 함수
     # 예산을 크게 초과하는 신규 함수 hunk
-    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 750_000  # 예산 초과 (REJECT#8: budget 700K → 750K 필요)
+    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 850_000  # 예산 초과 (REJECT#29: budget 700K → 800K, 850K 필요)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
