@@ -7257,114 +7257,87 @@ class TestTC23Reject26FailOpenDefense:
             f"TC-23b: reason에 'unreadable'/parse/json 포함 필요. 실제: {_reason!r}"
         )
 
-    def test_tc23c_npm_in_user_writable_path_fail_closed(
+    def test_tc23c_npm_never_executed_registry_fail_closed(
         self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
     ) -> None:
-        """AC-2a: npm이 사용자 홈 디렉토리 하위에 있으면 available=False, reason에 'user_writable' 포함."""
-        import shutil as _shutil_test
-        import json as _json_test
+        """REJECT#36 AC#2: _verify_codex_js_against_registry는 npm subprocess를 전혀 실행하지 않고
+        registry.npmjs.org HTTP로만 검증한다. 네트워크/버전 조회 실패 시 available=False로 fail-closed.
 
-        # 사용자 홈 디렉토리 아래의 가짜 npm 경로 설정
-        _fake_home = tmp_path / "fakehome"
-        _fake_home.mkdir(exist_ok=True)
-        _fake_npm = _fake_home / "AppData" / "Roaming" / "npm" / "npm.CMD"
-        _fake_npm.parent.mkdir(parents=True, exist_ok=True)
-        _fake_npm.write_text("@echo off\n", encoding="utf-8")
+        (구 TC-23c: 사용자 쓰기 경로 npm이 신뢰되는지 검증했으나, REJECT#36에서 이 함수는 npm을
+        전혀 호출하지 않으므로 npm 실행 자체가 발생하지 않음을 검증한다.)"""
+        import subprocess as _subprocess_test
+        import urllib.request as _urlreq_test
 
-        # shutil.which가 사용자 쓰기 가능 경로의 npm을 반환하도록 monkeypatch
-        def _mock_which(name, *args, **kwargs):
-            if name.lower() in ("npm", "npm.cmd", "npm.cmd"):
-                return str(_fake_npm)
-            return _shutil_test.which(name, *args, **kwargs)
+        # npm subprocess가 절대 실행되지 않아야 한다 — 호출 시 즉시 실패시킨다
+        def _forbid_npm_run(args, *a, **kw):
+            raise AssertionError(
+                f"REJECT#36 AC#2: _verify_codex_js_against_registry가 subprocess를 실행함. args={args!r}"
+            )
 
-        monkeypatch.setattr("shutil.which", _mock_which)
-        # expanduser가 fake home을 반환하도록
-        monkeypatch.setattr("os.path.expanduser", lambda _p: str(_fake_home) if _p == "~" else _p)
-        # APPDATA 환경변수도 fake home 하위로 설정
-        monkeypatch.setenv("APPDATA", str(_fake_home / "AppData" / "Roaming"))
-        monkeypatch.setenv("LOCALAPPDATA", str(_fake_home / "AppData" / "Local"))
+        monkeypatch.setattr("subprocess.run", _forbid_npm_run)
 
-        # 유효한 JS 파일 생성 (pkg_version=1.0.0으로 semver 통과)
+        # registry HTTP 조회를 결정적으로 실패시킨다 (네트워크 격리)
+        def _mock_urlopen(*a, **kw):
+            raise OSError("network isolated for test")
+
+        monkeypatch.setattr(_urlreq_test, "urlopen", _mock_urlopen)
+
         _js_path = tmp_path / "codex.js"
         _js_path.write_text("console.log('codex')", encoding="utf-8")
 
         _result = pipeline._verify_codex_js_against_registry(_js_path, "1.0.0")
         assert _result.get("available") is False, (
-            f"TC-23c: 사용자 쓰기 가능 경로 npm → available=False 필요. 실제: {_result!r}"
+            f"TC-23c: registry 조회 실패 → available=False(fail-closed) 필요. 실제: {_result!r}"
+        )
+        assert _result.get("ok") is False, (
+            f"TC-23c: registry 조회 실패 → ok=False 필요. 실제: {_result!r}"
         )
         _reason = _result.get("reason", "")
-        # REJECT#34: 경로 검증이 공통 헬퍼 _verify_npm_binary_is_system_path로 위임되어
-        #   사용자 쓰기 경로는 'npm_not_in_system_path' reason으로 fail-closed된다.
-        assert (
-            "user_writable" in _reason
-            or "npm_not_in_system_path" in _reason
-            or "npm_not_found" == _reason
-        ), (
-            f"TC-23c: reason에 'user_writable'/'npm_not_in_system_path'/'npm_not_found' 필요. "
-            f"실제: {_reason!r}"
+        assert "registry_fetch_error" in _reason, (
+            f"TC-23c: reason에 'registry_fetch_error' 필요(HTTP 경로 사용). 실제: {_reason!r}"
         )
 
-    def test_tc23d_npm_install_uses_registry_flag(
+    def test_tc23d_registry_http_used_not_npm_install(
         self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
     ) -> None:
-        """AC-4: npm install 명령에 --registry https://registry.npmjs.org 포함 + --no-userconfig."""
-        import shutil as _shutil_test
+        """REJECT#36 AC#2: 검증은 고정된 registry.npmjs.org HTTP 요청을 사용하고 npm install
+        subprocess는 사용하지 않는다.
+
+        (구 TC-23d: npm install --registry 인자를 검증했으나, REJECT#36에서 npm install을 제거하고
+        registry.npmjs.org HTTP + tarball 추출로 대체했다.)"""
         import subprocess as _subprocess_test
+        import urllib.request as _urlreq_test
 
-        # 시스템 경로(C:\Program Files 하위)의 가짜 npm 반환
-        _sys_npm = tmp_path / "system" / "npm.CMD"
-        _sys_npm.parent.mkdir(parents=True, exist_ok=True)
-        _sys_npm.write_text("@echo off\n", encoding="utf-8")
+        _requested_urls = []
 
-        def _mock_which(name, *args, **kwargs):
-            if name.lower() in ("npm", "npm.cmd", "npm.CMD"):
-                return str(_sys_npm)
-            return _shutil_test.which(name, *args, **kwargs)
+        def _forbid_npm_run(args, *a, **kw):
+            raise AssertionError(
+                f"REJECT#36 AC#2: npm install subprocess가 실행됨(제거되어야 함). args={args!r}"
+            )
 
-        monkeypatch.setattr("shutil.which", _mock_which)
+        monkeypatch.setattr("subprocess.run", _forbid_npm_run)
 
-        # REJECT#34: 경로 검증이 공통 헬퍼로 위임됨. 이 테스트는 install 인자(--registry,
-        #   --no-userconfig, non-bare npm)만 검증하므로, tmp_path의 가짜 npm이 시스템 경로
-        #   검증을 통과하도록 헬퍼를 True로 monkeypatch한다. (임의 경로 차단은 TC-49a가 검증)
-        monkeypatch.setattr("pipeline._verify_npm_binary_is_system_path", lambda _p: True)
-        # npm 경로가 user-writable로 분류되지 않도록 expanduser를 home이 아닌 경로로
-        monkeypatch.setattr("os.path.expanduser", lambda _p: "/different/home" if _p == "~" else _p)
-        monkeypatch.setenv("APPDATA", "/different/appdata")
-        monkeypatch.setenv("LOCALAPPDATA", "/different/localappdata")
+        # urlopen을 가로채 요청 URL을 기록하고 네트워크 없이 실패시킨다
+        def _mock_urlopen(req, *a, **kw):
+            _url = getattr(req, "full_url", None) or (req if isinstance(req, str) else str(req))
+            _requested_urls.append(_url)
+            raise OSError("network isolated for test")
 
-        _captured_args = []
-
-        def _mock_run(args, *a, **kw):
-            _captured_args.append(args)
-            # npm install이 실패한 것처럼 반환 (네트워크 없음)
-            class _FakeProc:
-                returncode = 1
-                stdout = ""
-                stderr = "npm ERR! network"
-            return _FakeProc()
-
-        monkeypatch.setattr("subprocess.run", _mock_run)
+        monkeypatch.setattr(_urlreq_test, "urlopen", _mock_urlopen)
 
         _js_path = tmp_path / "codex.js"
         _js_path.write_text("console.log('codex')", encoding="utf-8")
         pipeline._verify_codex_js_against_registry(_js_path, "0.144.1")
 
-        # npm install 호출이 캡처됐는지 확인
-        _npm_calls = [a for a in _captured_args if "install" in str(a)]
-        assert _npm_calls, (
-            f"TC-23d: npm install이 호출되지 않음. captured: {_captured_args!r}"
+        # registry.npmjs.org HTTP 요청이 발생했는지 확인
+        assert _requested_urls, (
+            "TC-23d: registry HTTP 요청이 발생하지 않음(HTTP 검증 경로 미사용)."
         )
-        _call_args = str(_npm_calls[0])
-        assert "--registry" in _call_args and "registry.npmjs.org" in _call_args, (
-            f"TC-23d: --registry https://registry.npmjs.org 없음. args: {_npm_calls[0]!r}"
+        assert any("registry.npmjs.org" in _u for _u in _requested_urls), (
+            f"TC-23d: registry.npmjs.org로 요청하지 않음. 요청 URL: {_requested_urls!r}"
         )
-        assert "--no-userconfig" in _call_args, (
-            f"TC-23d: --no-userconfig 없음. args: {_npm_calls[0]!r}"
-        )
-        # REJECT#27 AC-1: bare "npm" 사용 금지 — 검증된 절대 경로만 허용
-        _first_arg = _npm_calls[0][0] if isinstance(_npm_calls[0], list) else str(_npm_calls[0]).split()[0]
-        assert _first_arg != "npm", (
-            f"TC-23d: bare 'npm' 사용 금지 (PATH 재해석 공격). args[0]: {_first_arg!r}"
+        assert any("@openai/codex/0.144.1" in _u for _u in _requested_urls), (
+            f"TC-23d: 고정 버전 packument URL을 요청하지 않음. 요청 URL: {_requested_urls!r}"
         )
 
     def test_tc23e_package_json_absent_still_non_blocking(self, tmp_path: "Path") -> None:
@@ -8019,8 +7992,13 @@ def test_tc49a_arbitrary_path_npm_not_executed():
                 f"REJECT#34 AC#1: subprocess 실행됨 — sentinel 파일 생성 위험: {cmd}"
             )
 
+        def mock_urlopen(*a, **kw):
+            # REJECT#36: registry HTTP는 네트워크 격리(결정적). npm은 여전히 실행되지 않아야 함.
+            raise OSError("network isolated for test")
+
         with patch("shutil.which", side_effect=mock_which), \
-                patch("pipeline.subprocess.run", side_effect=mock_run):
+                patch("pipeline.subprocess.run", side_effect=mock_run), \
+                patch("urllib.request.urlopen", side_effect=mock_urlopen):
             with _tf.NamedTemporaryFile(
                 mode="w", suffix=".js", delete=False, encoding="utf-8"
             ) as jf:
@@ -8033,13 +8011,18 @@ def test_tc49a_arbitrary_path_npm_not_executed():
             finally:
                 os.unlink(fake_js)
 
+    # REJECT#36: _verify_codex_js_against_registry는 npm을 전혀 실행하지 않는다(자기참조 신뢰 제거).
     assert not subprocess_called, (
-        f"REJECT#34 AC#1: subprocess 실행됨: {subprocess_called}"
+        f"REJECT#34/#36 AC#1: subprocess(npm) 실행됨: {subprocess_called}"
     )
-    assert not result.get("ok"), "REJECT#34: 임의 경로 npm이 ok=True를 반환"
+    assert not result.get("ok"), "REJECT#34/#36: 임의 경로 npm이 ok=True를 반환"
     assert not os.path.exists(sentinel_file), "REJECT#34: sentinel 파일 생성됨"
-    assert result.get("reason", "").startswith("npm_not_in_system_path"), (
-        f"REJECT#34 AC#2: 시스템 경로 검증 실패 reason이 아님: {result.get('reason')!r}"
+    # REJECT#36: npm 실행 자체가 제거되었으므로 registry HTTP 경로로 fail-closed된다.
+    assert result.get("available") is False and not result.get("ok"), (
+        f"REJECT#36 AC#2: registry 조회 실패 시 fail-closed(available=False, ok=False)여야 함: {result!r}"
+    )
+    assert "registry_fetch_error" in result.get("reason", ""), (
+        f"REJECT#36 AC#2: registry HTTP 경로 reason이 아님: {result.get('reason')!r}"
     )
 
 
@@ -8182,4 +8165,110 @@ class TestTC61Reject35MissingFunctionConstantsCritical:
         r = pipeline._classify_codex_review_risk(["pipeline.py"], [], ["_CODEX_CRITICAL_FILE_PREFIXES"])
         assert r["risk_level"] == "CRITICAL", (
             f"REJECT#35 AC#5: _CODEX_CRITICAL_FILE_PREFIXES 변경이 CRITICAL 아님. got={r['risk_level']!r}"
+        )
+
+
+class TestTC62Reject36EnvVarTrustRemoval:
+    """REJECT#36: 환경변수 기반 npm 경로 신뢰 제거 — ProgramFiles*, NVM_HOME/NVM_SYMLINK 조작
+    으로 가짜 npm이 신뢰를 통과하는 취약점을 차단한다."""
+
+    def test_tc62a_programfiles_env_manipulation_blocked(self, monkeypatch) -> None:
+        """REJECT#36 AC#1: ProgramFiles 환경변수를 사용자 경로로 조작해도 가짜 npm이 차단된다."""
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_npm = os.path.join(tmpdir, "nodejs", "npm.cmd")
+            os.makedirs(os.path.dirname(fake_npm), exist_ok=True)
+            open(fake_npm, "w").close()
+            monkeypatch.setenv("ProgramFiles", tmpdir)
+            monkeypatch.setenv("ProgramFiles(x86)", tmpdir)
+            monkeypatch.setenv("ProgramW6432", tmpdir)
+            result = pipeline._verify_npm_binary_is_system_path(fake_npm)
+            # 환경변수를 신뢰하지 않으므로 사용자 경로의 npm은 False여야 한다
+            assert result is False, (
+                f"REJECT#36 AC#1: ProgramFiles 환경변수 조작 후에도 가짜 npm이 신뢰됨. "
+                f"got={result!r}. 환경변수 기반 경로 신뢰를 제거했는지 확인하세요."
+            )
+
+    def test_tc62b_nvm_home_env_manipulation_blocked(self, monkeypatch) -> None:
+        """REJECT#36 AC#1: NVM_HOME 환경변수를 사용자 경로로 조작해도 가짜 npm이 차단된다."""
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_npm = os.path.join(tmpdir, "npm.cmd")
+            open(fake_npm, "w").close()
+            monkeypatch.setenv("NVM_HOME", tmpdir)
+            monkeypatch.setenv("NVM_SYMLINK", tmpdir)
+            result = pipeline._verify_npm_binary_is_system_path(fake_npm)
+            assert result is False, (
+                f"REJECT#36 AC#1: NVM_HOME 환경변수 조작 후에도 가짜 npm이 신뢰됨. "
+                f"got={result!r}. NVM_HOME/NVM_SYMLINK 환경변수 신뢰를 제거했는지 확인하세요."
+            )
+
+    def test_tc62c_hardcoded_program_files_still_trusted(self) -> None:
+        """REJECT#36 AC#4: 환경변수 제거 후에도 C:\\Program Files\\nodejs의 npm은 신뢰된다."""
+        import sys
+        if sys.platform != "win32":
+            import pytest as _pytest
+            _pytest.skip("Windows 전용 테스트")
+        # C:\Program Files\nodejs\npm.cmd는 환경변수 없이도 허용되어야 한다
+        result = pipeline._verify_npm_binary_is_system_path(
+            r"C:\Program Files\nodejs\npm.cmd"
+        )
+        assert result is True, (
+            f"REJECT#36 AC#4: C:\\Program Files\\nodejs npm.cmd가 False 반환 — "
+            f"하드코딩 경로가 유지되지 않음. got={result!r}"
+        )
+
+    def test_tc62d_nvm_home_env_not_in_allowed_roots_source(self) -> None:
+        """REJECT#36 AC#1: _verify_npm_binary_is_system_path 소스에 NVM_HOME 환경변수가 없다."""
+        import inspect
+        src = inspect.getsource(pipeline._verify_npm_binary_is_system_path)
+        # NVM_HOME/NVM_SYMLINK를 os.environ.get으로 가져오면 안 됨
+        assert 'os.environ.get("NVM_HOME")' not in src and "os.environ.get('NVM_HOME')" not in src, (
+            "REJECT#36 AC#1: _verify_npm_binary_is_system_path가 여전히 NVM_HOME 환경변수를 신뢰함"
+        )
+        assert 'os.environ.get("NVM_SYMLINK")' not in src and "os.environ.get('NVM_SYMLINK')" not in src, (
+            "REJECT#36 AC#1: _verify_npm_binary_is_system_path가 여전히 NVM_SYMLINK 환경변수를 신뢰함"
+        )
+
+    def test_tc62e_programfiles_env_not_in_npm_binary_check_source(self) -> None:
+        """REJECT#36 AC#1: _verify_npm_binary_is_system_path 소스에 ProgramFiles 환경변수 직접 참조가 없다."""
+        import inspect
+        src = inspect.getsource(pipeline._verify_npm_binary_is_system_path)
+        # ProgramFiles 환경변수를 os.environ.get으로 가져오면 안 됨
+        assert '"ProgramFiles"' not in src or 'os.environ.get("ProgramFiles")' not in src, (
+            "REJECT#36 AC#1: _verify_npm_binary_is_system_path가 ProgramFiles 환경변수를 직접 신뢰함"
+        )
+
+    def test_tc62f_registry_api_used_not_npm_subprocess(self) -> None:
+        """REJECT#36 AC#2: _verify_codex_js_against_registry 소스에 npm subprocess 대신
+        registry.npmjs.org URL이 사용된다."""
+        import inspect
+        src = inspect.getsource(pipeline._verify_codex_js_against_registry)
+        # registry.npmjs.org API 직접 사용 확인
+        assert "registry.npmjs.org" in src, (
+            "REJECT#36 AC#2: _verify_codex_js_against_registry가 registry.npmjs.org를 직접 조회하지 않음"
+        )
+        # npm install subprocess가 없어야 함 (자기참조 비교 제거 확인)
+        # npm install 명령이 subprocess.run으로 실행되면 안 됨
+        assert '"install"' not in src or "npm_install" not in src, (
+            "REJECT#36 AC#2: _verify_codex_js_against_registry가 여전히 npm install subprocess를 사용함"
+        )
+
+    def test_tc62g_tarball_extraction_in_source(self) -> None:
+        """REJECT#36 AC#2: _verify_codex_js_against_registry가 tarfile로 tarball을 추출한다."""
+        import inspect
+        src = inspect.getsource(pipeline._verify_codex_js_against_registry)
+        assert "tarfile" in src, (
+            "REJECT#36 AC#2: _verify_codex_js_against_registry에 tarfile 추출 코드가 없음"
+        )
+
+    def test_tc62h_nvm_home_env_not_in_global_bin_allowed_source(self) -> None:
+        """REJECT#36 AC#3: _verify_npm_global_bin_allowed 소스에 NVM_HOME/NVM_SYMLINK 환경변수가 없다."""
+        import inspect
+        src = inspect.getsource(pipeline._verify_npm_global_bin_allowed)
+        assert '"NVM_HOME"' not in src, (
+            "REJECT#36 AC#3: _verify_npm_global_bin_allowed가 여전히 NVM_HOME 환경변수를 신뢰함"
+        )
+        assert '"NVM_SYMLINK"' not in src, (
+            "REJECT#36 AC#3: _verify_npm_global_bin_allowed가 여전히 NVM_SYMLINK 환경변수를 신뢰함"
         )

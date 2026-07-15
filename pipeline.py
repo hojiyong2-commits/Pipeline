@@ -9045,9 +9045,16 @@ def _verify_npm_binary_is_system_path(npm_path: str) -> bool:
     설치되는 위치가 아니라 전역 패키지 shim 위치이며 사용자 쓰기 가능하다. 이들을 허용목록에서 제거하여
     악성 npm.cmd/npm이 검증을 통과한 뒤 subprocess로 실행되는 경로를 차단한다.
 
+    REJECT#36: 환경변수(ProgramFiles*, NVM_HOME, NVM_SYMLINK)는 사용자 조작 가능하므로 신뢰하지 않는다.
+    공격자가 ProgramFiles를 자신이 쓰기 가능한 경로로 바꾸면 가짜 npm이 시스템 설치로 통과되므로,
+    winreg(HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ProgramFilesDir)로 실제 시스템 경로를
+    조회하거나 변경 불가능한 하드코딩 기본 경로만 사용한다. NVM_HOME/NVM_SYMLINK는 관리자 보호 경로임이
+    별도로 증명되지 않으므로 완전히 제거한다.
+
     허용:
-      - Windows: %ProgramFiles%\\nodejs, %ProgramFiles(x86)%\\nodejs, %ProgramW6432%\\nodejs,
-                 nvm-for-windows(NVM_HOME/NVM_SYMLINK, 관리자 설치)
+      - Windows: winreg에서 조회한 ProgramFilesDir\\nodejs, C:\\Program Files\\nodejs (하드코딩)
+                 C:\\Program Files (x86)\\nodejs (하드코딩)
+                 NVM_HOME/NVM_SYMLINK 환경변수는 사용자 조작 가능하므로 제외
       - POSIX: /usr/bin, /usr/local/bin, /bin, /opt/homebrew/bin, /opt/homebrew, /opt,
                /usr/local (root 소유 시스템 경로)
 
@@ -9072,21 +9079,31 @@ def _verify_npm_binary_is_system_path(npm_path: str) -> bool:
 
     _allowed_roots: List[Path] = []
     if sys.platform == "win32":
-        for _envk in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
-            _pf = os.environ.get(_envk)
-            if _pf:
-                _allowed_roots.append(Path(_pf) / "nodejs")
-        # REJECT#33: %APPDATA%\npm 제거 — 사용자 쓰기 가능 경로이므로 공격자가 악성 npm.cmd를
-        #   배치하면 _get_npm_global_bin이 검증 통과 후 subprocess로 실행할 수 있다. 정상 npm
-        #   바이너리는 전역 prefix가 아니라 관리자 보호 설치 경로(Program Files\nodejs)에 존재한다.
-        #   NVM_HOME/NVM_SYMLINK는 nvm-for-windows가 관리자 권한으로 설치한 시스템 위치를 가리키므로
-        #   유지한다.
-        for _nvmk in ("NVM_HOME", "NVM_SYMLINK"):
-            _nv = os.environ.get(_nvmk)
-            if _nv:
-                _allowed_roots.append(Path(_nv))
-        # 환경변수 부재 대비 표준 기본 경로.
-        _allowed_roots.append(Path(r"C:\Program Files\nodejs"))
+        # REJECT#36: 환경변수(ProgramFiles*, NVM_HOME, NVM_SYMLINK)는 사용자 조작 가능하므로
+        #   신뢰하지 않는다. NVM_HOME/NVM_SYMLINK는 관리자 보호 경로임이 별도 증명 없이 허용하지 않는다.
+        #   대신 winreg(HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\ProgramFilesDir)로 실제
+        #   시스템 경로를 조회하거나, 변경 불가능한 하드코딩 기본 경로를 사용한다.
+        _win_prog_roots: List[Path] = [
+            Path(r"C:\Program Files\nodejs"),
+            Path(r"C:\Program Files (x86)\nodejs"),
+        ]
+        # winreg로 실제 시스템 ProgramFilesDir 경로를 추가 조회
+        try:
+            import winreg as _winreg  # type: ignore[import-not-found]
+            with _winreg.OpenKey(
+                _winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion",
+            ) as _regkey:
+                for _rv in ("ProgramFilesDir", "ProgramFilesDir (x86)"):
+                    try:
+                        _rf = _winreg.QueryValueEx(_regkey, _rv)[0]
+                        if _rf and isinstance(_rf, str):
+                            _win_prog_roots.append(Path(_rf) / "nodejs")
+                    except OSError:
+                        pass
+        except (ImportError, OSError):
+            pass  # winreg 없음 → 하드코딩 경로만 사용
+        _allowed_roots.extend(_win_prog_roots)
     else:
         # REJECT#33: ~/.nvm 제거 — 사용자 홈 하위 경로는 쓰기 가능하여 root 소유가 보장되지 않는다.
         #   npm 바이너리는 root 소유 시스템 경로에서만 subprocess 실행을 허용한다. nvm 사용자는
@@ -9131,9 +9148,14 @@ def _verify_npm_global_bin_allowed(npm_global_bin: str) -> bool:
     설치 루트 목록과 대조한다. 목록 밖이면 조작된 npm 출력으로 간주하여 False(미신뢰)를 반환하고,
     상위(_verify_codex_binary_path_trust)에서 npm_global_bin_not_in_allowed_root로 fail-closed한다.
 
+    REJECT#36: NVM_SYMLINK/NVM_HOME 및 ProgramFiles* 환경변수는 사용자 조작 가능하므로 제거하고
+    winreg + 하드코딩 경로를 사용한다. APPDATA는 npm이 반환하는 사용자 전역 prefix이므로 global bin
+    허용 목록에만 유지한다(바이너리 위치 검증과는 별개 경계).
+
     허용 루트:
-      - Windows: %APPDATA%\\npm, <ProgramFiles>\\nodejs, <ProgramFiles(x86)>\\nodejs,
-                 <ProgramW6432>\\nodejs, nvm-for-windows(NVM_SYMLINK, NVM_HOME\\*)
+      - Windows: %APPDATA%\\npm, C:\\Program Files\\nodejs, C:\\Program Files (x86)\\nodejs,
+                 winreg에서 조회한 ProgramFilesDir\\nodejs
+                 NVM_SYMLINK/NVM_HOME 환경변수는 사용자 조작 가능하므로 제외
       - Unix: /usr/bin, /usr/local/bin, /bin, /opt/homebrew/bin,
               ~/.nvm/versions/node/*/bin
 
@@ -9160,26 +9182,32 @@ def _verify_npm_global_bin_allowed(npm_global_bin: str) -> bool:
 
     _allowed_roots: List[Path] = []
     if sys.platform == "win32":
+        # REJECT#36: NVM_SYMLINK/NVM_HOME 환경변수는 사용자 조작 가능하므로 제거한다.
+        #   ProgramFiles* 환경변수도 제거하고 winreg + 하드코딩 경로를 사용한다.
+        #   APPDATA는 npm이 반환하는 사용자 전역 prefix이므로 global bin 허용에만 유지한다.
         _appdata = os.environ.get("APPDATA")
         if _appdata:
             _allowed_roots.append(Path(_appdata) / "npm")
-        for _envk in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
-            _pf = os.environ.get(_envk)
-            if _pf:
-                _allowed_roots.append(Path(_pf) / "nodejs")
-        _allowed_roots.append(Path(r"C:\Program Files\nodejs"))
-        # nvm-for-windows: 활성 심볼릭 링크(NVM_SYMLINK) 및 버전별 설치(NVM_HOME\*).
-        _nvm_sym = os.environ.get("NVM_SYMLINK")
-        if _nvm_sym:
-            _allowed_roots.append(Path(_nvm_sym))
-        _nvm_home = os.environ.get("NVM_HOME")
-        if _nvm_home:
-            try:
-                for _ver in Path(_nvm_home).glob("*"):
-                    if _ver.is_dir():
-                        _allowed_roots.append(_ver)
-            except Exception:  # noqa: BLE001
-                pass
+        _win_prog_roots_gbin: List[Path] = [
+            Path(r"C:\Program Files\nodejs"),
+            Path(r"C:\Program Files (x86)\nodejs"),
+        ]
+        try:
+            import winreg as _winreg_gbin  # type: ignore[import-not-found]
+            with _winreg_gbin.OpenKey(
+                _winreg_gbin.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion",
+            ) as _regkey_gbin:
+                for _rv in ("ProgramFilesDir", "ProgramFilesDir (x86)"):
+                    try:
+                        _rf = _winreg_gbin.QueryValueEx(_regkey_gbin, _rv)[0]
+                        if _rf and isinstance(_rf, str):
+                            _win_prog_roots_gbin.append(Path(_rf) / "nodejs")
+                    except OSError:
+                        pass
+        except (ImportError, OSError):
+            pass
+        _allowed_roots.extend(_win_prog_roots_gbin)
     else:
         _allowed_roots.extend([
             Path("/usr/bin"), Path("/usr/local/bin"), Path("/bin"),
@@ -9914,10 +9942,16 @@ def _verify_direct_native_ownership(native_path: "Path") -> Dict[str, Any]:
 def _verify_codex_js_against_registry(
     js_path: "Path", pkg_version: str, timeout: int = 60
 ) -> Dict[str, Any]:
-    """REJECT#24 AC-1/2/4: npm 레지스트리 JS SHA 비교로 위조 JS 탐지 (의미론적 분석 대체).
+    """REJECT#24 AC-1/2/4 + REJECT#36: 레지스트리 JS SHA 비교로 위조 JS 탐지 (의미론적 분석 대체).
 
     의미론적 JS 내용 분석(dead code / console.log 우회 가능)의 한계를 극복하기 위해
-    npm 레지스트리에서 동일 버전을 임시 설치한 뒤 JS SHA256을 직접 비교한다.
+    고정된 registry.npmjs.org에서 tarball과 무결성 메타데이터(dist.integrity)를 직접 받아
+    tarball 무결성을 먼저 검증한 뒤, tarball 내부 codex.js를 추출해 로컬 설치본과 SHA256을 비교한다.
+
+    REJECT#36: 이전 구현은 후보 npm을 subprocess로 실행해 임시 설치하고 그 결과와 비교했다. 그러나
+    가짜 npm이 임시 위치에도 동일한 위조 codex.js를 생성하면 위조본을 자기 자신과 비교해 정상으로
+    통과시킬 수 있었다(자기참조 신뢰). 이를 제거하고 npm 실행 파일을 전혀 사용하지 않으며, 고정된
+    registry.npmjs.org에서 독립적으로 받은 무결성 메타데이터·tarball만 기준으로 비교한다.
 
     AC-4: wrapper/JS가 존재하면 외부 레지스트리 provenance 필수; 부재 = fail-closed
     AC-1: 위조 JS + 정품 native binary 조합 → acceptance_eligible=False
@@ -9927,7 +9961,7 @@ def _verify_codex_js_against_registry(
     Args:
         js_path: 설치된 codex.js 경로.
         pkg_version: 설치된 @openai/codex 버전 문자열 (예: "1.0.0").
-        timeout: npm install 타임아웃 (초).
+        timeout: registry.npmjs.org HTTP 요청 타임아웃 (초).
 
     Returns:
         {
@@ -9969,123 +10003,130 @@ def _verify_codex_js_against_registry(
         if not re.match(r"^\d+\.\d+\.\d+(?:[+.\-][a-zA-Z0-9.+\-]*)?$", _ver_stripped):
             _r["reason"] = "pkg_version_not_semver"
             return _r
-        # 3. npm 레지스트리에서 해당 버전 임시 설치 후 JS SHA 비교
+        # 3. REJECT#36: 후보 npm subprocess로 임시 설치하면 가짜 npm이 임시 위치에도 동일한 위조
+        #   codex.js를 생성해 위조본을 자기 자신과 비교(자기참조 신뢰)로 통과시킬 수 있다. 이를
+        #   제거하고 고정된 registry.npmjs.org에서 tarball과 무결성 메타데이터(dist.integrity, sha512)를
+        #   독립적으로 받아 tarball 무결성을 먼저 검증한 뒤, tarball 내부 codex.js를 추출해 로컬
+        #   설치본과 SHA256을 비교한다. npm 실행 파일은 전혀 사용하지 않는다.
+        import urllib.request as _urlreq
+        import tarfile as _tarfile
+        import base64 as _base64
         import tempfile as _tf_reg
-        import sys as _sys_reg
-        import shutil as _shutil_reg
-        # REJECT#26 AC-1: Windows .CMD 파일은 shell=True 없이 직접 subprocess 실행 불가.
-        #   shutil.which로 npm 경로를 먼저 확인하여 진짜 "npm 없음"과 "Windows subprocess 제한"을 구분.
-        #   pkg_version은 위에서 semver 검증 완료 → shell=True 사용해도 injection 없음.
-        _npm_exe = (
-            _shutil_reg.which("npm")
-            or _shutil_reg.which("npm.cmd")
-            or _shutil_reg.which("npm.CMD")
+
+        _packument_url = (
+            f"https://registry.npmjs.org/@openai/codex/{_ver_stripped}"
         )
-        if _npm_exe is None:
-            _r["reason"] = "npm_not_found"
-            return _r
-        # REJECT#34 AC#1/2: 공통 신뢰 헬퍼로 npm 실행 경로를 한 번만 시스템 경로 검증한다.
-        #   _verify_npm_binary_is_system_path는 홈/AppData/.nvm뿐 아니라 임의 경로(/tmp/evil,
-        #   D:\evil 등) 전부를 차단하고 관리자 보호 시스템 설치 경로만 허용한다(fail-closed).
-        #   미검증 PATH 결과나 bare npm은 절대 subprocess로 실행하지 않는다.
-        if not _verify_npm_binary_is_system_path(str(_npm_exe)):
-            _r["reason"] = f"npm_not_in_system_path:{str(_npm_exe)[:80]}"
-            return _r
-        # REJECT#27: shell=True + bare "npm"은 PATH를 재해석하여 가짜 npm 실행 허용.
-        #   검증된 _npm_exe 절대 경로를 직접 사용하고 shell=True를 제거한다.
-        #   Windows .CMD: System32 절대 cmd.exe /c + 검증된 npm 절대 경로.
-        _is_win_cmd = _sys_reg.platform == "win32" and str(_npm_exe).lower().endswith((".cmd", ".bat"))
-        if _is_win_cmd:
-            # cmd.exe 절대 경로 고정 (PATH 재조회 방지)
-            _cmd_exe_path = r"C:\Windows\System32\cmd.exe"
-            if not os.path.isfile(_cmd_exe_path):
-                _r["reason"] = "cmd_exe_not_found_at_system32"
-                return _r
         try:
-            with _tf_reg.TemporaryDirectory(prefix="codex_reg_verify_") as _tmpdir:
-                # REJECT#26 AC-2/REJECT#27: NPM_CONFIG_* 및 사용자 설정 제거로 레지스트리 리다이렉션 차단.
-                #   PATH도 정리하여 자식 프로세스가 가짜 npm을 호출하지 못하도록 한다.
-                _npm_env = {k: v for k, v in os.environ.items()
-                            if not k.upper().startswith("NPM_CONFIG_")}
-                _npm_env.pop("npm_config_registry", None)
-                _npm_env.pop("NPM_CONFIG_REGISTRY", None)
-                # REJECT#34 AC#3: API 키, GitHub 토큰, NPM 토큰, AWS 자격 증명, 파이프라인 승인
-                #   시크릿을 npm subprocess 환경에서 제거한다. 임의 코드 실행 시에도 시크릿 유출 차단.
-                _SENSITIVE_ENV_VARS_TO_REMOVE = [
-                    "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
-                    "GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PAT",
-                    "NPM_TOKEN", "NPM_AUTH_TOKEN",
-                    "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-                    "PIPELINE_ACCEPT_SECRET", "PIPELINE_APPROVAL_SECRET",
-                ]
-                for _sensitive_var in _SENSITIVE_ENV_VARS_TO_REMOVE:
-                    _npm_env.pop(_sensitive_var, None)
-                    _npm_env.pop(_sensitive_var.lower(), None)
-                # 검증된 _npm_exe만 사용: PATH의 가짜 npm 우선순위 공격 차단
-                _npm_install_args = [
-                    "--prefix", _tmpdir,
-                    "--no-save", "--ignore-scripts", "--prefer-offline=false",
-                    "--registry", "https://registry.npmjs.org",
-                    "--no-userconfig",
-                    f"@openai/codex@{pkg_version.strip()}",
-                ]
-                if _is_win_cmd:
-                    # Windows .CMD: System32 cmd.exe /c + 검증된 npm 절대 경로 (shell=False)
-                    _npm_cmd_list = [_cmd_exe_path, "/c", _npm_exe, "install"] + _npm_install_args
-                else:
-                    # POSIX: 검증된 npm 절대 경로를 직접 실행 (shell=False)
-                    _npm_cmd_list = [_npm_exe, "install"] + _npm_install_args
-                _proc = subprocess.run(
-                    _npm_cmd_list,
-                    shell=False, capture_output=True, text=True, timeout=timeout,
-                    env=_npm_env,
-                )
-                if _proc.returncode != 0:
-                    # npm 실패: 네트워크 오류 / 버전 없음 등 → available=False
-                    _err_snippet = (_proc.stderr or "")[:80].replace("\n", " ")
-                    _r["reason"] = f"npm_install_error:{_proc.returncode}:{_err_snippet}"
-                    return _r
-                # 4. 임시 설치된 레지스트리 JS 경로 탐색
-                _reg_base = Path(_tmpdir) / "node_modules" / "@openai" / "codex"
-                _reg_js_candidates = [
-                    _reg_base / "bin" / "codex.js",
-                    _reg_base / "codex.js",
-                    _reg_base / "index.js",
-                ]
-                _reg_js: Optional["Path"] = None
-                for _cand in _reg_js_candidates:
-                    if _cand.exists():
-                        _reg_js = _cand
-                        break
-                if _reg_js is None:
-                    _r["reason"] = "registry_js_not_found_in_temp"
-                    return _r
-                # 5. 레지스트리 JS SHA256 계산
-                try:
-                    _reg_sha = hashlib.sha256(_reg_js.read_bytes()).hexdigest()
-                    _r["registry_sha"] = _reg_sha
-                except (OSError, PermissionError) as _exc:
-                    _r["reason"] = f"registry_sha_error:{type(_exc).__name__}:{str(_exc)[:60]}"
-                    return _r
-                # 6. SHA 비교: 일치 → 정품, 불일치 → 위조 JS 탐지
-                _r["available"] = True
-                if _installed_sha == _reg_sha:
-                    _r["ok"] = True
-                    _r["reason"] = "js_sha_matches_registry"
-                else:
-                    _r["ok"] = False
-                    _r["reason"] = (
-                        f"js_sha_mismatch:"
-                        f"installed={_installed_sha[:16]},registry={_reg_sha[:16]}"
-                    )
-        except subprocess.TimeoutExpired:
-            _r["reason"] = f"npm_install_timeout:{timeout}s"
-        except FileNotFoundError:
-            # npm 경로가 shutil.which 이후에도 실행 불가 → available=False
-            _r["reason"] = "npm_not_found"
+            _req = _urlreq.Request(
+                _packument_url,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "pipeline-codex-verify/1.0",
+                },
+            )
+            with _urlreq.urlopen(_req, timeout=timeout) as _resp:
+                _meta = json.loads(_resp.read())
         except Exception as _exc:  # noqa: BLE001
             _r["reason"] = (
-                f"registry_verify_exception:{type(_exc).__name__}:{str(_exc)[:80]}"
+                f"registry_fetch_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+            )
+            return _r
+
+        # dist.integrity는 tarball 전체의 sha512 (ssri 형식: "sha512-BASE64")
+        _dist = _meta.get("dist", {}) if isinstance(_meta, dict) else {}
+        _tarball_url = _dist.get("tarball", "") if isinstance(_dist, dict) else ""
+        _integrity = _dist.get("integrity", "") if isinstance(_dist, dict) else ""
+
+        if not _tarball_url or not _integrity:
+            _r["reason"] = "registry_missing_tarball_or_integrity"
+            return _r
+        # REJECT#36: tarball URL은 고정된 registry.npmjs.org 도메인이어야 한다(리다이렉션/조작 차단).
+        if not isinstance(_tarball_url, str) or not _tarball_url.startswith(
+            "https://registry.npmjs.org/"
+        ):
+            _r["reason"] = f"registry_tarball_url_untrusted:{str(_tarball_url)[:60]}"
+            return _r
+
+        # tarball 다운로드
+        try:
+            _req2 = _urlreq.Request(
+                _tarball_url,
+                headers={"User-Agent": "pipeline-codex-verify/1.0"},
+            )
+            with _urlreq.urlopen(_req2, timeout=timeout) as _resp2:
+                _tarball_bytes = _resp2.read()
+        except Exception as _exc:  # noqa: BLE001
+            _r["reason"] = (
+                f"tarball_download_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+            )
+            return _r
+
+        # tarball 무결성 검증 (dist.integrity sha512) — 위조 tarball 차단
+        if isinstance(_integrity, str) and _integrity.startswith("sha512-"):
+            _expected_b64 = _integrity[len("sha512-"):]
+            _actual_sha512 = _base64.b64encode(
+                hashlib.sha512(_tarball_bytes).digest()
+            ).decode()
+            if _actual_sha512 != _expected_b64:
+                _r["available"] = True
+                _r["reason"] = "tarball_integrity_mismatch"
+                return _r
+        else:
+            _r["reason"] = "registry_integrity_not_sha512"
+            return _r
+
+        # tarball에서 codex.js 추출 후 로컬 JS와 SHA256 비교
+        _registry_js_bytes: Optional[bytes] = None
+        with _tf_reg.TemporaryDirectory(prefix="codex_reg_verify_") as _tmpdir:
+            _tb_path = Path(_tmpdir) / "codex.tgz"
+            try:
+                _tb_path.write_bytes(_tarball_bytes)
+            except (OSError, PermissionError) as _exc:
+                _r["reason"] = (
+                    f"tarball_write_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+                )
+                return _r
+            try:
+                with _tarfile.open(str(_tb_path), "r:gz") as _tf_obj:
+                    _member_names = _tf_obj.getnames()
+                    # npm tarball 내부는 package/ 접두사; codex.js는 package/bin/codex.js
+                    _js_member: Optional[str] = None
+                    for _m in _member_names:
+                        if _m == "package/bin/codex.js" or _m.endswith("/bin/codex.js"):
+                            _js_member = _m
+                            break
+                    if _js_member is None:
+                        _r["available"] = True
+                        _r["reason"] = "tarball_no_codex_js"
+                        return _r
+                    _extracted = _tf_obj.extractfile(_js_member)
+                    if _extracted is None:
+                        _r["available"] = True
+                        _r["reason"] = "tarball_codex_js_not_extractable"
+                        return _r
+                    _registry_js_bytes = _extracted.read()
+            except Exception as _exc:  # noqa: BLE001
+                _r["reason"] = (
+                    f"tarball_extract_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+                )
+                return _r
+
+        if _registry_js_bytes is None:
+            _r["reason"] = "tarball_codex_js_empty"
+            return _r
+
+        # SHA256 비교: 일치 → 정품, 불일치 → 위조 JS 탐지
+        _registry_sha = hashlib.sha256(_registry_js_bytes).hexdigest()
+        _r["registry_sha"] = _registry_sha
+        _r["available"] = True
+        if _installed_sha == _registry_sha:
+            _r["ok"] = True
+            _r["reason"] = "js_sha_matches_registry"
+        else:
+            _r["ok"] = False
+            _r["reason"] = (
+                f"js_sha_mismatch:"
+                f"installed={_installed_sha[:16]},registry={_registry_sha[:16]}"
             )
     except Exception as _exc:  # noqa: BLE001
         _r["reason"] = f"outer_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
