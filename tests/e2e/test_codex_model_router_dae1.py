@@ -5937,24 +5937,34 @@ class TestTC19TrustRootIndependence:
 
     # ---- 수정 A: npm 바이너리 시스템 경로 검증 ---- #
     def test_tc19a_system_path_npm_is_trusted(self) -> None:
-        """수정 A: 시스템 설치 경로의 npm은 신뢰된다(플랫폼별)."""
+        """수정 A + REJECT#33: 관리자 보호 시스템 경로 npm만 신뢰된다(사용자 쓰기 경로는 차단)."""
         if sys.platform == "win32":
             _pf = os.environ.get("ProgramFiles", r"C:\Program Files")
             _npm = str(Path(_pf) / "nodejs" / "npm.cmd")
             assert pipeline._verify_npm_binary_is_system_path(_npm) is True, (
                 f"수정 A: Program Files nodejs npm이 신뢰되지 않음: {_npm!r}"
             )
+            # REJECT#33: %APPDATA%\npm은 사용자 쓰기 가능 경로이므로 npm 바이너리 허용목록에서
+            #   제거되었다. 여기에 배치된 npm은 이제 차단(False)되어야 한다.
             _appdata = os.environ.get("APPDATA")
             if _appdata:
                 _npm2 = str(Path(_appdata) / "npm" / "npm.cmd")
-                assert pipeline._verify_npm_binary_is_system_path(_npm2) is True, (
-                    f"수정 A: %APPDATA%\\npm npm이 신뢰되지 않음: {_npm2!r}"
+                assert pipeline._verify_npm_binary_is_system_path(_npm2) is False, (
+                    f"REJECT#33: %APPDATA%\\npm npm이 여전히 신뢰됨(사용자 쓰기 경로 차단 실패): {_npm2!r}"
                 )
         else:
             for _sys_npm in ("/usr/bin/npm", "/usr/local/bin/npm"):
                 assert pipeline._verify_npm_binary_is_system_path(_sys_npm) is True, (
                     f"수정 A: 시스템 경로 npm이 신뢰되지 않음: {_sys_npm!r}"
                 )
+            # REJECT#33: ~/.nvm은 사용자 홈 하위(쓰기 가능)이므로 차단(False)되어야 한다.
+            _nvm_npm = str(
+                Path(os.path.expanduser("~")) / ".nvm" / "versions" / "node"
+                / "v20.0.0" / "bin" / "npm"
+            )
+            assert pipeline._verify_npm_binary_is_system_path(_nvm_npm) is False, (
+                f"REJECT#33: ~/.nvm npm이 여전히 신뢰됨(사용자 홈 경로 차단 실패): {_nvm_npm!r}"
+            )
 
     def test_tc19b_path_injected_fake_npm_is_rejected(self, tmp_path: "Path") -> None:
         """수정 A: 임의 디렉토리(PATH 주입)의 가짜 npm은 시스템 경로로 신뢰되지 않는다."""
@@ -7874,3 +7884,103 @@ def test_tc47d_detect_capability_falls_back_when_no_node():
         f"REJECT#32 회귀: node 미제공 시 verified_bin_path 직접 실행이 아님: {captured_cmd!r}"
     )
     assert captured_cmd[1] == "--version"
+
+
+# =========================================================================== #
+# TC-48: REJECT#33 — npm 바이너리 허용목록에서 사용자 쓰기 가능 경로 제거
+#
+# root cause: %APPDATA%\npm / ~/.nvm(사용자 쓰기 가능)이 npm 바이너리 허용목록에 포함되어,
+#   PATH에 주입된 악성 npm이 _verify_npm_binary_is_system_path를 통과하고 _get_npm_global_bin에서
+#   검증 전 subprocess로 실행될 수 있었다. 사용자 쓰기 경로를 허용목록에서 제거하여 fail-closed한다.
+#
+# AC#1: %APPDATA%\npm / ~/.nvm 악성 npm이 실행되지 않고 None/False 반환.
+# AC#2: 악성 npm이 sentinel 파일을 생성하지 못하는(subprocess 미실행) E2E 검증.
+# AC#3: Program Files 서명 npm + /usr/bin·/usr/local/bin 시스템 소유 npm은 정상 동작.
+# =========================================================================== #
+def test_tc48a_appdata_npm_path_blocked():
+    """REJECT#33 AC#1: %APPDATA%\\npm의 npm은 사용자 쓰기 가능 → False."""
+    appdata = os.environ.get("APPDATA", r"C:\Users\test\AppData\Roaming")
+    npm_path = str(Path(appdata) / "npm" / "npm.cmd")
+    result = pipeline._verify_npm_binary_is_system_path(npm_path)
+    assert result is False, (
+        f"REJECT#33 AC#1: %APPDATA%\\npm의 npm이 True (사용자 쓰기 가능 경로 차단 안 됨): {npm_path}"
+    )
+
+
+def test_tc48b_nvm_home_path_blocked():
+    """REJECT#33 AC#1: ~/.nvm의 npm은 사용자 쓰기 가능 → False."""
+    home = os.path.expanduser("~")
+    nvm_path = str(Path(home) / ".nvm" / "versions" / "node" / "v20.0.0" / "bin" / "npm")
+    result = pipeline._verify_npm_binary_is_system_path(nvm_path)
+    assert result is False, (
+        f"REJECT#33 AC#1: ~/.nvm의 npm이 True (사용자 쓰기 가능 경로 차단 안 됨): {nvm_path}"
+    )
+
+
+def test_tc48c_program_files_npm_passes():
+    """REJECT#33 AC#3: Program Files의 npm은 정상 통과.
+
+    POSIX 러너에서는 Windows 경로 접두사가 매칭되지 않으므로 시스템 경로 npm으로 검증한다.
+    """
+    if sys.platform == "win32":
+        npm_path = r"C:\Program Files\nodejs\npm.cmd"
+        result = pipeline._verify_npm_binary_is_system_path(npm_path)
+        assert result is True, (
+            f"REJECT#33 AC#3: Program Files의 npm이 False — 정상 설치 깨짐: {npm_path}"
+        )
+    else:
+        for npm_path in ("/usr/bin/npm", "/usr/local/bin/npm"):
+            result = pipeline._verify_npm_binary_is_system_path(npm_path)
+            assert result is True, (
+                f"REJECT#33 AC#3: 시스템 소유 npm이 False — 정상 설치 깨짐: {npm_path}"
+            )
+
+
+def test_tc48d_appdata_npm_binary_not_executed():
+    """REJECT#33 AC#2: %APPDATA%\\npm(또는 ~/.nvm)의 npm은 subprocess 실행 전 None 반환(부작용 없음)."""
+    from unittest.mock import patch
+
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA", r"C:\Users\test\AppData\Roaming")
+        fake_npm = str(Path(base) / "npm" / "npm.cmd")
+        probe_names = ("npm.cmd", "npm")
+    else:
+        fake_npm = str(
+            Path(os.path.expanduser("~")) / ".nvm" / "versions" / "node"
+            / "v20.0.0" / "bin" / "npm"
+        )
+        probe_names = ("npm",)
+
+    called_with = []
+
+    def mock_which(name):
+        if name in probe_names:
+            return fake_npm
+        return None
+
+    def mock_run(cmd, **kwargs):
+        called_with.extend(cmd)
+        raise AssertionError("npm subprocess가 실행됨 — REJECT#33 AC#2 위반(sentinel 생성 위험)")
+
+    with patch("pipeline.shutil.which", side_effect=mock_which), \
+         patch("pipeline.subprocess.run", side_effect=mock_run):
+        result = pipeline._get_npm_global_bin()
+
+    assert result is None, (
+        f"REJECT#33: 사용자 쓰기 경로 npm이 실행됐거나 결과 반환됨: {result!r}"
+    )
+    assert not called_with, (
+        f"REJECT#33 AC#2: subprocess 실행됨 — sentinel 파일 생성 위험: {called_with!r}"
+    )
+
+
+def test_tc48e_get_npm_global_bin_sanitizes_env():
+    """REJECT#33 AC#5: _get_npm_global_bin이 npm subprocess에 민감 변수 제거 env를 배선한다."""
+    import inspect
+    src = inspect.getsource(pipeline._get_npm_global_bin)
+    assert "env=_npm_env" in src, (
+        "REJECT#33 AC#5: npm subprocess가 sanitized env(env=_npm_env)를 사용하지 않음"
+    )
+    assert 'pop("OPENAI_API_KEY"' in src or "OPENAI_API_KEY" in src, (
+        "REJECT#33 AC#5: OPENAI_API_KEY 등 민감 변수 제거 로직이 없음"
+    )

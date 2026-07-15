@@ -9004,33 +9004,43 @@ def _check_codex_model_capability_match(
     return {"result": "OK", "model_verification_level": _level}
 
 
-# [Purpose]: REJECT#17 수정 A — npm 실행 파일이 공격자가 임의 배치할 수 없는 시스템 설치 경로에
-#            있는지 확인한다. _get_npm_global_bin이 npm 출력을 신뢰하기 전 npm 바이너리 자체의
-#            출처를 검증하여 PATH 선두 주입(가짜 npm) 자기참조 신뢰를 차단한다.
-# [Assumptions]: npm은 공식 Node.js 설치 경로(Windows: Program Files\nodejs 또는 %APPDATA%\npm;
-#            Unix: /usr/bin, /usr/local/bin, /opt, ~/.nvm)에 위치한다. nvm-for-windows는
-#            NVM_HOME/NVM_SYMLINK 환경변수로 위치를 노출한다.
+# [Purpose]: REJECT#17 수정 A + REJECT#33 — npm 실행 파일이 공격자가 임의 배치할 수 없는
+#            "관리자 보호 시스템 설치 경로"에 있는지 확인한다. _get_npm_global_bin이 npm을
+#            subprocess로 실행하기 전 npm 바이너리 자체의 출처를 검증하여 PATH 선두 주입(가짜 npm)
+#            자기참조 신뢰 + 임의 코드 실행을 차단한다.
+# [Assumptions]: npm 바이너리는 관리자 보호 설치 경로에만 존재한다(Windows: Program Files\nodejs;
+#            POSIX: /usr/bin, /usr/local/bin 등 root 소유 시스템 경로). npm 전역 prefix
+#            (%APPDATA%\npm)나 사용자 홈(~/.nvm)은 npm "바이너리" 위치가 아니라 전역 패키지 shim
+#            위치이며 사용자 쓰기 가능하므로 바이너리 허용목록에서 제외한다. nvm-for-windows는
+#            NVM_HOME/NVM_SYMLINK 환경변수로 관리자 설치 위치를 노출한다.
 # [Vulnerability & Risks]: 비표준(그러나 합법) npm 설치 경로가 있으면 오탐(False)으로 fail-closed되어
 #            trust가 거부될 수 있다. 이는 안전측 오류이며, 필요 시 허용 경로 목록을 확장한다.
-# [Improvement]: OS 패키지 매니저 메타데이터(예: dpkg -S, MSI product code)로 소유권을 교차 검증하면
-#            경로 접두사 heuristic보다 강한 provenance를 얻을 수 있다.
+#            REJECT#33에서 %APPDATA%\npm·~/.nvm(사용자 쓰기 가능)을 제거하여 악성 npm 실행 벡터를
+#            차단했다. nvm 사용자는 root 소유 시스템 npm으로 fail-closed되며 이는 의도된 정책이다.
+# [Improvement]: OS 패키지 매니저 메타데이터(예: dpkg -S, MSI product code)나 POSIX stat 기반 root
+#            소유권 검사로 소유권을 교차 검증하면 경로 접두사 heuristic보다 강한 provenance를 얻는다.
 def _verify_npm_binary_is_system_path(npm_path: str) -> bool:
-    """REJECT#17 수정 A: npm 실행 파일이 시스템 설치 경로에 있는지 확인한다(PATH 주입 npm 차단).
+    """REJECT#17 수정 A + REJECT#33: npm 실행 파일이 관리자 보호 시스템 설치 경로에 있는지 확인한다.
 
-    _get_npm_global_bin이 npm 출력을 신뢰하려면 npm 바이너리 자체가 공격자가 임의로 배치할 수
-    없는 시스템 설치 경로에 있어야 한다. 임의 디렉토리(cwd·임시 폴더 등)의 npm은 PATH 선두 주입
-    공격 벡터이므로 신뢰하지 않는다(fail-closed).
+    _get_npm_global_bin이 npm을 subprocess로 실행하려면 npm 바이너리 자체가 공격자가 임의로 배치할
+    수 없는 관리자 보호 시스템 설치 경로에 있어야 한다. 임의 디렉토리(cwd·임시 폴더)뿐 아니라 사용자
+    쓰기 가능 경로(%APPDATA%\\npm, ~/.nvm)의 npm도 PATH 선두 주입 + 임의 코드 실행 공격 벡터이므로
+    신뢰하지 않는다(fail-closed).
+
+    REJECT#33: npm 전역 prefix(%APPDATA%\\npm)와 POSIX 사용자 홈(~/.nvm)은 npm 바이너리가 정상적으로
+    설치되는 위치가 아니라 전역 패키지 shim 위치이며 사용자 쓰기 가능하다. 이들을 허용목록에서 제거하여
+    악성 npm.cmd/npm이 검증을 통과한 뒤 subprocess로 실행되는 경로를 차단한다.
 
     허용:
       - Windows: %ProgramFiles%\\nodejs, %ProgramFiles(x86)%\\nodejs, %ProgramW6432%\\nodejs,
-                 %APPDATA%\\npm(npm global prefix), nvm-for-windows(NVM_HOME/NVM_SYMLINK)
-      - Unix: /usr/bin, /usr/local/bin, /bin, /opt/homebrew/bin, /opt/homebrew, /opt,
-              /usr/local, ~/.nvm(nvm)
+                 nvm-for-windows(NVM_HOME/NVM_SYMLINK, 관리자 설치)
+      - POSIX: /usr/bin, /usr/local/bin, /bin, /opt/homebrew/bin, /opt/homebrew, /opt,
+               /usr/local (root 소유 시스템 경로)
 
     Args:
         npm_path: 검증할 npm 실행 파일 절대/상대 경로.
     Returns:
-        시스템 설치 경로 내에 있으면 True, 아니면 False.
+        관리자 보호 시스템 설치 경로 내에 있으면 True, 아니면 False.
     Raises:
         TypeError: npm_path가 None이거나 str이 아닌 경우.
     """
@@ -9052,9 +9062,11 @@ def _verify_npm_binary_is_system_path(npm_path: str) -> bool:
             _pf = os.environ.get(_envk)
             if _pf:
                 _allowed_roots.append(Path(_pf) / "nodejs")
-        _appdata = os.environ.get("APPDATA")
-        if _appdata:
-            _allowed_roots.append(Path(_appdata) / "npm")
+        # REJECT#33: %APPDATA%\npm 제거 — 사용자 쓰기 가능 경로이므로 공격자가 악성 npm.cmd를
+        #   배치하면 _get_npm_global_bin이 검증 통과 후 subprocess로 실행할 수 있다. 정상 npm
+        #   바이너리는 전역 prefix가 아니라 관리자 보호 설치 경로(Program Files\nodejs)에 존재한다.
+        #   NVM_HOME/NVM_SYMLINK는 nvm-for-windows가 관리자 권한으로 설치한 시스템 위치를 가리키므로
+        #   유지한다.
         for _nvmk in ("NVM_HOME", "NVM_SYMLINK"):
             _nv = os.environ.get(_nvmk)
             if _nv:
@@ -9062,19 +9074,14 @@ def _verify_npm_binary_is_system_path(npm_path: str) -> bool:
         # 환경변수 부재 대비 표준 기본 경로.
         _allowed_roots.append(Path(r"C:\Program Files\nodejs"))
     else:
+        # REJECT#33: ~/.nvm 제거 — 사용자 홈 하위 경로는 쓰기 가능하여 root 소유가 보장되지 않는다.
+        #   npm 바이너리는 root 소유 시스템 경로에서만 subprocess 실행을 허용한다. nvm 사용자는
+        #   root 소유 시스템 npm으로 fail-closed되며 이는 의도된 보안 정책이다.
         _allowed_roots.extend([
             Path("/usr/bin"), Path("/usr/local/bin"), Path("/bin"),
             Path("/opt/homebrew/bin"), Path("/opt/homebrew"),
             Path("/opt"), Path("/usr/local"),
         ])
-        _home = os.environ.get("HOME") or ""
-        if not _home:
-            try:
-                _home = str(Path.home())
-            except Exception:  # noqa: BLE001
-                _home = ""
-        if _home:
-            _allowed_roots.append(Path(_home) / ".nvm")
 
     for _root in _allowed_roots:
         try:
@@ -9223,8 +9230,19 @@ def _get_npm_global_bin() -> Optional[str]:
     if not _resolved_npm:
         return None
     if not _verify_npm_binary_is_system_path(_resolved_npm):
-        # npm 바이너리가 신뢰 불가 위치(PATH 주입 의심) → 그 출력도 신뢰 불가 (fail-closed).
+        # npm 바이너리가 신뢰 불가 위치(PATH 주입/사용자 쓰기 가능 경로 의심) → 검증 통과 전이므로
+        # subprocess를 절대 실행하지 않고 그 출력도 신뢰하지 않는다 (REJECT#33 AC#1/#2 fail-closed).
         return None
+
+    # REJECT#33 AC#5: npm subprocess는 민감 환경 변수를 제거한 환경에서만 실행한다. 검증된 npm이라도
+    #   실행 환경의 시크릿(API 키/토큰)이 하위 프로세스로 유출되지 않도록 방어한다.
+    _npm_env = os.environ.copy()
+    for _sensitive in (
+        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GH_TOKEN",
+        "NPM_TOKEN", "AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID",
+        "PIPELINE_APPROVAL_SECRET", "PIPELINE_SERVER_IDENTITY_KEY",
+    ):
+        _npm_env.pop(_sensitive, None)
 
     # 신뢰된 npm 절대 경로로만 조회한다(두 번째 PATH 조회 제거 = TOCTOU/재주입 차단).
     for _npm_exe in (_resolved_npm,):
@@ -9234,6 +9252,7 @@ def _get_npm_global_bin() -> Optional[str]:
                 [_npm_exe, "bin", "-g"],
                 capture_output=True, text=True, timeout=10,
                 encoding="utf-8", errors="replace",
+                env=_npm_env,
             )
             if _res.returncode == 0:
                 _out = _res.stdout.strip()
@@ -9248,6 +9267,7 @@ def _get_npm_global_bin() -> Optional[str]:
                 [_npm_exe, "config", "get", "prefix"],
                 capture_output=True, text=True, timeout=10,
                 encoding="utf-8", errors="replace",
+                env=_npm_env,
             )
             if _res.returncode == 0:
                 _prefix = _res.stdout.strip()
