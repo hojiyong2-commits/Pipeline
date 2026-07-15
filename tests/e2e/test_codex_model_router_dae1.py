@@ -5752,8 +5752,10 @@ class TestTC18CapabilityTOCTOUAndCoverage:
         assert "verified_bin_path=_cap_verified_bin" in src, (
             "REJECT#16 결함A: call site가 verified_bin_path를 배선하지 않음"
         )
-        assert 'pop("OPENAI_API_KEY"' in src, (
-            "REJECT#16 결함A: call site가 OPENAI_API_KEY 제거 env를 구성하지 않음"
+        # REJECT#38: call site는 인라인 pop 대신 중앙 정제 함수 _codex_clean_env()로
+        #   OPENAI_API_KEY + NODE_OPTIONS/NODE_PATH 등 선행 로딩 변수를 제거한 env를 구성한다.
+        assert "_cap_clean_env = _codex_clean_env()" in src, (
+            "REJECT#38: call site가 _codex_clean_env()로 정제 env를 구성하지 않음"
         )
         assert "env=_cap_clean_env" in src, (
             "REJECT#16 결함A: call site가 clean env를 capability 감지에 전달하지 않음"
@@ -7980,8 +7982,10 @@ def test_tc48e_get_npm_global_bin_sanitizes_env():
     assert "env=_npm_env" in src, (
         "REJECT#33 AC#5: npm subprocess가 sanitized env(env=_npm_env)를 사용하지 않음"
     )
-    assert 'pop("OPENAI_API_KEY"' in src or "OPENAI_API_KEY" in src, (
-        "REJECT#33 AC#5: OPENAI_API_KEY 등 민감 변수 제거 로직이 없음"
+    # REJECT#38: 민감 변수 제거 로직은 인라인 pop 대신 중앙 정제 함수 _codex_clean_env()로 통합됨.
+    #   (OPENAI_API_KEY + NODE_OPTIONS/NODE_PATH 등 선행 로딩 변수 제거)
+    assert "_codex_clean_env()" in src, (
+        "REJECT#38: _get_npm_global_bin이 _codex_clean_env()로 민감/선행로딩 변수를 제거하지 않음"
     )
 
 
@@ -8384,4 +8388,73 @@ class TestTC63Reject37NodeOptionsAndNoProfile:
         assert "Microsoft.PowerShell.Security" in src, (
             "REJECT#37 AC#3: _check_authenticode_signature가 비한정 Get-AuthenticodeSignature를 사용함 — "
             "사용자 모듈에서 재정의 가능"
+        )
+
+
+class TestTC64Reject38CentralCleanEnv:
+    """REJECT#38: _codex_clean_env() 중앙 정제 함수 사용 검증 (AC#1-4)"""
+
+    def test_tc64a_cmd_codex_review_uses_codex_clean_env(self):
+        """TC-64a: _cmd_gates_codex_review 소스에서 _cap_clean_env를 _codex_clean_env()로 할당"""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._cmd_gates_codex_review)
+        # _codex_clean_env()로 _cap_clean_env를 설정해야 한다
+        assert "_codex_clean_env()" in src, (
+            "_cmd_gates_codex_review must assign _cap_clean_env = _codex_clean_env()"
+        )
+        # 인라인 os.environ.copy() + OPENAI_API_KEY pop 패턴이 없어야 한다
+        assert "_cap_clean_env = os.environ.copy()" not in src, (
+            "_cmd_gates_codex_review must not use inline os.environ.copy() for _cap_clean_env"
+        )
+
+    def test_tc64b_npm_global_bin_uses_codex_clean_env(self):
+        """TC-64b: _get_npm_global_bin이 _codex_clean_env()로 npm subprocess 환경을 정제"""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._get_npm_global_bin)
+        assert "_codex_clean_env()" in src, (
+            "_get_npm_global_bin must use _codex_clean_env() for npm subprocess env"
+        )
+        # 인라인 민감 변수 pop 루프가 없어야 한다
+        assert "ANTHROPIC_API_KEY" not in src, (
+            "_get_npm_global_bin must not manually pop API keys — use _codex_clean_env()"
+        )
+
+    def test_tc64c_npm_ls_integrity_uses_codex_clean_env(self):
+        """TC-64c: _get_npm_ls_integrity가 _codex_clean_env()로 npm subprocess 환경을 정제"""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._get_npm_ls_integrity)
+        assert "_codex_clean_env()" in src, (
+            "_get_npm_ls_integrity must use _codex_clean_env() for npm subprocess env"
+        )
+        # 인라인 os.environ.copy() + pop 패턴이 없어야 한다
+        assert "_env = os.environ.copy()" not in src, (
+            "_get_npm_ls_integrity must not use inline os.environ.copy() for npm env"
+        )
+
+    def test_tc64d_node_preload_vars_in_critical_constants(self):
+        """TC-64d: _CODEX_NODE_PRELOAD_VARS가 CODEX_CRITICAL_CONSTANTS에 등록됨"""
+        import pipeline as _pl
+        assert "_CODEX_NODE_PRELOAD_VARS" in _pl.CODEX_CRITICAL_CONSTANTS, (
+            "_CODEX_NODE_PRELOAD_VARS must be in CODEX_CRITICAL_CONSTANTS"
+        )
+
+    def test_tc64e_node_preload_vars_change_triggers_critical(self):
+        """TC-64e: _CODEX_NODE_PRELOAD_VARS 변경이 CRITICAL risk를 트리거
+
+        _classify_codex_review_risk(changed_files, changed_functions, changed_constants)는
+        dict를 반환하며, changed_constants에 CRITICAL 상수가 있으면 risk_level=CRITICAL.
+        changed_files는 fail-closed 방지를 위해 비어 있지 않아야 한다.
+        """
+        import pipeline as _pl
+        _result = _pl._classify_codex_review_risk(
+            ["pipeline.py"],
+            [],
+            ["_CODEX_NODE_PRELOAD_VARS"],
+        )
+        _risk = _result.get("risk_level")
+        assert _risk == "CRITICAL", (
+            f"_CODEX_NODE_PRELOAD_VARS change must be CRITICAL, got {_risk!r} ({_result!r})"
         )

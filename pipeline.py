@@ -2503,6 +2503,8 @@ CODEX_CRITICAL_CONSTANTS: List[str] = [
     #   CRITICAL 대신 HIGH로 저하될 수 있으므로 CRITICAL 분류 필수이다.
     "_CODEX_CRITICAL_FILE_EXACT",
     "_CODEX_CRITICAL_FILE_PREFIXES",
+    # REJECT#38: NODE 선행 로딩 변수 목록 — 변경 시 NODE_OPTIONS 제거 경로가 우회된다.
+    "_CODEX_NODE_PRELOAD_VARS",
 ]
 
 # risk level별 모델 정책 SSoT.
@@ -9279,15 +9281,9 @@ def _get_npm_global_bin() -> Optional[str]:
         # subprocess를 절대 실행하지 않고 그 출력도 신뢰하지 않는다 (REJECT#33 AC#1/#2 fail-closed).
         return None
 
-    # REJECT#33 AC#5: npm subprocess는 민감 환경 변수를 제거한 환경에서만 실행한다. 검증된 npm이라도
-    #   실행 환경의 시크릿(API 키/토큰)이 하위 프로세스로 유출되지 않도록 방어한다.
-    _npm_env = os.environ.copy()
-    for _sensitive in (
-        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GH_TOKEN",
-        "NPM_TOKEN", "AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID",
-        "PIPELINE_APPROVAL_SECRET", "PIPELINE_SERVER_IDENTITY_KEY",
-    ):
-        _npm_env.pop(_sensitive, None)
+    # REJECT#38: npm subprocess는 중앙 정제 함수로 환경을 정제한다.
+    #   NODE_OPTIONS/NODE_PATH를 포함한 선행 로딩 변수와 민감 변수 모두 제거.
+    _npm_env = _codex_clean_env()
 
     # 신뢰된 npm 절대 경로로만 조회한다(두 번째 PATH 조회 제거 = TOCTOU/재주입 차단).
     for _npm_exe in (_resolved_npm,):
@@ -9725,9 +9721,8 @@ def _get_npm_ls_integrity(pkg_root: "Optional[Path]" = None) -> Dict[str, Any]:
         if not _npm_bin:
             _out["reason"] = "npm_not_found_or_not_system_path"
             return _out
-        # npm ls -g --json @openai/codex 실행 (OPENAI_API_KEY 제거, 타임아웃 30초)
-        _env = os.environ.copy()
-        _env.pop("OPENAI_API_KEY", None)
+        # npm ls -g --json @openai/codex 실행 (REJECT#38: 중앙 정제 함수로 NODE_OPTIONS 포함 제거, 타임아웃 30초)
+        _env = _codex_clean_env()
         _res = subprocess.run(
             [_npm_bin, "ls", "-g", "--json", "@openai/codex"],
             capture_output=True, text=True, timeout=30, env=_env,
@@ -27240,8 +27235,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #     - 테스트: _fake_codex_bin
     #     - 프로덕션: _codex_binary_trust["path"](이미 _verify_codex_binary_path_trust 통과)
     _cap_verified_bin = _fake_codex_bin or str(_codex_binary_trust.get("path", "") or "")
-    _cap_clean_env = os.environ.copy()
-    _cap_clean_env.pop("OPENAI_API_KEY", None)  # ChatGPT 인증만 사용, API key 차단
+    _cap_clean_env = _codex_clean_env()  # REJECT#38: 중앙 정제 함수 사용, NODE_OPTIONS 포함 모든 선행 로딩 변수 제거
     # REJECT#32: wrapper 체인(npm_wrapper/posix_npm_symlink)이면 초기 capability probe도 검증된
     #   node + codex.js로 직접 실행한다. _cap_verified_bin(=trust path)은 npm 래퍼(codex.cmd)일 수
     #   있으므로, 그 경로를 실행 파일로 쓰면 정상 dispatch 뒤 악성 명령이 붙은 래퍼가 --version
