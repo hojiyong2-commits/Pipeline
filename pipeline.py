@@ -12467,11 +12467,15 @@ def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
         return out
     out["valid"] = True
     _cats: List[str] = []
+    # REJECT#19(IMP-20260712-DAE1): 모든 finding이 명시적으로 OUT_OF_SCOPE_DIAGNOSTIC 목록에 있는지 추적.
+    # diagnostic_only=True는 이 flag가 True일 때만 허용된다.
+    _all_explicitly_out_of_scope_diagnostic = True
     for _f in findings:
         if not isinstance(_f, dict):
             # 비정상 항목은 fail-closed로 IN_SCOPE P0 취급.
             out["in_scope_count"] += 1
             out["in_scope_all_count"] += 1
+            _all_explicitly_out_of_scope_diagnostic = False
             continue
         _scope = str(_f.get("scope", "") or "").strip()
         _sev = str(_f.get("severity", "") or "").strip().upper()
@@ -12481,7 +12485,6 @@ def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
         # REJECT#18(IMP-20260712-DAE1): scope를 Codex 출력에서 신뢰하지 않음.
         # root_cause_category를 SSoT 목록에 매핑해 canonical_scope를 결정한다.
         # 전달된 scope와 불일치해도 SSoT canonical scope를 사용한다(fail-closed).
-        # category가 비어 있으면 제공된 scope 필드를 fallback으로 사용(레거시 호환).
         # 알 수 없는 category는 fail-closed로 IN_SCOPE 처리한다.
         if _cat:
             if _cat in CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED:
@@ -12494,11 +12497,13 @@ def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
                 # 알 수 없는 category → fail-closed로 IN_SCOPE 취급.
                 _canonical_scope = "IN_SCOPE"
         else:
-            # category 없음 → 제공된 scope 필드 fallback (레거시 호환).
-            if _scope in ("OUT_OF_SCOPE_DIAGNOSTIC", "ENVIRONMENT_UNTRUSTED"):
-                _canonical_scope = _scope
-            else:
-                _canonical_scope = "IN_SCOPE"
+            # REJECT#19(IMP-20260712-DAE1): category 없음 → fail-closed로 IN_SCOPE.
+            # scope 필드 fallback 제거 — 신뢰할 수 없는 Codex 출력의 scope를 허용하지 않음.
+            _canonical_scope = "IN_SCOPE"
+        # REJECT#19: 해당 finding이 명시적으로 OUT_OF_SCOPE_DIAGNOSTIC 목록에 있는지 추적.
+        # category가 없거나 목록에 없으면 diagnostic_only=True 자격 박탈.
+        if not (_cat and _cat in CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC):
+            _all_explicitly_out_of_scope_diagnostic = False
         if _canonical_scope == "OUT_OF_SCOPE_DIAGNOSTIC":
             out["out_of_scope_diagnostic_count"] += 1
         elif _canonical_scope == "ENVIRONMENT_UNTRUSTED":
@@ -12511,11 +12516,13 @@ def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
     out["root_cause_categories"] = _cats
     # reject_count 증가 규칙: IN_SCOPE P0/P1 finding이 하나라도 있어야 실제 REJECT로 계수한다.
     out["reject_count_delta"] = 1 if out["in_scope_count"] > 0 else 0
-    # diagnostic_only: IN_SCOPE(P0/P1) 없음 + ENVIRONMENT_UNTRUSTED 없음 + OUT_OF_SCOPE 있음.
+    # REJECT#19: diagnostic_only는 in_scope_all_count == 0(P2/P3 포함 모든 IN_SCOPE 없음)이며
+    # 모든 finding의 category가 명시적으로 CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC에 있을 때만 true.
     out["diagnostic_only"] = (
-        out["in_scope_count"] == 0
+        out["in_scope_all_count"] == 0
         and out["environment_untrusted_count"] == 0
         and out["out_of_scope_diagnostic_count"] > 0
+        and _all_explicitly_out_of_scope_diagnostic
     )
     return out
 

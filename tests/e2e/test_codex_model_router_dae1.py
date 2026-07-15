@@ -7991,3 +7991,58 @@ class TestBoundedTrustModelV2:
         assert cls["in_scope_count"] == 1        # 알 수 없는 category → IN_SCOPE fail-closed
         assert cls["out_of_scope_diagnostic_count"] == 0
         assert cls["diagnostic_only"] is False
+
+    def test_reject37a_no_category_p0_always_in_scope_regardless_of_scope_field(self):
+        """REJECT#19 AC-1: category 없는 P0 finding은 scope 값 무관하게 IN_SCOPE."""
+        cls = pipeline._classify_codex_findings([
+            {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC"},  # category 없음
+        ])
+        assert cls["in_scope_count"] == 1          # fail-closed IN_SCOPE
+        assert cls["out_of_scope_diagnostic_count"] == 0
+        assert cls["diagnostic_only"] is False
+
+    def test_reject37b_no_category_finding_blocks_acceptance_eligible(self):
+        """REJECT#19 AC-2: category 없는 APPROVE 결과는 acceptance_eligible=false."""
+        import json
+        pv = pipeline._parse_json_verdict(json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": [
+                {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC"},  # category 없음
+            ],
+        }))
+        assert pv is not None
+        # category 없음 → IN_SCOPE → in_scope_count > 0 → APPROVE에서도 acceptance 차단
+        assert pv["in_scope_count"] > 0
+        assert pv["reject_count_delta"] == 1
+
+    def test_reject37c_in_scope_p2p3_mixed_with_out_of_scope_diagnostic_only_false(self):
+        """REJECT#19 AC-3: IN_SCOPE P2/P3와 OUT_OF_SCOPE 혼합이면 diagnostic_only=false."""
+        cls = pipeline._classify_codex_findings([
+            {"severity": "P2", "scope": "IN_SCOPE",
+             "root_cause_category": "fake_codex_exec"},           # IN_SCOPE P2 (lower severity)
+            {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+             "root_cause_category": "npm_tarball_supply_chain_proof"},  # OUT_OF_SCOPE
+        ])
+        assert cls["diagnostic_only"] is False     # in_scope_all_count > 0 (P2 IN_SCOPE)
+        assert cls["in_scope_all_count"] == 1      # P2 counted in all_count
+        assert cls["in_scope_count"] == 0          # P2 NOT in P0/P1 count
+        assert cls["out_of_scope_diagnostic_count"] == 1
+
+    def test_reject37d_all_explicit_out_of_scope_diagnostic_only_true(self):
+        """REJECT#19 AC-4: 모든 category가 명시적으로 OUT_OF_SCOPE 목록에 있을 때만 diagnostic_only=true."""
+        # 모두 명시적 OUT_OF_SCOPE
+        cls_ok = pipeline._classify_codex_findings([
+            {"severity": "P0", "scope": "IN_SCOPE",
+             "root_cause_category": "openai_registry_compromise"},
+            {"severity": "P1", "scope": "IN_SCOPE",
+             "root_cause_category": "native_binary_origin_proof"},
+        ])
+        assert cls_ok["diagnostic_only"] is True   # 모두 OUT_OF_SCOPE SSoT에 있음
+        assert cls_ok["in_scope_all_count"] == 0
+        # 하나라도 category 없으면 diagnostic_only=False
+        cls_no_cat = pipeline._classify_codex_findings([
+            {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+             "root_cause_category": "openai_registry_compromise"},
+            {"severity": "P1", "scope": "OUT_OF_SCOPE_DIAGNOSTIC"},  # category 없음
+        ])
+        assert cls_no_cat["diagnostic_only"] is False  # category 없는 finding → IN_SCOPE → 차단
