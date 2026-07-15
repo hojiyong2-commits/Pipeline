@@ -2430,6 +2430,12 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   이 함수를 변경하면 provenance_absent_all_sources 판정을 우회해 acceptance_eligible=True가
     #   부당하게 유지될 수 있으므로 CRITICAL 분류 필수이다.
     "_get_npm_ls_integrity",
+    # IMP-20260712-DAE1 REJECT#23: Windows Authenticode 서명 검증 + JS entrypoint 내용 검증 등록.
+    #   - _check_authenticode_signature: native binary OpenAI 서명 검증 — 변경 시 acceptance_eligible 판정 우회 가능.
+    #   - _verify_codex_js_entrypoint_content: 위조 JS + 정품 native 조합 차단 — 변경 시 JS 위조 공격 허용.
+    #   두 함수 모두 단독 변경으로 acceptance_eligible=True 우회 가능 → CRITICAL 분류 필수.
+    "_check_authenticode_signature",
+    "_verify_codex_js_entrypoint_content",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -9742,6 +9748,65 @@ def _verify_direct_native_ownership(native_path: "Path") -> Dict[str, Any]:
         }
 
 
+def _verify_codex_js_entrypoint_content(js_path: "Path", native_bin_path: "Path") -> Dict[str, Any]:
+    """REJECT#23 AC-1: JS entrypoint가 위조 코드가 아닌 정품 Codex 진입점인지 내용 검증한다.
+
+    위조 공격 방지: npm wrapper 경로에서 genuine native binary를 참조하는 가짜 JS를
+    배치하면 Authenticode 검증을 통과하면서 임의 verdict를 출력할 수 있다.
+    이 함수는 JS entrypoint 내용이 최소한 native binary를 참조하는 구조임을 확인한다.
+
+    검증 항목:
+      1. JS 파일 크기 >= 200 bytes (stub/hardcoded-verdict 스크립트 차단)
+      2. JS가 vendor 경로 또는 native binary 이름 패턴을 참조 (내용 검사)
+      3. JS가 단독으로 APPROVE/REJECT 문자열만 출력하는 명백한 위조 패턴 없음
+
+    Returns:
+        {"ok": bool, "reason": str}
+        ok=True: 정품 진입점으로 판단 가능
+        ok=False: 위조 의심 또는 검증 불가
+    """
+    _result: Dict[str, Any] = {"ok": False, "reason": ""}
+    try:
+        if not js_path or not js_path.exists():
+            _result["reason"] = "js_not_found"
+            return _result
+        _size = js_path.stat().st_size
+        if _size < 200:
+            # 200 bytes 미만 → hardcoded-verdict stub 의심 (진품 Codex JS는 수 KB 이상)
+            _result["reason"] = f"js_too_small:{_size}"
+            return _result
+        _content = js_path.read_text(encoding="utf-8", errors="replace")
+        # native binary 이름 또는 vendor 디렉터리 참조 여부 확인
+        _native_name = native_bin_path.name if native_bin_path else ""
+        _native_stem = native_bin_path.stem if native_bin_path else ""
+        _has_vendor_ref = (
+            "vendor" in _content.lower()
+            or (_native_name and _native_name.lower() in _content.lower())
+            or (_native_stem and _native_stem.lower() in _content.lower())
+            or "execfile" in _content.lower()
+            or "spawn" in _content.lower()
+            or "child_process" in _content.lower()
+        )
+        if not _has_vendor_ref:
+            _result["reason"] = "js_no_vendor_or_binary_ref"
+            return _result
+        # 명백한 위조 패턴: JS가 APPROVE/REJECT를 직접 stdout에 출력
+        import re as _re_js
+        _verdict_inject = _re_js.search(
+            r'process\.stdout\.write\s*\(.*(?:APPROVE|REJECT).*\)',
+            _content,
+            _re_js.IGNORECASE,
+        )
+        if _verdict_inject:
+            _result["reason"] = "js_verdict_injection_pattern"
+            return _result
+        _result["ok"] = True
+        _result["reason"] = "js_content_ok"
+    except Exception as _exc:  # noqa: BLE001
+        _result["reason"] = f"js_content_check_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
+    return _result
+
+
 def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
     """REJECT#22: Windows Authenticode 서명으로 native binary가 OpenAI 서명인지 검증한다.
 
@@ -9970,18 +10035,32 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["trusted"] = False
                 _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
                 return _r
+            # REJECT#23 AC-1: JS entrypoint 내용 검증 — 위조 JS + 정품 native 조합 차단.
+            #   가짜 JS가 native binary를 호출하되 verdict를 조작하는 시나리오를 탐지한다.
+            _js_content_check = _verify_codex_js_entrypoint_content(_js_ep, _native_bin)
+            _js_content_ok = bool(_js_content_check.get("ok"))
+            if not _js_content_ok:
+                _r["acceptance_eligible"] = False
+                _r["provenance_reason"] = (
+                    f"js_content_invalid:{_js_content_check.get('reason', '')[:80]}"
+                )
+                # JS 내용 실패: acceptance_eligible=False 확정. Authenticode가 valid여도 무시.
             # REJECT#22: Authenticode 독립 신뢰 소스 검증 (항상 실행 — npm provenance와 독립).
             #   npm 7+ 글로벌 설치는 lockfile·package.json·npm ls provenance가 모두 absent이 정상.
             #   OS 수준 서명(Authenticode)이 유일한 독립 신뢰 소스: 공격자는 OpenAI 서명을 위조 불가.
-            #   - Windows: valid+OpenAI → acceptance_eligible=True; invalid/unavailable → False (fail-closed).
+            #   - Windows+JS ok: valid+OpenAI → acceptance_eligible=True; invalid/unavailable → False.
             #   - non-Windows: Authenticode 없음 → acceptance_eligible=False (POSIX provenance 부재 fail-closed).
+            #   단, JS content check 실패(_js_content_ok=False) 시 Authenticode valid여도 acceptance_eligible=False 유지.
             _authenticode = _check_authenticode_signature(str(_native_bin))
             if _authenticode.get("available"):
                 if _authenticode.get("ok"):
-                    _r["acceptance_eligible"] = True
-                    _r["provenance_reason"] = (
-                        f"authenticode_valid:{_authenticode.get('subject', '')[:40]}"
-                    )
+                    if _js_content_ok:
+                        # JS content ok + Authenticode valid → 정품 체인 확인
+                        _r["acceptance_eligible"] = True
+                        _r["provenance_reason"] = (
+                            f"authenticode_valid:{_authenticode.get('subject', '')[:40]}"
+                        )
+                    # else: JS content 실패 → acceptance_eligible=False 유지 (이미 설정됨)
                 else:
                     # Authenticode 실행됐으나 실패 → fake/tampered binary → fail-closed
                     _r["acceptance_eligible"] = False
