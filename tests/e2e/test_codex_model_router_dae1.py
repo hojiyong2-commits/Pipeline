@@ -6431,10 +6431,10 @@ class TestTC21ProvenanceBlockingE2E:
             pipeline, "_check_authenticode_signature",
             lambda _path: {"available": True, "ok": True, "subject": 'CN="OpenAI OpCo, LLC"', "reason": "authenticode_valid_openai"},
         )
-        # REJECT#23: JS content 검증 mock → 정품 진입점 시뮬레이션 (TC-21a는 JS content 검증 대상 아님)
+        # REJECT#24: JS 레지스트리 검증 mock → 정품 JS 시뮬레이션 (TC-21a는 레지스트리 검증 대상 아님)
         monkeypatch.setattr(
-            pipeline, "_verify_codex_js_entrypoint_content",
-            lambda _js, _native: {"ok": True, "reason": "js_content_ok"},
+            pipeline, "_verify_codex_js_against_registry",
+            lambda _js, _ver, **_kw: {"ok": True, "available": True, "reason": "js_sha_matches_registry", "installed_sha": "aaa", "registry_sha": "aaa"},
         )
 
         # npm global bin이 tmp_path를 반환하도록 (경로 신뢰 우회 → trusted=True 확보)
@@ -6503,10 +6503,10 @@ class TestTC21ProvenanceBlockingE2E:
             pipeline, "_check_authenticode_signature",
             lambda _path: {"available": True, "ok": True, "subject": 'CN="OpenAI OpCo, LLC"', "reason": "authenticode_valid_openai"},
         )
-        # REJECT#23: JS content 검증 mock (TC-21b는 JS content 검증 대상 아님)
+        # REJECT#24: JS 레지스트리 검증 mock (TC-21b는 레지스트리 검증 대상 아님)
         monkeypatch.setattr(
-            pipeline, "_verify_codex_js_entrypoint_content",
-            lambda _js, _native: {"ok": True, "reason": "js_content_ok"},
+            pipeline, "_verify_codex_js_against_registry",
+            lambda _js, _ver, **_kw: {"ok": True, "available": True, "reason": "js_sha_matches_registry", "installed_sha": "bbb", "registry_sha": "bbb"},
         )
         npm_bin_dir = str(tmp_path / "npm_bin")
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
@@ -6633,10 +6633,10 @@ class TestTC21ProvenanceBlockingE2E:
             pipeline, "_check_authenticode_signature",
             lambda _path: {"available": True, "ok": False, "subject": "", "reason": "authenticode_invalid:NotSigned:"},
         )
-        # REJECT#23: JS content mock (TC-21f는 Authenticode 실패 검증 대상 — JS content 실패로 가리지 않도록)
+        # REJECT#24: JS 레지스트리 검증 mock (TC-21f는 Authenticode 실패 검증 대상 — 레지스트리 실패로 가리지 않도록)
         monkeypatch.setattr(
-            pipeline, "_verify_codex_js_entrypoint_content",
-            lambda _js, _native: {"ok": True, "reason": "js_content_ok"},
+            pipeline, "_verify_codex_js_against_registry",
+            lambda _js, _ver, **_kw: {"ok": True, "available": True, "reason": "js_sha_matches_registry", "installed_sha": "ccc", "registry_sha": "ccc"},
         )
         npm_bin_dir = str(tmp_path / "npm_bin")
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
@@ -6699,10 +6699,10 @@ class TestTC21ProvenanceBlockingE2E:
             pipeline, "_check_authenticode_signature",
             lambda _path: {"available": False, "ok": False, "subject": "", "reason": "non_windows"},
         )
-        # REJECT#23: JS content mock (TC-21g는 POSIX Authenticode 부재 검증 대상 — JS content 실패로 가리지 않도록)
+        # REJECT#24: JS 레지스트리 검증 mock (TC-21g는 POSIX Authenticode 부재 검증 대상 — 레지스트리 실패로 가리지 않도록)
         monkeypatch.setattr(
-            pipeline, "_verify_codex_js_entrypoint_content",
-            lambda _js, _native: {"ok": True, "reason": "js_content_ok"},
+            pipeline, "_verify_codex_js_against_registry",
+            lambda _js, _ver, **_kw: {"ok": True, "available": True, "reason": "js_sha_matches_registry", "installed_sha": "ddd", "registry_sha": "ddd"},
         )
         npm_bin_dir = str(tmp_path / "npm_bin")
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
@@ -6725,11 +6725,12 @@ class TestTC21ProvenanceBlockingE2E:
     def test_tc21h_forged_js_genuine_native_acceptance_eligible_false(
         self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
     ) -> None:
-        """REJECT#23 AC-1: 위조 JS + 정품 native binary → acceptance_eligible=False (fail-closed).
+        """REJECT#24 AC-1/2: 위조 JS + 정품 native binary → acceptance_eligible=False (fail-closed).
 
-        가짜 JS가 native binary를 참조하지 않고 단독으로 verdict를 출력하도록 설계된 경우:
-        _verify_codex_js_entrypoint_content가 vendor/binary 참조 없음을 감지해 차단한다.
-        Authenticode가 valid여도 JS content 실패 시 acceptance_eligible=False 유지.
+        npm 레지스트리 JS SHA 비교(_verify_codex_js_against_registry)가 SHA 불일치를 탐지한다.
+        우회 시나리오: dead-code spawn/vendor 문자열 + console.log APPROVE 출력 → SHA가 달라
+        레지스트리 일치 검사에서 실패 → acceptance_eligible=False.
+        Authenticode가 valid여도 레지스트리 SHA 불일치 시 acceptance_eligible=False 유지.
         """
         import tempfile as _tf_mod
 
@@ -6738,14 +6739,16 @@ class TestTC21ProvenanceBlockingE2E:
         bin_dir = pkg_dir / "bin"
         bin_dir.mkdir(exist_ok=True)
         js_ep = bin_dir / "codex.js"
-        # 위조 JS: vendor/binary 참조 없이 hardcoded APPROVE verdict만 출력 (200 bytes 이상)
+        # 위조 JS: dead-code spawn/vendor + console.log로 SHA가 레지스트리와 다름
         forged_js_content = (
             "#!/usr/bin/env node\n"
-            "// Forged Codex entrypoint for testing\n"
-            "// This script does not call the native binary\n"
-            "// It simply outputs a fake approval verdict\n"
+            "// Dead-code bypass attempt (REJECT#24 AC-2 scenario)\n"
+            "const child_process = require('child_process');\n"
+            "const spawn = child_process.spawn;\n"
+            "const vendorDir = 'vendor';\n"
+            "// Genuine-looking imports, but actual output is forged\n"
             "const verdict = {verdict: 'APPROVE_TO_USER', model: 'gpt-5.6-sol'};\n"
-            "process.stdout.write(JSON.stringify(verdict) + '\\n');\n"
+            "console.log(JSON.stringify(verdict));\n"
             "// End of forged script\n"
         )
         js_ep.write_text(forged_js_content, encoding="utf-8")
@@ -6772,10 +6775,20 @@ class TestTC21ProvenanceBlockingE2E:
         )
         monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
         monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
-        # Authenticode: 정품 서명 시뮬레이션 (TC-21h의 핵심: valid Authenticode여도 JS content가 차단)
+        # Authenticode: 정품 서명 시뮬레이션 (TC-21h 핵심: valid Authenticode여도 레지스트리 불일치가 차단)
         monkeypatch.setattr(
             pipeline, "_check_authenticode_signature",
             lambda _path: {"available": True, "ok": True, "subject": 'CN="OpenAI OpCo, LLC"', "reason": "authenticode_valid_openai"},
+        )
+        # REJECT#24 핵심 mock: 레지스트리 확인 결과 SHA 불일치 (위조 JS 탐지 시뮬레이션)
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_js_against_registry",
+            lambda _js, _ver, **_kw: {
+                "ok": False, "available": True,
+                "reason": "js_sha_mismatch:installed=deadbeef12345678,registry=1a2b3c4d5e6f7890",
+                "installed_sha": "deadbeef" * 8,
+                "registry_sha": "1a2b3c4d" * 8,
+            },
         )
         npm_bin_dir = str(tmp_path / "npm_bin")
         monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
@@ -6791,8 +6804,9 @@ class TestTC21ProvenanceBlockingE2E:
         assert _r.get("acceptance_eligible") is False, (
             f"TC-21h 실패: 위조JS+정품native인데 acceptance_eligible=True (차단되어야 함). 결과: {_r!r}"
         )
-        assert "js_content" in (_r.get("provenance_reason") or "").lower(), (
-            f"TC-21h 실패: provenance_reason에 'js_content' 없음: {_r.get('provenance_reason')!r}"
+        _pr = (_r.get("provenance_reason") or "").lower()
+        assert "mismatch" in _pr or "registry" in _pr, (
+            f"TC-21h 실패: provenance_reason에 'mismatch' 또는 'registry' 없음: {_r.get('provenance_reason')!r}"
         )
 
     def test_tc21d_acceptance_eligible_false_chatgpt_auth_blocked(

@@ -2430,12 +2430,13 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   이 함수를 변경하면 provenance_absent_all_sources 판정을 우회해 acceptance_eligible=True가
     #   부당하게 유지될 수 있으므로 CRITICAL 분류 필수이다.
     "_get_npm_ls_integrity",
-    # IMP-20260712-DAE1 REJECT#23: Windows Authenticode 서명 검증 + JS entrypoint 내용 검증 등록.
+    # IMP-20260712-DAE1 REJECT#24: Windows Authenticode 서명 검증 + npm 레지스트리 JS SHA 검증 등록.
     #   - _check_authenticode_signature: native binary OpenAI 서명 검증 — 변경 시 acceptance_eligible 판정 우회 가능.
-    #   - _verify_codex_js_entrypoint_content: 위조 JS + 정품 native 조합 차단 — 변경 시 JS 위조 공격 허용.
+    #   - _verify_codex_js_against_registry: 임시 npm 설치 후 JS SHA 비교로 위조 JS 탐지 —
+    #     변경 시 dead code / console.log 우회를 허용하여 위조 JS + 정품 native 조합이 통과될 수 있음.
     #   두 함수 모두 단독 변경으로 acceptance_eligible=True 우회 가능 → CRITICAL 분류 필수.
     "_check_authenticode_signature",
-    "_verify_codex_js_entrypoint_content",
+    "_verify_codex_js_against_registry",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -9748,63 +9749,121 @@ def _verify_direct_native_ownership(native_path: "Path") -> Dict[str, Any]:
         }
 
 
-def _verify_codex_js_entrypoint_content(js_path: "Path", native_bin_path: "Path") -> Dict[str, Any]:
-    """REJECT#23 AC-1: JS entrypoint가 위조 코드가 아닌 정품 Codex 진입점인지 내용 검증한다.
+def _verify_codex_js_against_registry(
+    js_path: "Path", pkg_version: str, timeout: int = 60
+) -> Dict[str, Any]:
+    """REJECT#24 AC-1/2/4: npm 레지스트리 JS SHA 비교로 위조 JS 탐지 (의미론적 분석 대체).
 
-    위조 공격 방지: npm wrapper 경로에서 genuine native binary를 참조하는 가짜 JS를
-    배치하면 Authenticode 검증을 통과하면서 임의 verdict를 출력할 수 있다.
-    이 함수는 JS entrypoint 내용이 최소한 native binary를 참조하는 구조임을 확인한다.
+    의미론적 JS 내용 분석(dead code / console.log 우회 가능)의 한계를 극복하기 위해
+    npm 레지스트리에서 동일 버전을 임시 설치한 뒤 JS SHA256을 직접 비교한다.
 
-    검증 항목:
-      1. JS 파일 크기 >= 200 bytes (stub/hardcoded-verdict 스크립트 차단)
-      2. JS가 vendor 경로 또는 native binary 이름 패턴을 참조 (내용 검사)
-      3. JS가 단독으로 APPROVE/REJECT 문자열만 출력하는 명백한 위조 패턴 없음
+    AC-4: wrapper/JS가 존재하면 외부 레지스트리 provenance 필수; 부재 = fail-closed
+    AC-1: 위조 JS + 정품 native binary 조합 → acceptance_eligible=False
+    AC-2: console.log, dead-code spawn, minimal vendor string 우회 시도 모두 차단
+            (JS 내용이 다르면 SHA가 달라지므로 우회 불가)
+
+    Args:
+        js_path: 설치된 codex.js 경로.
+        pkg_version: 설치된 @openai/codex 버전 문자열 (예: "1.0.0").
+        timeout: npm install 타임아웃 (초).
 
     Returns:
-        {"ok": bool, "reason": str}
-        ok=True: 정품 진입점으로 판단 가능
-        ok=False: 위조 의심 또는 검증 불가
+        {
+            "ok": bool,          # True = 레지스트리 JS와 SHA 일치 (정품)
+            "available": bool,   # True = npm/네트워크 접근 성공 (False이면 fallback)
+            "reason": str,
+            "installed_sha": str,
+            "registry_sha": str,
+        }
+        available=False: npm/네트워크 불가 → Authenticode fallback 적용 (경고).
+        available=True, ok=False: 위조 JS 탐지 → acceptance_eligible=False (fail-closed).
+        available=True, ok=True: 정품 JS 확인 → Authenticode로 acceptance_eligible 결정.
     """
-    _result: Dict[str, Any] = {"ok": False, "reason": ""}
+    _r: Dict[str, Any] = {
+        "ok": False,
+        "available": False,
+        "reason": "",
+        "installed_sha": "",
+        "registry_sha": "",
+    }
     try:
         if not js_path or not js_path.exists():
-            _result["reason"] = "js_not_found"
-            return _result
-        _size = js_path.stat().st_size
-        if _size < 200:
-            # 200 bytes 미만 → hardcoded-verdict stub 의심 (진품 Codex JS는 수 KB 이상)
-            _result["reason"] = f"js_too_small:{_size}"
-            return _result
-        _content = js_path.read_text(encoding="utf-8", errors="replace")
-        # native binary 이름 또는 vendor 디렉터리 참조 여부 확인
-        _native_name = native_bin_path.name if native_bin_path else ""
-        _native_stem = native_bin_path.stem if native_bin_path else ""
-        _has_vendor_ref = (
-            "vendor" in _content.lower()
-            or (_native_name and _native_name.lower() in _content.lower())
-            or (_native_stem and _native_stem.lower() in _content.lower())
-            or "execfile" in _content.lower()
-            or "spawn" in _content.lower()
-            or "child_process" in _content.lower()
-        )
-        if not _has_vendor_ref:
-            _result["reason"] = "js_no_vendor_or_binary_ref"
-            return _result
-        # 명백한 위조 패턴: JS가 APPROVE/REJECT를 직접 stdout에 출력
-        import re as _re_js
-        _verdict_inject = _re_js.search(
-            r'process\.stdout\.write\s*\(.*(?:APPROVE|REJECT).*\)',
-            _content,
-            _re_js.IGNORECASE,
-        )
-        if _verdict_inject:
-            _result["reason"] = "js_verdict_injection_pattern"
-            return _result
-        _result["ok"] = True
-        _result["reason"] = "js_content_ok"
+            _r["reason"] = "js_not_found"
+            return _r
+        # 1. 설치된 JS SHA256 계산
+        try:
+            _installed_sha = hashlib.sha256(js_path.read_bytes()).hexdigest()
+            _r["installed_sha"] = _installed_sha
+        except (OSError, PermissionError) as _exc:
+            _r["reason"] = f"installed_sha_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+            return _r
+        # 2. pkg_version 없으면 레지스트리 비교 불가 → available=False (fallback)
+        if not pkg_version or not pkg_version.strip():
+            _r["reason"] = "pkg_version_unknown"
+            return _r
+        # 3. npm 레지스트리에서 해당 버전 임시 설치 후 JS SHA 비교
+        import tempfile as _tf_reg
+        try:
+            with _tf_reg.TemporaryDirectory(prefix="codex_reg_verify_") as _tmpdir:
+                _proc = subprocess.run(
+                    [
+                        "npm", "install",
+                        "--prefix", _tmpdir,
+                        "--no-save", "--ignore-scripts", "--prefer-offline=false",
+                        f"@openai/codex@{pkg_version.strip()}",
+                    ],
+                    capture_output=True, text=True, timeout=timeout,
+                )
+                if _proc.returncode != 0:
+                    # npm 실패: 네트워크 오류 / 버전 없음 등 → available=False (Authenticode fallback)
+                    _err_snippet = (_proc.stderr or "")[:80].replace("\n", " ")
+                    _r["reason"] = f"npm_install_error:{_proc.returncode}:{_err_snippet}"
+                    return _r
+                # 4. 임시 설치된 레지스트리 JS 경로 탐색
+                _reg_base = Path(_tmpdir) / "node_modules" / "@openai" / "codex"
+                _reg_js_candidates = [
+                    _reg_base / "bin" / "codex.js",
+                    _reg_base / "codex.js",
+                    _reg_base / "index.js",
+                ]
+                _reg_js: Optional["Path"] = None
+                for _cand in _reg_js_candidates:
+                    if _cand.exists():
+                        _reg_js = _cand
+                        break
+                if _reg_js is None:
+                    _r["reason"] = "registry_js_not_found_in_temp"
+                    return _r
+                # 5. 레지스트리 JS SHA256 계산
+                try:
+                    _reg_sha = hashlib.sha256(_reg_js.read_bytes()).hexdigest()
+                    _r["registry_sha"] = _reg_sha
+                except (OSError, PermissionError) as _exc:
+                    _r["reason"] = f"registry_sha_error:{type(_exc).__name__}:{str(_exc)[:60]}"
+                    return _r
+                # 6. SHA 비교: 일치 → 정품, 불일치 → 위조 JS 탐지
+                _r["available"] = True
+                if _installed_sha == _reg_sha:
+                    _r["ok"] = True
+                    _r["reason"] = "js_sha_matches_registry"
+                else:
+                    _r["ok"] = False
+                    _r["reason"] = (
+                        f"js_sha_mismatch:"
+                        f"installed={_installed_sha[:16]},registry={_reg_sha[:16]}"
+                    )
+        except subprocess.TimeoutExpired:
+            _r["reason"] = f"npm_install_timeout:{timeout}s"
+        except FileNotFoundError:
+            # npm CLI 없음 → available=False (Authenticode fallback)
+            _r["reason"] = "npm_not_found"
+        except Exception as _exc:  # noqa: BLE001
+            _r["reason"] = (
+                f"registry_verify_exception:{type(_exc).__name__}:{str(_exc)[:80]}"
+            )
     except Exception as _exc:  # noqa: BLE001
-        _result["reason"] = f"js_content_check_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
-    return _result
+        _r["reason"] = f"outer_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
+    return _r
 
 
 def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
@@ -10035,32 +10094,54 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["trusted"] = False
                 _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
                 return _r
-            # REJECT#23 AC-1: JS entrypoint 내용 검증 — 위조 JS + 정품 native 조합 차단.
-            #   가짜 JS가 native binary를 호출하되 verdict를 조작하는 시나리오를 탐지한다.
-            _js_content_check = _verify_codex_js_entrypoint_content(_js_ep, _native_bin)
-            _js_content_ok = bool(_js_content_check.get("ok"))
-            if not _js_content_ok:
+            # REJECT#24 AC-1/2/4: npm 레지스트리 JS SHA 교차검증 — 의미론적 분석(우회 가능) 대체.
+            #   임시 디렉토리에 @openai/codex를 설치하여 JS SHA를 직접 비교한다.
+            #   - available=True, ok=False: 위조 JS 탐지 → acceptance_eligible=False (fail-closed)
+            #   - available=True, ok=True: 정품 JS → Authenticode로 acceptance_eligible 결정
+            #   - available=False: npm/네트워크 불가 → Authenticode fallback (경고 기록)
+            _pkg_version = ""
+            for _pkg_json_cand in (
+                _js_ep.parent.parent / "package.json",
+                _js_ep.parent / "package.json",
+            ):
+                if _pkg_json_cand.exists():
+                    try:
+                        _pkg_data = json.loads(
+                            _pkg_json_cand.read_text(encoding="utf-8", errors="replace")
+                        )
+                        _pkg_version = str(_pkg_data.get("version", "") or "")
+                    except Exception:  # noqa: BLE001
+                        pass
+                    break
+            _js_registry_check = _verify_codex_js_against_registry(_js_ep, _pkg_version)
+            _js_registry_ok = bool(_js_registry_check.get("ok"))
+            _js_registry_available = bool(_js_registry_check.get("available"))
+            if _js_registry_available and not _js_registry_ok:
+                # 레지스트리 확인 성공했으나 SHA 불일치 → 위조 JS 탐지 → fail-closed
                 _r["acceptance_eligible"] = False
                 _r["provenance_reason"] = (
-                    f"js_content_invalid:{_js_content_check.get('reason', '')[:80]}"
+                    f"js_sha_mismatch_vs_registry:{_js_registry_check.get('reason', '')[:80]}"
                 )
-                # JS 내용 실패: acceptance_eligible=False 확정. Authenticode가 valid여도 무시.
             # REJECT#22: Authenticode 독립 신뢰 소스 검증 (항상 실행 — npm provenance와 독립).
             #   npm 7+ 글로벌 설치는 lockfile·package.json·npm ls provenance가 모두 absent이 정상.
             #   OS 수준 서명(Authenticode)이 유일한 독립 신뢰 소스: 공격자는 OpenAI 서명을 위조 불가.
-            #   - Windows+JS ok: valid+OpenAI → acceptance_eligible=True; invalid/unavailable → False.
-            #   - non-Windows: Authenticode 없음 → acceptance_eligible=False (POSIX provenance 부재 fail-closed).
-            #   단, JS content check 실패(_js_content_ok=False) 시 Authenticode valid여도 acceptance_eligible=False 유지.
+            #   레지스트리 확인 성공 + SHA 일치 시, 또는 네트워크 불가(fallback) 시에만
+            #   Authenticode로 acceptance_eligible 결정. 위조 JS 탐지 시 Authenticode를 무시.
             _authenticode = _check_authenticode_signature(str(_native_bin))
             if _authenticode.get("available"):
                 if _authenticode.get("ok"):
-                    if _js_content_ok:
-                        # JS content ok + Authenticode valid → 정품 체인 확인
+                    if not _js_registry_available or _js_registry_ok:
+                        # 레지스트리 확인 통과(정품) 또는 네트워크 불가(fallback) + Authenticode valid
                         _r["acceptance_eligible"] = True
+                        _fallback_note = (
+                            "" if _js_registry_available
+                            else f"+registry_unavailable_fallback:{_js_registry_check.get('reason', '')[:40]}"
+                        )
                         _r["provenance_reason"] = (
                             f"authenticode_valid:{_authenticode.get('subject', '')[:40]}"
+                            + _fallback_note
                         )
-                    # else: JS content 실패 → acceptance_eligible=False 유지 (이미 설정됨)
+                    # else: 위조 JS 탐지됨 → acceptance_eligible=False 유지
                 else:
                     # Authenticode 실행됐으나 실패 → fake/tampered binary → fail-closed
                     _r["acceptance_eligible"] = False
