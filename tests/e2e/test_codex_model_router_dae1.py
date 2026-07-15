@@ -7728,3 +7728,149 @@ def test_tc45d_check_auth_uses_node_direct_when_provided():
     assert captured_cmd[2:] == ["login", "status"], (
         f"REJECT#31 AC#3: login status 인자 불일치: {captured_cmd!r}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# REJECT#32: 초기 capability probe도 검증된 node + codex.js 직접 실행.
+#   - _verify_npm_wrapper_content: 정상 node dispatch 뒤 악성 실행 줄이 붙은 래퍼 차단(단일 dispatch).
+#   - _detect_codex_cli_capability: node_bin + codex_js 제공 시 npm 래퍼 대신 node 직접 실행.
+#   - _cmd_gates_codex_review: 초기 capability probe에 node_interpreter_path + js_entrypoint_path 배선.
+# --------------------------------------------------------------------------- #
+def test_tc47a_cmd_with_extra_exec_line_blocked():
+    """REJECT#32 AC#4: 정상 node dispatch 뒤에 악성 실행 줄이 있는 cmd → _verify_npm_wrapper_content=False."""
+    import tempfile
+    malicious_cmd = (
+        "@echo off\n"
+        "@node \"%~dp0\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\n"
+        "malicious.exe arg1\n"  # 정품 dispatch 뒤에 덧붙인 악성 실행 줄
+    )
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cmd', delete=False, encoding='utf-8') as f:
+        f.write(malicious_cmd)
+        fname = f.name
+    _orig_platform = pipeline.sys.platform
+    try:
+        pipeline.sys.platform = "win32"
+        result = pipeline._verify_npm_wrapper_content(Path(fname))
+        assert result is False, (
+            "REJECT#32 AC#4: node 뒤에 악성 실행 줄이 있는 cmd가 True 반환 — "
+            "단일 node dispatch만 허용해야 함"
+        )
+    finally:
+        pipeline.sys.platform = _orig_platform
+        os.unlink(fname)
+
+
+def test_tc47a2_real_npm_wrapper_with_control_flow_still_passes():
+    """REJECT#32 회귀: 제어 흐름(if/else/goto/그룹핑)이 있는 정상 npm 래퍼는 통과."""
+    import tempfile
+    real_cmd = (
+        "@ECHO off\n"
+        "GOTO start\n"
+        ":find_dp0\n"
+        "SET dp0=%~dp0\n"
+        "EXIT /b\n"
+        ":start\n"
+        "SETLOCAL\n"
+        "CALL :find_dp0\n"
+        "IF EXIST \"%dp0%\\node.exe\" (\n"
+        "  SET \"_prog=%dp0%\\node.exe\"\n"
+        ") ELSE (\n"
+        "  SET \"_prog=node\"\n"
+        ")\n"
+        "endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "
+        "\"%_prog%\" \"%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\n"
+    )
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cmd', delete=False, encoding='utf-8') as f:
+        f.write(real_cmd)
+        fname = f.name
+    _orig_platform = pipeline.sys.platform
+    try:
+        pipeline.sys.platform = "win32"
+        result = pipeline._verify_npm_wrapper_content(Path(fname))
+        assert result is True, (
+            "REJECT#32 회귀: 제어 흐름이 있는 공식 npm 래퍼가 False 반환 — 정상 설치를 깨트림"
+        )
+    finally:
+        pipeline.sys.platform = _orig_platform
+        os.unlink(fname)
+
+
+def test_tc47b_detect_capability_uses_node_direct():
+    """REJECT#32 AC#2/3: _detect_codex_cli_capability가 node_bin + codex.js 직접 실행(npm 래퍼 미실행)."""
+    from unittest.mock import patch, MagicMock
+    captured_cmd = []
+
+    def _mock_run(cmd, **kwargs):
+        captured_cmd.clear()
+        captured_cmd.extend([str(c) for c in cmd])
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "1.0.0"
+        mock_result.stderr = ""
+        return mock_result
+
+    fake_node = "/usr/local/bin/node"
+    fake_js = "/usr/local/lib/node_modules/@openai/codex/bin/codex.js"
+    with patch("pipeline.subprocess.run", side_effect=_mock_run):
+        pipeline._detect_codex_cli_capability(
+            verified_bin_path="codex.cmd",  # npm 래퍼 경로 전달 — 실행 파일로 쓰이면 안 됨
+            node_bin=fake_node,
+            codex_js=fake_js,
+        )
+    assert captured_cmd[0] == fake_node, (
+        f"REJECT#32 AC#2: capability probe argv[0]이 node_bin이 아님: {captured_cmd!r}"
+    )
+    assert captured_cmd[1] == fake_js, (
+        f"REJECT#32 AC#3: capability probe argv[1]이 codex_js가 아님: {captured_cmd!r}"
+    )
+    assert captured_cmd[2] == "--version", (
+        f"REJECT#32 AC#2: capability probe argv[2]이 --version이 아님: {captured_cmd!r}"
+    )
+    assert "codex.cmd" not in captured_cmd, (
+        f"REJECT#32 AC#3: npm 래퍼(codex.cmd)가 subprocess 실행 파일로 사용됨: {captured_cmd!r}"
+    )
+
+
+def test_tc47c_call_site_wires_node_and_js_to_initial_probe():
+    """REJECT#32 AC#2: _cmd_gates_codex_review 초기 capability probe가 node + codex.js를 배선한다."""
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    assert "_detect_codex_cli_capability(" in src
+    assert "node_bin=_cap_node_bin" in src, (
+        "REJECT#32 AC#2: 초기 capability probe call site가 node_bin을 배선하지 않음"
+    )
+    assert "codex_js=_cap_codex_js" in src, (
+        "REJECT#32 AC#2/3: 초기 capability probe call site가 codex_js를 배선하지 않음"
+    )
+    assert 'get("node_interpreter_path"' in src, (
+        "REJECT#32 AC#2: call site가 신뢰 검증된 node_interpreter_path에서 node_bin을 얻지 않음"
+    )
+    assert 'get("js_entrypoint_path"' in src, (
+        "REJECT#32 AC#3: call site가 신뢰 검증된 js_entrypoint_path에서 codex_js를 얻지 않음"
+    )
+
+
+def test_tc47d_detect_capability_falls_back_when_no_node():
+    """REJECT#32 회귀: node_bin/codex_js 미제공 시 verified_bin_path 직접 실행(direct_native/레거시)."""
+    from unittest.mock import patch, MagicMock
+    captured_cmd = []
+
+    def _mock_run(cmd, **kwargs):
+        captured_cmd.clear()
+        captured_cmd.extend([str(c) for c in cmd])
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "1.0.0"
+        mock_result.stderr = ""
+        return mock_result
+
+    with patch("pipeline.subprocess.run", side_effect=_mock_run):
+        pipeline._detect_codex_cli_capability(
+            verified_bin_path="/usr/local/bin/codex",  # direct_native 절대 경로
+            node_bin="",
+            codex_js="",
+        )
+    assert captured_cmd[0] == "/usr/local/bin/codex", (
+        f"REJECT#32 회귀: node 미제공 시 verified_bin_path 직접 실행이 아님: {captured_cmd!r}"
+    )
+    assert captured_cmd[1] == "--version"

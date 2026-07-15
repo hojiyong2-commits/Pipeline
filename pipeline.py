@@ -8573,6 +8573,8 @@ def _build_codex_model_policy(
 def _detect_codex_cli_capability(
     verified_bin_path: str = "",
     env: Optional[Dict[str, str]] = None,
+    node_bin: Optional[str] = None,
+    codex_js: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Codex CLI 가용성을 감지. actual_model은 실제 exec 결과가 없으면 항상 unknown.
 
@@ -8588,24 +8590,51 @@ def _detect_codex_cli_capability(
       - env가 주어지면(보통 OPENAI_API_KEY가 제거된 환경) subprocess에 그대로 전달한다.
         None이면 현재 프로세스 환경을 상속한다(레거시 경로).
 
+    IMP-20260712-DAE1 REJECT#32(초기 capability probe도 검증된 node+codex.js 직접 실행):
+      - node_bin과 codex_js가 모두 제공되면 초기 --version 확인을 [node_bin, codex_js, "--version"]
+        형태로 실행한다. 사용자 쓰기 가능한 npm 래퍼(codex.cmd)를 subprocess 실행 파일로 쓰지
+        않으므로, 정상 dispatch 뒤에 악성 명령을 덧붙인 래퍼가 초기 probe에서 임의 코드를
+        실행하는 벡터를 제거한다(exec/auth 경로와 동일 정책, REJECT#31과 대칭).
+      - 둘 중 하나라도 없으면 verified_bin_path(또는 codex fallback)를 직접 실행한다.
+        direct_native 설치에서는 verified_bin_path 자체가 검증된 native 절대 경로이므로 안전하다.
+
     Args:
         verified_bin_path: 신뢰 검증된 codex 절대경로. 빈 문자열이면 "codex" PATH fallback.
+            direct_native 설치에서는 검증된 native 절대 경로를 그대로 직접 실행하는 데 사용한다.
         env: subprocess에 전달할 환경 dict(예: OPENAI_API_KEY 제거 env). None이면 현재 환경 상속.
+        node_bin: 신뢰 검증된 node 인터프리터 절대 경로(REJECT#32). codex_js와 함께 제공될 때만
+            직접 실행 경로가 활성화된다. None/빈 값이면 verified_bin_path를 사용.
+        codex_js: 레지스트리 SHA가 검증된 codex.js 진입점 절대 경로(REJECT#32). node_bin과 함께
+            제공되면 npm 래퍼(codex.cmd) 대신 [node_bin, codex_js, "--version"]로 직접 실행.
     Returns:
         {"available": bool, "actual_model": str, "model_source": str, "env_hint": str}.
         model_source: "version_check"(가용하나 모델 미확인) | "unknown"(미가용).
+    Raises:
+        TypeError: node_bin/codex_js가 None이 아니면서 str이 아닌 경우.
     """
     # None 입력 방어: verified_bin_path가 None이면 "" 로 강등하여 codex PATH fallback을 탄다
     #   (레거시 호환 — 호출자가 명시적으로 None을 넘겨도 안전하게 동작).
     if verified_bin_path is None:
         verified_bin_path = ""  # allowed: None → "" fallback (레거시 호환, 빈 경로는 codex PATH fallback)
+    # REJECT#32: node_bin/codex_js는 Optional[str] — 제공되면 str이어야 한다(암묵적 형변환 금지).
+    for _pn, _pv in (("node_bin", node_bin), ("codex_js", codex_js)):
+        if _pv is not None and not isinstance(_pv, str):
+            raise TypeError(f"{_pn} must be str or None, got {type(_pv).__name__}")
     # 운영자 명시 모델(선택). actual_model 증거로 인정하지 않고 진단용 힌트로만 보관한다.
     _env_hint = str(os.environ.get("CODEX_CLI_MODEL", "") or "").strip()
     # REJECT#16 결함A: 신뢰 검증된 절대경로가 있으면 우선 사용(PATH 재해석 차단). 없으면 codex fallback.
     _cap_bin = verified_bin_path if verified_bin_path else "codex"
+    # REJECT#32 AC#2/3: node_bin + codex_js가 모두 제공되면 검증된 node로 codex.js를 직접 실행한다.
+    #   npm 래퍼(codex.cmd)를 실행 파일로 쓰지 않으므로 악성 래퍼가 초기 probe를 가로챌 수 없다.
+    _cap_node_bin = str(node_bin) if node_bin else ""
+    _cap_codex_js = str(codex_js) if codex_js else ""
+    if _cap_node_bin and _cap_codex_js:
+        _cap_cmd = [_cap_node_bin, _cap_codex_js, "--version"]
+    else:
+        _cap_cmd = [_cap_bin, "--version"]
     try:
         result = subprocess.run(
-            [_cap_bin, "--version"],
+            _cap_cmd,
             capture_output=True, text=True, timeout=5,
             env=env,  # None이면 현재 환경 상속(레거시), 주어지면 OPENAI_API_KEY 제거 env 전달
         )
@@ -9265,9 +9294,50 @@ def _verify_npm_wrapper_content(bin_path: "Path") -> bool:
                     if not _stripped:
                         continue
                     _exec_lines.append(_stripped_low)
+                # REJECT#32: 주석 제거 후 남은 "외부 프로그램 실행 줄"은 정확히 node dispatch만
+                #   허용한다. 정상 node dispatch 뒤에 악성 실행 줄을 덧붙인 래퍼(정품 검사 통과 후
+                #   --version 탐색 중 임의 코드 실행)를 차단하기 위한 단일 dispatch 강제이다.
+                #   배치 내부 명령어(echo/set/if/... )·레이블·그룹핑/제어 토큰만 있는 하위 명령은
+                #   외부 실행이 아니므로 제외하고, 그 외 외부 실행 하위 명령이 node를 참조하지
+                #   않으면 즉시 거부한다(fail-closed).
+                _BATCH_INTERNAL_CMDS = frozenset({
+                    "echo", "set", "setlocal", "endlocal", "if", "for", "goto",
+                    "call", "exit", "pause", "cls", "pushd", "popd", "else",
+                    "title", "rem", "shift", "verify", "type", "color", "cd",
+                })
+                _all_node_dispatch = True
+                for _el in _exec_lines:
+                    # 배치 명령 구분자(&&, ||, &, |)로 분할하여 각 하위 명령을 개별 검사한다.
+                    _sep_norm = (
+                        _el.replace("&&", "\n").replace("||", "\n")
+                        .replace("&", "\n").replace("|", "\n")
+                    )
+                    for _sub in _sep_norm.split("\n"):
+                        _norm = _sub.strip()
+                        if _norm.startswith("@"):
+                            _norm = _norm[1:].strip()  # allowed: '@' 접두 제거 후 첫 토큰 판정
+                        # 그룹핑 토큰 제거 후 첫 토큰으로 내부 명령/레이블/빈 줄 판정.
+                        _norm = _norm.replace("(", " ").replace(")", " ").strip()
+                        if not _norm or _norm.startswith(":"):
+                            continue  # 그룹핑 토큰만/레이블 → 외부 실행 아님
+                        _first_tok = _norm.split()[0]
+                        if _first_tok in _BATCH_INTERNAL_CMDS:
+                            continue  # 배치 내부 명령 → 외부 실행 아님
+                        if _first_tok.startswith(("2>", "1>", ">", "<")):
+                            continue  # 리다이렉션 토큰 → 외부 실행 아님
+                        # 외부 프로그램 실행 하위 명령 — 반드시 node를 참조해야 한다(경로 정규화 후).
+                        if "node" not in _sub.replace("\\", "/"):
+                            _all_node_dispatch = False
+                            break
+                    if not _all_node_dispatch:
+                        break
                 # 남은 실행 코드만 합쳐 경로 정규화(역슬래시→슬래시) 후 검사한다.
                 _exec_txt = "\n".join(_exec_lines).replace("\\", "/")
-                return "node" in _exec_txt and "@openai/codex" in _exec_txt
+                return (
+                    _all_node_dispatch
+                    and "node" in _exec_txt
+                    and "@openai/codex" in _exec_txt
+                )
             # REJECT#20: .exe 등 non-script on Windows — fail-closed 처리.
             #   npm global bin에 악성 codex.exe를 배치하면 PATHEXT 우선순위로 .cmd보다 먼저 선택된다.
             #   내용·서명·패키지 출처 검증이 불가능한 .exe는 신뢰하지 않는다 (fail-closed).
@@ -27063,9 +27133,23 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _cap_verified_bin = _fake_codex_bin or str(_codex_binary_trust.get("path", "") or "")
     _cap_clean_env = os.environ.copy()
     _cap_clean_env.pop("OPENAI_API_KEY", None)  # ChatGPT 인증만 사용, API key 차단
+    # REJECT#32: wrapper 체인(npm_wrapper/posix_npm_symlink)이면 초기 capability probe도 검증된
+    #   node + codex.js로 직접 실행한다. _cap_verified_bin(=trust path)은 npm 래퍼(codex.cmd)일 수
+    #   있으므로, 그 경로를 실행 파일로 쓰면 정상 dispatch 뒤 악성 명령이 붙은 래퍼가 --version
+    #   탐색 중 임의 코드를 실행할 수 있다(REJECT#32 root cause). node_interpreter_path +
+    #   js_entrypoint_path를 배선하여 auth/exec/최종 --version과 동일한 신뢰 실행 경로로 고정한다.
+    #   _fake_codex_bin(test seam)일 때는 신뢰 체인 필드가 비어 있어 빈 값이 되고 기존 fake 실행
+    #   경로가 유지된다(회귀 방지). direct_native도 빈 값 → _cap_verified_bin(검증된 native) 직접 실행.
+    _cap_node_bin = ""
+    _cap_codex_js = ""
+    if not _fake_codex_bin:
+        _cap_node_bin = str(_codex_binary_trust.get("node_interpreter_path", "") or "")
+        _cap_codex_js = str(_codex_binary_trust.get("js_entrypoint_path", "") or "")
     _cap_info = _detect_codex_cli_capability(
         verified_bin_path=_cap_verified_bin,
         env=_cap_clean_env,
+        node_bin=_cap_node_bin,
+        codex_js=_cap_codex_js,
     )
     _actual_model_str = str(_cap_info.get("actual_model", "unknown") or "unknown")
     _model_source_str = str(_cap_info.get("model_source", "unknown") or "unknown")
