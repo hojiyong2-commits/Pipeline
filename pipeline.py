@@ -13339,25 +13339,31 @@ def _check_codex_rate_limit(
 def _check_codex_review_gate(
     pipeline_id: str, state: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """gates accept --result ACCEPT 전 Codex Review Loop 승인 여부를 검증 (fail-closed).
+    """gates accept --result ACCEPT 전 Codex Review 승인 여부를 검증 (fail-closed).
 
-    .pipeline/codex_review_loop_state.json을 로드하여 다음을 검사한다:
+    .pipeline/codex_review_result.json(Codex Review SSoT)을 로드하여 다음을 검사한다:
       - 파일 없음/파싱 오류 → codex_review_not_approved BLOCKED (fail-closed)
-      - status != APPROVED → codex_review_not_approved BLOCKED
-      - APPROVED이지만 5개 필수 필드(pipeline_id, pr_head_sha, packet_sha256,
-        pr_body_sha256, accept_code) 중 하나라도 없거나 빔 → codex_review_stale BLOCKED
+      - status/verdict가 APPROVED/APPROVE_TO_USER/APPROVE가 아님
+        → codex_review_not_approved BLOCKED
+      - acceptance_eligible이 명시적으로 False → codex_review_not_eligible BLOCKED
+      - APPROVED이지만 3개 필수 필드(pipeline_id, pr_head_sha, packet_sha256)
+        중 하나라도 없거나 빔 → codex_review_stale BLOCKED
       - APPROVED이지만 pipeline_id가 현재 파이프라인과 다름 → codex_review_stale BLOCKED
       - APPROVED이지만 gh CLI로 head SHA를 못 얻음 → codex_review_stale BLOCKED (fail-closed)
       - APPROVED이지만 pr_head_sha가 현재 PR head SHA와 다름 → codex_review_stale BLOCKED
-      - acceptance_request.json이 없거나 packet_sha256/pr_body_sha256이 빔
+      - acceptance_request.json이 없거나 packet_sha256이 빔
         → codex_review_stale BLOCKED (fail-closed)
-      - APPROVED이지만 packet_sha256/pr_body_sha256이 acceptance_request.json과 다름
+      - APPROVED이지만 packet_sha256이 acceptance_request.json과 다름
         → codex_review_stale BLOCKED
+      - pr_body_sha256/pr_body_candidate_sha256이 result에 있고
+        acceptance_request.json과 다름 → codex_review_stale BLOCKED
+        (result에 body SHA가 없으면 선택적 필드로 SKIP)
       - 모두 존재하고 일치 → PASS
 
-    2차 REJECT 재작업(IMP-20260626-4121): "값이 있으면 비교, 없으면 SKIP" 구조를
-    제거하고 모든 비교를 fail-closed로 강화한다. APPROVED 파일만 있고 필드가
-    누락된 경우 우회를 차단한다.
+    MT-11(IMP-20260712-DAE1) 버그 수정: 이전 구현은 쓰는 코드가 없는
+    codex_review_loop_state.json을 읽어 항상 codex_review_not_approved로
+    BLOCKED되었다. gates codex-review가 실제로 쓰는 SSoT인
+    codex_review_result.json을 읽도록 경로/필드/status 판정을 정정한다.
 
     기존 provenance/replay/nonce 검증을 대체하지 않으며, 그 이전 선검사로만 동작한다.
 
@@ -13377,34 +13383,41 @@ def _check_codex_review_gate(
             f"pipeline_id must be str, got {type(pipeline_id).__name__}"
         )
 
-    loop_path = _codex_review_loop_state_path()
-    if not loop_path.exists():
+    result_path = _codex_review_result_path()
+    if not result_path.exists():
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_not_approved",
             "message": (
-                "Codex 검토가 아직 APPROVE되지 않았습니다. "
+                "Codex 검토가 아직 APPROVE되지 않았습니다 "
+                "(codex_review_result.json 없음). "
                 "gates request-accept를 먼저 실행하세요."
             ),
         }
 
     try:
-        with open(loop_path, encoding="utf-8") as fh:
-            loop_state = json.load(fh)
-        if not isinstance(loop_state, dict):
-            raise ValueError("codex_review_loop_state.json is not an object")
+        with open(result_path, encoding="utf-8") as fh:
+            result_data = json.load(fh)
+        if not isinstance(result_data, dict):
+            raise ValueError("codex_review_result.json is not an object")
     except (OSError, json.JSONDecodeError, ValueError):
         # fail-closed: 로드/파싱 실패는 미승인으로 간주
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_not_approved",
             "message": (
-                "codex_review_loop_state.json 로드/파싱에 실패했습니다 (fail-closed). "
+                "codex_review_result.json 로드/파싱에 실패했습니다 (fail-closed). "
                 "gates request-accept를 다시 실행하세요."
             ),
         }
 
-    if str(loop_state.get("status", "")) != "APPROVED":
+    # status/verdict 판정 — result.json은 status(APPROVED)와 verdict(APPROVE_TO_USER)
+    # 중 하나 또는 둘 다를 기록할 수 있으므로 양쪽을 모두 허용한다.
+    _cx_val = str(
+        result_data.get("status", "") or result_data.get("verdict", "") or ""
+    ).upper()
+    _cx_ok = _cx_val in {"APPROVED", "APPROVE_TO_USER", "APPROVE"}
+    if not _cx_ok:
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_not_approved",
@@ -13414,18 +13427,29 @@ def _check_codex_review_gate(
             ),
         }
 
-    # APPROVED — fail-closed 필수 필드 존재 검증 (2차 REJECT 재작업).
-    # "값이 있으면 비교, 없으면 SKIP" 구조의 우회를 차단한다. 아래 5개 필드가
-    # 하나라도 비어 있으면 비교 자체를 SKIP하지 않고 즉시 codex_review_stale BLOCKED.
+    # acceptance_eligible 검증 — 명시적으로 False이면 acceptance 조건 미충족.
+    # 필드가 없으면(None) 하위 호환을 위해 통과시킨다(선택적 필드).
+    _ae = result_data.get("acceptance_eligible")
+    if _ae is not None and _ae is not True:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_not_eligible",
+            "message": (
+                "codex_review_result.json의 acceptance_eligible이 False입니다. "
+                "이 결과는 acceptance 조건을 충족하지 않습니다."
+            ),
+        }
+
+    # APPROVED — fail-closed 필수 필드 존재 검증. 아래 3개 필드가 하나라도
+    # 비어 있으면 비교 자체를 SKIP하지 않고 즉시 codex_review_stale BLOCKED.
+    # result.json에는 accept_code 필드가 없으므로 제외한다.
     required_fields = [
         "pipeline_id",
         "pr_head_sha",
         "packet_sha256",
-        "pr_body_sha256",
-        "accept_code",
     ]
     for field in required_fields:
-        if not str(loop_state.get(field, "") or "").strip():
+        if not str(result_data.get(field, "") or "").strip():
             return {
                 "status": "BLOCKED",
                 "failure_code": "codex_review_stale",
@@ -13437,7 +13461,7 @@ def _check_codex_review_gate(
 
     # pipeline_id 일치 검증 (다른 파이프라인의 승인 상태 재사용 차단).
     # 빈 값 체크는 위 required_fields 루프에서 이미 완료.
-    if str(loop_state["pipeline_id"]) != pipeline_id:
+    if str(result_data["pipeline_id"]) != pipeline_id:
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_stale",
@@ -13459,7 +13483,7 @@ def _check_codex_review_gate(
                 "fail-closed — gates request-accept를 다시 실행하세요."
             ),
         }
-    if str(loop_state["pr_head_sha"]).lower() != str(current_head_sha).lower():
+    if str(result_data["pr_head_sha"]).lower() != str(current_head_sha).lower():
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_stale",
@@ -13492,7 +13516,7 @@ def _check_codex_review_gate(
                 "fail-closed — gates request-accept를 다시 실행하세요."
             ),
         }
-    if req_packet_sha != str(loop_state["packet_sha256"]):
+    if req_packet_sha != str(result_data["packet_sha256"]):
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_stale",
@@ -13502,25 +13526,25 @@ def _check_codex_review_gate(
             ),
         }
 
+    # pr_body_sha256 검증 — result.json의 pr_body_sha256(우선) 또는
+    # pr_body_candidate_sha256을 acceptance_request.json과 비교한다. result에
+    # 두 필드 모두 없으면 선택적 필드로 간주하고 SKIP한다.
     req_body_sha = str(_req.get("pr_body_sha256", "") or "")
-    if not req_body_sha:
-        return {
-            "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
-            "message": (
-                "acceptance_request.json에 pr_body_sha256이 없거나 비어 있습니다. "
-                "fail-closed — gates request-accept를 다시 실행하세요."
-            ),
-        }
-    if req_body_sha != str(loop_state["pr_body_sha256"]):
-        return {
-            "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
-            "message": (
-                "Codex APPROVED 상태의 pr_body_sha256이 현재 acceptance_request.json과 "
-                "다릅니다. PR 본문이 갱신되었습니다. gates request-accept를 다시 실행하세요."
-            ),
-        }
+    _body_sha_from_result = (
+        str(result_data.get("pr_body_sha256") or "")
+        or str(result_data.get("pr_body_candidate_sha256") or "")
+    )
+    if _body_sha_from_result:
+        if req_body_sha != _body_sha_from_result:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "codex_review_stale",
+                "message": (
+                    "Codex APPROVED 상태의 pr_body_sha256이 현재 acceptance_request.json과 "
+                    "다릅니다. PR 본문이 갱신되었습니다. gates request-accept를 다시 실행하세요."
+                ),
+            }
+    # pr_body_sha256이 result.json에 없으면 SKIP (선택적 필드)
 
     return {"status": "PASS"}
 
