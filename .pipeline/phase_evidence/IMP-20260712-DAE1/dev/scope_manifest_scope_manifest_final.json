@@ -1,0 +1,250 @@
+{
+  "pipeline_id": "IMP-20260712-DAE1",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "CODEX_MODEL_ROUTER_SSoT 상수 + risk 규칙 상수"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-1 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_classify_codex_review_risk (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-2 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_build_codex_model_policy (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-3 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_detect_codex_cli_capability (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-4 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_check_codex_cache (rework#2: cache hit 시 cached_actual_model/effort 반환)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-9"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_check_codex_cache 반환에 cached_actual_model/cached_actual_effort 추가 (verified_cache 신뢰 승계)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_review (rework#2: 기본 경로=실제 codex exec, capability gate 재배치, external injection 차단)",
+        "_check_codex_review_operational_trust (신규: request-accept fail-closed 신뢰 게이트)",
+        "_cmd_gates_request_accept (신뢰 게이트 배선)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-6",
+            "AC-7",
+            "AC-9"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "cache miss + 비명시 주입 시 --auto-codex-cli 없이 실제 codex exec 자동 실행 (기본 경로)",
+            "CLI 실행 전 _check_codex_capability_gate 호출 제거 → 실제 실행 후 _check_codex_model_capability_match로 actual_model 검증",
+            "verdict_source in (external_verdict, external_cli_injection) + 비 PIPELINE_TEST_MODE → acceptance_eligible=False 강제",
+            "cache hit 재사용 시 verdict_source=verified_cache + cached actual_model/effort 복원",
+            "신규 _check_codex_review_operational_trust: verdict_source/selected==actual/HIGH·CRITICAL actual!=unknown/router_version·risk_level·model_policy_signature/codex_cli_command placeholder 검증",
+            "_cmd_gates_request_accept에서 router-era 결과에 운영 신뢰 게이트 배선 (PIPELINE_TEST_MODE=1은 생략)",
+            "result에 model_policy_signature 기록"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_build_codex_review_bundle (기존 확장)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-7 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": [
+        "pipeline-manager-agent.md 문서"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8",
+          "implemented_ac": [],
+          "changed_files": [
+            ".claude/agents/pipeline-manager-agent.md"
+          ],
+          "implementation_evidence": [
+            "MT-8 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [
+        "tests/e2e/test_codex_model_router_dae1.py",
+        "tests/e2e/test_codex_model_router_e2e.py",
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        "tests/e2e/test_codex_cost_optimization_9f5e.py",
+        "tests/e2e/test_codex_defects_dae1.py",
+        "pyproject.toml",
+        "tests/e2e/test_ac_tracking_1abe.py",
+        "tests/e2e/test_codex_defect_fix_dae1.py",
+        "tests/oracles/IMP-20260712-DAE1/tc04_high_risk_pipeline/input.json",
+        "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/expected.json",
+        "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/input.json"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_codex_model_router_dae1.py (기존)",
+        "tests/e2e/test_codex_model_router_e2e.py (신규 operational trust + ops gating E2E 13종 추가)",
+        "tests/e2e/test_codex_review_gate_3bb6.py (기존)",
+        "tests/e2e/test_codex_cost_optimization_9f5e.py (요구3 반영: tc7/tc9 PIPELINE_TEST_MODE=1)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-9",
+          "implemented_ac": [
+            "AC-8"
+          ],
+          "changed_files": [
+            "tests/e2e/test_codex_model_router_e2e.py",
+            "tests/e2e/test_codex_cost_optimization_9f5e.py",
+            "tests/e2e/test_codex_defects_dae1.py"
+          ],
+          "implementation_evidence": [
+            "test_codex_model_router_e2e.py: _check_codex_review_operational_trust 11종 + acceptance_eligible ops gating parametrized 6종 추가",
+            "test_codex_cost_optimization_9f5e.py: tc7/tc9를 PIPELINE_TEST_MODE=1로 격리 (요구3 --codex-cli-* 주입 승인 자격 차단 반영)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-10",
+      "files": [
+        "codex_model_router_report.md"
+      ],
+      "affected_functions": [
+        "codex_model_router_report.md (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-10",
+          "implemented_ac": [],
+          "changed_files": [
+            "codex_model_router_report.md"
+          ],
+          "implementation_evidence": [
+            "MT-10 complete"
+          ]
+        }
+      ]
+    }
+  ]
+}
