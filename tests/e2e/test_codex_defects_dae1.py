@@ -122,6 +122,7 @@ def _full_finding() -> Dict[str, object]:
 # ================================================================== #
 def test_1_epoch_missing_blocks_before_cli(tmp_path: Path) -> None:
     """review_epoch 없음 → codex_review_epoch_missing BLOCKED, fake codex marker 미생성."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via marker/output.
     state_path, _ = _setup_state(tmp_path, {"pipeline_id": _PID, "current_phase": 7})
     bin_dir = tmp_path / "bin"
     marker = tmp_path / "codex_called.marker"
@@ -140,6 +141,7 @@ def test_1_epoch_missing_blocks_before_cli(tmp_path: Path) -> None:
 # ================================================================== #
 def test_2_legacy_history_persists_non_converging(tmp_path: Path) -> None:
     """epoch 없는 22회 REJECT 이력 → result 파일에 NON_CONVERGING 영속(history는 보존)."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via result file.
     state_path, pdir = _setup_state(tmp_path, {"pipeline_id": _PID, "current_phase": 7})
     entries = [
         {
@@ -175,6 +177,7 @@ def test_2_legacy_history_persists_non_converging(tmp_path: Path) -> None:
 # ================================================================== #
 def test_3_result_deleted_history_blocks_pre_cli(tmp_path: Path) -> None:
     """named epoch + 5 REJECT history + result 파일 없음 → pre-CLI NON_CONVERGING BLOCKED."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via result file.
     epoch = "epoch_20260712_001"
     state = {
         "pipeline_id": _PID,
