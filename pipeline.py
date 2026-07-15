@@ -9442,8 +9442,16 @@ def _check_package_json_npm_integrity(pkg_root: "Path") -> Dict[str, Any]:
         if not _pkg_json.exists():
             _out["reason"] = "package_json_not_found"
             return _out
-        _raw = _read_text_fallback(_pkg_json)  # 4-encoding fallback (utf-8/utf-8-sig/cp949/latin-1)
-        _data = json.loads(_raw)
+        # REJECT#26 AC-3: 파일이 존재하지만 읽기/파싱 실패 → 조작 의심 → fail-closed.
+        #   "부재"와 "손상"을 구분: 부재는 non-blocking, 손상은 available=True, ok=False.
+        try:
+            _raw = _read_text_fallback(_pkg_json)  # 4-encoding fallback (utf-8/utf-8-sig/cp949/latin-1)
+            _data = json.loads(_raw)
+        except (OSError, PermissionError, json.JSONDecodeError, UnicodeDecodeError, ValueError) as _pe:
+            _out["available"] = True
+            _out["ok"] = False
+            _out["reason"] = f"package_json_exists_but_unreadable:{type(_pe).__name__}:{str(_pe)[:60]}"
+            return _out
         if not isinstance(_data, dict):
             _out["reason"] = "package_json_not_object"
             return _out
@@ -9481,10 +9489,11 @@ def _check_package_json_npm_integrity(pkg_root: "Path") -> Dict[str, Any]:
             _out["reason"] = "integrity_without_resolved"
         return _out
     except Exception as _exc:  # noqa: BLE001
-        # 파싱 실패는 non-blocking(정상 설치를 깨지 않음) — available=False, ok=True.
+        # 예상치 못한 예외(경로 구성 오류 등) — file.exists() 전에 발생하므로 non-blocking.
+        # 파일 읽기/파싱 오류는 위의 개별 try-except에서 fail-closed로 처리됨(REJECT#26 AC-3).
         _out["available"] = False
         _out["ok"] = True
-        _out["reason"] = f"integrity_check_error:{type(_exc).__name__}"
+        _out["reason"] = f"integrity_check_unexpected_error:{type(_exc).__name__}"
         return _out
 
 
@@ -9644,8 +9653,16 @@ def _check_npm_lockfile_integrity(pkg_root: "Path") -> Dict[str, Any]:
             _out["reason"] = "lockfile_absent(global_install_ok)"
             return _out
         _out["source"] = str(_lock_path)
-        _raw = _read_text_fallback(_lock_path)  # 4-encoding fallback
-        _data = json.loads(_raw)
+        # REJECT#26 AC-3: lockfile 존재하지만 읽기/파싱 실패 → 조작 의심 → fail-closed.
+        #   "부재"와 "손상" 구분: lockfile이 없으면 non-blocking, 있는데 파싱 불가면 차단.
+        try:
+            _raw = _read_text_fallback(_lock_path)  # 4-encoding fallback
+            _data = json.loads(_raw)
+        except (OSError, PermissionError, json.JSONDecodeError, UnicodeDecodeError, ValueError) as _pe:
+            _out["available"] = True
+            _out["ok"] = False
+            _out["reason"] = f"lockfile_exists_but_unreadable:{type(_pe).__name__}:{str(_pe)[:60]}"
+            return _out
         if not isinstance(_data, dict):
             _out["reason"] = "lockfile_not_object"
             return _out
@@ -9679,10 +9696,11 @@ def _check_npm_lockfile_integrity(pkg_root: "Path") -> Dict[str, Any]:
             _out["reason"] = f"lockfile_integrity_malformed:{_integrity[:60]}"
         return _out
     except Exception as _exc:  # noqa: BLE001
-        # 파싱/IO 실패는 non-blocking(정상 설치를 깨지 않음) — 문제 1/2/SHA 체인이 신뢰를 담당.
+        # 예상치 못한 예외(경로 구성 오류 등) — lockfile 존재 확인 전에 발생하므로 non-blocking.
+        # lockfile 존재하지만 파싱 실패는 위의 개별 try-except에서 fail-closed로 처리됨(REJECT#26 AC-3).
         _out["available"] = False
         _out["ok"] = True
-        _out["reason"] = f"lockfile_check_error:{type(_exc).__name__}"
+        _out["reason"] = f"lockfile_check_unexpected_error:{type(_exc).__name__}"
         return _out
 
 
@@ -9809,19 +9827,64 @@ def _verify_codex_js_against_registry(
             return _r
         # 3. npm 레지스트리에서 해당 버전 임시 설치 후 JS SHA 비교
         import tempfile as _tf_reg
+        import sys as _sys_reg
+        import shutil as _shutil_reg
+        # REJECT#26 AC-1: Windows .CMD 파일은 shell=True 없이 직접 subprocess 실행 불가.
+        #   shutil.which로 npm 경로를 먼저 확인하여 진짜 "npm 없음"과 "Windows subprocess 제한"을 구분.
+        #   pkg_version은 위에서 semver 검증 완료 → shell=True 사용해도 injection 없음.
+        _npm_exe = (
+            _shutil_reg.which("npm")
+            or _shutil_reg.which("npm.cmd")
+            or _shutil_reg.which("npm.CMD")
+        )
+        if _npm_exe is None:
+            _r["reason"] = "npm_not_found"
+            return _r
+        # REJECT#26 AC-2: 사용자 쓰기 가능 경로(홈 디렉토리, AppData, .nvm 등)의 npm은 신뢰 루트 불가.
+        #   PATH 앞에 가짜 npm을 두는 공격을 차단한다. 시스템 경로(/usr/bin, /usr/local/bin,
+        #   C:\Program Files\)의 npm만 허용한다.
+        _npm_exe_norm = os.path.normcase(os.path.abspath(_npm_exe))
+        _home_norm = os.path.normcase(os.path.abspath(os.path.expanduser("~")))
+        _appdata_norm = os.path.normcase(os.path.abspath(
+            os.environ.get("APPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Roaming"))
+        ))
+        _localappdata_norm = os.path.normcase(os.path.abspath(
+            os.environ.get("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local"))
+        ))
+        _npm_user_writable = (
+            _npm_exe_norm.startswith(_home_norm + os.sep)
+            or _npm_exe_norm.startswith(_appdata_norm + os.sep)
+            or _npm_exe_norm.startswith(_localappdata_norm + os.sep)
+            or os.sep + ".nvm" + os.sep in _npm_exe_norm
+            or os.sep + ".npm" + os.sep in _npm_exe_norm
+        )
+        if _npm_user_writable:
+            _r["reason"] = f"npm_in_user_writable_path:{_npm_exe_norm[:80]}"
+            return _r
+        # Windows에서 .CMD/.BAT 파일: shell=True 필요 (cmd.exe를 통해 실행)
+        _use_shell = _sys_reg.platform == "win32" and str(_npm_exe).lower().endswith((".cmd", ".bat"))
         try:
             with _tf_reg.TemporaryDirectory(prefix="codex_reg_verify_") as _tmpdir:
+                # REJECT#26 AC-2: NPM_CONFIG_* 및 사용자 설정을 제거하여 레지스트리 리다이렉션 공격 차단.
+                #   공식 registry.npmjs.org를 명시적으로 고정한다.
+                _npm_env = {k: v for k, v in os.environ.items()
+                            if not k.upper().startswith("NPM_CONFIG_")}
+                _npm_env.pop("npm_config_registry", None)
+                _npm_env.pop("NPM_CONFIG_REGISTRY", None)
                 _proc = subprocess.run(
                     [
                         "npm", "install",
                         "--prefix", _tmpdir,
                         "--no-save", "--ignore-scripts", "--prefer-offline=false",
+                        "--registry", "https://registry.npmjs.org",
+                        "--no-userconfig",
                         f"@openai/codex@{pkg_version.strip()}",
                     ],
-                    capture_output=True, text=True, timeout=timeout,
+                    shell=_use_shell, capture_output=True, text=True, timeout=timeout,
+                    env=_npm_env,
                 )
                 if _proc.returncode != 0:
-                    # npm 실패: 네트워크 오류 / 버전 없음 등 → available=False (Authenticode fallback)
+                    # npm 실패: 네트워크 오류 / 버전 없음 등 → available=False
                     _err_snippet = (_proc.stderr or "")[:80].replace("\n", " ")
                     _r["reason"] = f"npm_install_error:{_proc.returncode}:{_err_snippet}"
                     return _r
@@ -9861,7 +9924,7 @@ def _verify_codex_js_against_registry(
         except subprocess.TimeoutExpired:
             _r["reason"] = f"npm_install_timeout:{timeout}s"
         except FileNotFoundError:
-            # npm CLI 없음 → available=False (Authenticode fallback)
+            # npm 경로가 shutil.which 이후에도 실행 불가 → available=False
             _r["reason"] = "npm_not_found"
         except Exception as _exc:  # noqa: BLE001
             _r["reason"] = (
@@ -9898,8 +9961,20 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
             + "$subj = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { '' };"
             + "@{status=$sig.Status.ToString();subject=$subj} | ConvertTo-Json -Compress"
         )
+        # REJECT#26 AC-2: bare "powershell" → PATH 주입 공격 가능. 절대 경로 고정.
+        _ps_exe = (
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        )
+        if not os.path.isfile(_ps_exe):
+            # fallback: System32 없으면 SysWOW64 확인
+            _ps_exe_alt = r"C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe"
+            if os.path.isfile(_ps_exe_alt):
+                _ps_exe = _ps_exe_alt
+            else:
+                _r["reason"] = "powershell_not_found_at_system32"
+                return _r
         _proc = subprocess.run(
-            ["powershell", "-NonInteractive", "-Command", _ps_script],
+            [_ps_exe, "-NonInteractive", "-Command", _ps_script],
             capture_output=True, text=True, timeout=20,
         )
         if _proc.returncode != 0:
@@ -29584,6 +29659,16 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                         "[BLOCKED] failure_code=codex_binary_revalidation_trust_failed\n"
                         f"  Codex 실행 파일 경로 신뢰 검증 실패: "
                         f"{_cur_trust.get('untrusted_reason', 'unknown')}\n"
+                        "  gates codex-review를 재실행하세요."
+                    )
+                # REJECT#26 AC-1: acceptance_eligible=False → fail-closed.
+                #   PATH 제거 우회 방지: 저장 경로 재검증 결과의 acceptance_eligible도 강제 확인.
+                #   acceptance_eligible=True가 아니면 승인 코드 발급 경로를 차단한다.
+                if not _cur_trust.get("acceptance_eligible", True):
+                    _die(
+                        "[BLOCKED] failure_code=codex_binary_revalidation_not_eligible\n"
+                        "  Codex 실행 파일 저장 경로 재검증에서 acceptance_eligible=False입니다.\n"
+                        f"  사유: {_cur_trust.get('provenance_reason', 'unknown')[:80]}\n"
                         "  gates codex-review를 재실행하세요."
                     )
                 _cur_sha = _cur_trust.get("sha256", "")

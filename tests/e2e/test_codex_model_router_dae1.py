@@ -7182,3 +7182,176 @@ class TestTC22Reject20ExactHostnameAndExplicitBinE2E:
         assert _result.get("result") == "BLOCKED", (
             f"TC-22e: BLOCKED가 아님 (FAKE_BIN이 실행 불가이므로 BLOCKED 예상): {_result!r}"
         )
+
+
+# ===========================================================================
+# TC-23: REJECT#26 — fail-open 방어 3종 강화
+# ===========================================================================
+class TestTC23Reject26FailOpenDefense:
+    """REJECT#26 수정 5가지를 단위 테스트로 검증한다.
+
+    AC-1: request-accept 저장 경로 재검증에서 acceptance_eligible=False → BLOCKED
+          (_verify_codex_binary_path_trust가 acceptance_eligible=False 반환 시).
+    AC-2a: npm이 사용자 쓰기 가능 경로(%APPDATA%, ~/)에 있으면 available=False.
+    AC-2b: PowerShell은 System32 절대 경로만 사용 (subprocess args 검증).
+    AC-3a: package.json이 존재하지만 JSON 파싱 실패 → available=True, ok=False.
+    AC-3b: .package-lock.json이 존재하지만 JSON 파싱 실패 → available=True, ok=False.
+    AC-4: npm install 명령에 --registry https://registry.npmjs.org 포함.
+    """
+
+    def test_tc23a_corrupted_package_json_fail_closed(self, tmp_path: "Path") -> None:
+        """AC-3a: package.json 존재하지만 JSON 파싱 실패 → available=True, ok=False (fail-closed)."""
+        _pkg_root = tmp_path / "node_modules" / "@openai" / "codex"
+        _pkg_root.mkdir(parents=True, exist_ok=True)
+        # 존재하지만 JSON이 아닌 파일 생성
+        (_pkg_root / "package.json").write_bytes(b"NOT VALID JSON {{{")
+        _result = pipeline._check_package_json_npm_integrity(_pkg_root)
+        assert _result.get("available") is True, (
+            f"TC-23a: corrupted package.json → available=True 필요. 실제: {_result!r}"
+        )
+        assert _result.get("ok") is False, (
+            f"TC-23a: corrupted package.json → ok=False 필요 (fail-closed). 실제: {_result!r}"
+        )
+        _reason = _result.get("reason", "")
+        assert "unreadable" in _reason or "parse" in _reason.lower() or "json" in _reason.lower(), (
+            f"TC-23a: reason에 'unreadable'/parse/json 포함 필요. 실제: {_reason!r}"
+        )
+
+    def test_tc23b_corrupted_lockfile_fail_closed(self, tmp_path: "Path") -> None:
+        """AC-3b: .package-lock.json 존재하지만 파싱 실패 → available=True, ok=False (fail-closed)."""
+        _pkg_root = tmp_path / "node_modules" / "@openai" / "codex"
+        _pkg_root.mkdir(parents=True, exist_ok=True)
+        # node_modules 루트에 손상된 .package-lock.json 생성
+        _lockfile = tmp_path / "node_modules" / ".package-lock.json"
+        _lockfile.write_bytes(b"BROKEN JSON <<<")
+        _result = pipeline._check_npm_lockfile_integrity(_pkg_root)
+        assert _result.get("available") is True, (
+            f"TC-23b: corrupted lockfile → available=True 필요. 실제: {_result!r}"
+        )
+        assert _result.get("ok") is False, (
+            f"TC-23b: corrupted lockfile → ok=False 필요 (fail-closed). 실제: {_result!r}"
+        )
+        _reason = _result.get("reason", "")
+        assert "unreadable" in _reason or "parse" in _reason.lower() or "json" in _reason.lower(), (
+            f"TC-23b: reason에 'unreadable'/parse/json 포함 필요. 실제: {_reason!r}"
+        )
+
+    def test_tc23c_npm_in_user_writable_path_fail_closed(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC-2a: npm이 사용자 홈 디렉토리 하위에 있으면 available=False, reason에 'user_writable' 포함."""
+        import shutil as _shutil_test
+        import json as _json_test
+
+        # 사용자 홈 디렉토리 아래의 가짜 npm 경로 설정
+        _fake_home = tmp_path / "fakehome"
+        _fake_home.mkdir(exist_ok=True)
+        _fake_npm = _fake_home / "AppData" / "Roaming" / "npm" / "npm.CMD"
+        _fake_npm.parent.mkdir(parents=True, exist_ok=True)
+        _fake_npm.write_text("@echo off\n", encoding="utf-8")
+
+        # shutil.which가 사용자 쓰기 가능 경로의 npm을 반환하도록 monkeypatch
+        def _mock_which(name, *args, **kwargs):
+            if name.lower() in ("npm", "npm.cmd", "npm.cmd"):
+                return str(_fake_npm)
+            return _shutil_test.which(name, *args, **kwargs)
+
+        monkeypatch.setattr("shutil.which", _mock_which)
+        # expanduser가 fake home을 반환하도록
+        monkeypatch.setattr("os.path.expanduser", lambda _p: str(_fake_home) if _p == "~" else _p)
+        # APPDATA 환경변수도 fake home 하위로 설정
+        monkeypatch.setenv("APPDATA", str(_fake_home / "AppData" / "Roaming"))
+        monkeypatch.setenv("LOCALAPPDATA", str(_fake_home / "AppData" / "Local"))
+
+        # 유효한 JS 파일 생성 (pkg_version=1.0.0으로 semver 통과)
+        _js_path = tmp_path / "codex.js"
+        _js_path.write_text("console.log('codex')", encoding="utf-8")
+
+        _result = pipeline._verify_codex_js_against_registry(_js_path, "1.0.0")
+        assert _result.get("available") is False, (
+            f"TC-23c: 사용자 쓰기 가능 경로 npm → available=False 필요. 실제: {_result!r}"
+        )
+        _reason = _result.get("reason", "")
+        assert "user_writable" in _reason or "npm_not_found" == _reason, (
+            f"TC-23c: reason에 'user_writable' 또는 'npm_not_found' 필요. 실제: {_reason!r}"
+        )
+
+    def test_tc23d_npm_install_uses_registry_flag(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC-4: npm install 명령에 --registry https://registry.npmjs.org 포함 + --no-userconfig."""
+        import shutil as _shutil_test
+        import subprocess as _subprocess_test
+
+        # 시스템 경로(C:\Program Files 하위)의 가짜 npm 반환
+        _sys_npm = tmp_path / "system" / "npm.CMD"
+        _sys_npm.parent.mkdir(parents=True, exist_ok=True)
+        _sys_npm.write_text("@echo off\n", encoding="utf-8")
+
+        def _mock_which(name, *args, **kwargs):
+            if name.lower() in ("npm", "npm.cmd", "npm.CMD"):
+                return str(_sys_npm)
+            return _shutil_test.which(name, *args, **kwargs)
+
+        monkeypatch.setattr("shutil.which", _mock_which)
+
+        # npm 경로가 user-writable로 분류되지 않도록 expanduser를 home이 아닌 경로로
+        monkeypatch.setattr("os.path.expanduser", lambda _p: "/different/home" if _p == "~" else _p)
+        monkeypatch.setenv("APPDATA", "/different/appdata")
+        monkeypatch.setenv("LOCALAPPDATA", "/different/localappdata")
+
+        _captured_args = []
+
+        def _mock_run(args, *a, **kw):
+            _captured_args.append(args)
+            # npm install이 실패한 것처럼 반환 (네트워크 없음)
+            class _FakeProc:
+                returncode = 1
+                stdout = ""
+                stderr = "npm ERR! network"
+            return _FakeProc()
+
+        monkeypatch.setattr("subprocess.run", _mock_run)
+
+        _js_path = tmp_path / "codex.js"
+        _js_path.write_text("console.log('codex')", encoding="utf-8")
+        pipeline._verify_codex_js_against_registry(_js_path, "0.144.1")
+
+        # npm install 호출이 캡처됐는지 확인
+        _npm_calls = [a for a in _captured_args if "install" in str(a)]
+        assert _npm_calls, (
+            f"TC-23d: npm install이 호출되지 않음. captured: {_captured_args!r}"
+        )
+        _call_args = str(_npm_calls[0])
+        assert "--registry" in _call_args and "registry.npmjs.org" in _call_args, (
+            f"TC-23d: --registry https://registry.npmjs.org 없음. args: {_npm_calls[0]!r}"
+        )
+        assert "--no-userconfig" in _call_args, (
+            f"TC-23d: --no-userconfig 없음. args: {_npm_calls[0]!r}"
+        )
+
+    def test_tc23e_package_json_absent_still_non_blocking(self, tmp_path: "Path") -> None:
+        """AC-3 역방향: package.json이 존재하지 않으면 available=False, ok=True (기존 동작 유지)."""
+        _pkg_root = tmp_path / "node_modules" / "@openai" / "codex"
+        _pkg_root.mkdir(parents=True, exist_ok=True)
+        # package.json을 생성하지 않음
+        _result = pipeline._check_package_json_npm_integrity(_pkg_root)
+        assert _result.get("available") is False, (
+            f"TC-23e: package.json 없음 → available=False 필요. 실제: {_result!r}"
+        )
+        assert _result.get("ok") is True, (
+            f"TC-23e: package.json 없음 → ok=True 필요 (non-blocking). 실제: {_result!r}"
+        )
+
+    def test_tc23f_lockfile_absent_still_non_blocking(self, tmp_path: "Path") -> None:
+        """AC-3 역방향: .package-lock.json이 없으면 available=False, ok=True (기존 동작 유지)."""
+        _pkg_root = tmp_path / "node_modules" / "@openai" / "codex"
+        _pkg_root.mkdir(parents=True, exist_ok=True)
+        # lockfile 생성하지 않음
+        _result = pipeline._check_npm_lockfile_integrity(_pkg_root)
+        assert _result.get("available") is False, (
+            f"TC-23f: lockfile 없음 → available=False 필요. 실제: {_result!r}"
+        )
+        assert _result.get("ok") is True, (
+            f"TC-23f: lockfile 없음 → ok=True 필요 (non-blocking). 실제: {_result!r}"
+        )
