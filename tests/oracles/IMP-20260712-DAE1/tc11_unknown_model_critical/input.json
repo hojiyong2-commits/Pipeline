@@ -1,5 +1,6 @@
 {
   "actual_model": "unknown",
   "risk_level": "CRITICAL",
-  "mode": "enforce"
+  "mode": "enforce",
+  "verification_level": "invocation_verified"
 }
