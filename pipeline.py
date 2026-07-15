@@ -12634,7 +12634,14 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     #   APPROVED, REJECT/BLOCKED면 REJECTED로 매핑하되, diagnostic_only/environment_untrusted 플래그로
     #   downstream(_cmd_gates_codex_review)이 reject_count 증가/즉시 BLOCKED를 결정한다.
     _findings = obj.get("findings")
+    # Defect 6: findings가 빈 리스트인 REJECT는 parse_failure (findings=[] REJECT는 invalid).
+    #   findings=[] + REJECT/BLOCKED → ERROR/invalid_verdict_schema (reject_count 미증가, fail-closed).
+    if isinstance(_findings, list) and len(_findings) == 0 and verdict in ("REJECT", "BLOCKED"):
+        return None
     if isinstance(_findings, list) and len(_findings) > 0:
+        # Defect 5: 각 finding의 필수 필드 검증은 _classify_codex_findings가 담당한다.
+        #   root_cause_category가 없거나 SSoT 목록에 없는 finding은 _classify_codex_findings에서
+        #   이미 IN_SCOPE P0으로 fail-closed 처리되므로, 여기서는 분류 결과를 그대로 신뢰한다.
         _cls = _classify_codex_findings(_findings)
         if verdict == "APPROVE_TO_USER":
             _mapped = "APPROVED"
@@ -12869,8 +12876,12 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                 }
             if _vd["kind"] == "REJECT":
                 # IMP-20260712-DAE1 REJECT#9: structured 필드 보존.
+                # Defect 4: findings scope 분류 필드(_classify_codex_findings 결과)를 결과에 전파한다.
+                #   기존 코드는 findings/in_scope_count/reject_count_delta 등을 전파하지 않아
+                #   _cmd_gates_codex_review에서 _findings_present=False → reject_count_delta=1(기본값)
+                #   버그가 발생했다. NDJSON 경로도 findings 분류 결과를 전파해야 한다.
                 _p = _vd["parsed"]
-                return {
+                _ndjson_reject_result: Dict[str, Any] = {
                     "status": "REJECTED",
                     "error_type": None,
                     "error_retryable": False,
@@ -12884,6 +12895,16 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
                     "required_fix": _p.get("required_fix") or None,
                     "acceptance_criteria": _p.get("acceptance_criteria") or None,
                 }
+                # findings scope 분류 필드 전파 (존재할 때만).
+                for _ff in (
+                    "findings", "in_scope_count", "out_of_scope_diagnostic_count",
+                    "environment_untrusted_count", "reject_count_delta", "diagnostic_only",
+                    "environment_untrusted", "root_cause_categories",
+                ):
+                    _ff_val = _p.get(_ff)
+                    if _ff_val is not None:
+                        _ndjson_reject_result[_ff] = _ff_val
+                return _ndjson_reject_result
             # INVALID (plaintext REJECT 등) → parse_failure
             base["error_type"] = "parse_failure"
             base["error_retryable"] = False
@@ -13083,6 +13104,11 @@ def _record_user_authorized_contract_migration(
     decided_at: str,
 ) -> None:
     """사용자가 직접 결정한 Codex Review Contract 전환을 pipeline state에 기록한다.
+
+    Defect 3: 이 함수는 사용자 명시적 결정(gates codex-review --start-epoch) 경로에서만
+    호출되어야 한다. agent 또는 자동 흐름이 사용자 결정 없이 이 함수를 호출하여 새 epoch를
+    임의 생성하는 것은 금지된다. scope_decision_source는 항상 "user"로 고정되며, review_epoch가
+    비어 있는 상태에서의 자동 CLI 호출은 codex_review_epoch_missing(Defect 1)으로 차단된다.
 
     Args:
         state: 활성 pipeline_state dict.
@@ -27261,15 +27287,62 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             migration_reason=_start_epoch_reason,
             decided_at=_now(),
         )
-        _save_state(state, pipeline_id)
+        _save_state(state)
         _new_epoch = str(
             (state.get("codex_review_contract_migration") or {}).get("review_epoch", "")
         )
-        print(f"[CODEX REVIEW] contract migration 기록 완료")
+        print("[CODEX REVIEW] contract migration 기록 완료")
         print(f"  review_epoch={_new_epoch}")
         print(f"  migration_reason={_start_epoch_reason!r}")
         print("  새 epoch에서 circuit breaker가 초기화됩니다.")
         sys.exit(0)
+
+    # Defect 1: review_epoch 비어있으면 Codex CLI 미호출 - codex_review_epoch_missing BLOCKED.
+    #   단, explicit 주입(--verdict/--codex-cli-*)과 PIPELINE_TEST_MODE는 실제 Codex CLI를 호출하지
+    #   않고 주입/모의 결과를 사용하므로 epoch 요구 대상이 아니다. 이 exemption은 evidence_complete
+    #   gate(_explicit_injection) 및 기존 explicit-injection 규칙과 동일한 패턴이며, 실제 CLI를 호출하는
+    #   경로에서만 fail-closed epoch 요구를 강제한다(하위 호환 보존, BUG-20260702-E69E 회귀 방지).
+    _d1_explicit_injection = (
+        getattr(args, "verdict", None) is not None
+        or getattr(args, "codex_cli_exit_code", None) is not None
+    )
+    _d1_test_mode = str(os.environ.get("PIPELINE_TEST_MODE", "") or "").strip() == "1"
+    _migration_check = state.get("codex_review_contract_migration") if isinstance(state, dict) else None
+    _current_epoch = str(_migration_check.get("review_epoch", "") or "") if isinstance(_migration_check, dict) else ""
+    if not _current_epoch and not _d1_explicit_injection and not _d1_test_mode:
+        # Defect 2: epoch_legacy 이력으로 circuit breaker 체크하여 NON_CONVERGING 상태 기록.
+        _legacy_hist: List[Dict[str, Any]] = []
+        try:
+            _legacy_hist_p = _codex_review_history_path()
+            if _legacy_hist_p.exists():
+                for _legacy_ln in _legacy_hist_p.read_text(encoding="utf-8").splitlines():
+                    _legacy_ln = _legacy_ln.strip()
+                    if not _legacy_ln:
+                        continue
+                    try:
+                        _legacy_obj = json.loads(_legacy_ln)
+                        if isinstance(_legacy_obj, dict):
+                            _legacy_hist.append(_legacy_obj)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+        except OSError:
+            _legacy_hist = []
+        _legacy_cb = _check_codex_circuit_breaker(_legacy_hist, "epoch_legacy")
+        _legacy_nc_msg = ""
+        if _legacy_cb.get("triggered"):
+            _legacy_nc_msg = (
+                f"\n  epoch_legacy 이력에서 circuit breaker 발동: reason={_legacy_cb.get('reason')}, "
+                f"effective_rejects={_legacy_cb.get('effective_rejects')}, "
+                f"same_category_max={_legacy_cb.get('same_category_max')}\n"
+                "  이 이력은 NON_CONVERGING 상태입니다."
+            )
+        _die(
+            "[BLOCKED] failure_code=codex_review_epoch_missing\n"
+            "  review_epoch가 설정되지 않았습니다 — Codex CLI를 호출하지 않습니다 (fail-closed).\n"
+            f"  기존 이력 항목 수: {len(_legacy_hist)}개 (epoch_legacy로 정규화됨){_legacy_nc_msg}\n"
+            "  먼저 사용자 결정(contract migration)으로 새 epoch를 시작하세요:\n"
+            "  python pipeline.py gates codex-review --start-epoch '이유를 입력하세요'"
+        )
 
     # BUG-20260702-E69E: 직전 기록에서 reject/CLI-error 누적 카운터를 읽는다.
     #   reject_count는 status==REJECTED일 때만, cli_error_count는 status==ERROR일 때만 누적한다.
@@ -27295,6 +27368,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             prev_reject_count = 0
             prev_cli_error_count = 0
             prev_status = ""
+
+    # Defect 10: 이전 상태가 NON_CONVERGING이면 즉시 BLOCKED (사용자 결정 전 재실행 금지).
+    if prev_status == "NON_CONVERGING":
+        _die(
+            "[BLOCKED] failure_code=codex_review_non_converging_blocked\n"
+            f"  이전 Codex Review 결과가 NON_CONVERGING 상태입니다(reject_count={prev_reject_count}).\n"
+            "  자동 force-review, counter 초기화, 자동 epoch 생성은 모두 금지됩니다 (fail-closed).\n"
+            "  사용자 결정으로 새 epoch를 시작하세요:\n"
+            "  python pipeline.py gates codex-review --start-epoch '이유를 입력하세요'"
+        )
 
     # BUG-20260702-E69E: Codex Review 입력 bundle을 SSoT artifact로 먼저 materialize한다(fail-closed).
     #   이 write가 review_bundle_sha256을 non-empty로 만들어, 이후 _codex_snapshot_identity가
@@ -28407,51 +28490,65 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         _reject_delta = int(_cli.get("reject_count_delta", 1) or 0) if _findings_present else 1
     else:
         _reject_delta = 0
+    # Defect 7: 불변식 강제 — findings 기반 REJECT에서 in_scope_count=0 and environment_untrusted_count=0
+    #   이면 reject_count_delta=0(findings scope 분류의 최종 방어선). Defect 4로 NDJSON REJECT의 findings
+    #   분류 필드가 전파되므로, out-of-scope-only findings REJECT는 여기서 delta=0으로 고정된다.
+    #   NOTE: _findings_present=False인 legacy/explicit REJECT(findings 없는 순수 REJECT)는 이 불변식
+    #   대상이 아니다 — 기존 BUG-20260702-E69E 의미(explicit REJECT는 reject_count 증가)를 보존한다.
+    if (
+        _findings_present
+        and _finding_in_scope == 0
+        and _finding_env_untrusted == 0
+        and review_status == "REJECTED"
+    ):
+        _reject_delta = 0
     new_reject_count = prev_reject_count + _reject_delta
     new_cli_error_count = prev_cli_error_count  # ERROR 경로는 별도 함수에서 처리됨
 
     # ENVIRONMENT_UNTRUSTED finding → 실제 침해 증거 → 즉시 fail-closed BLOCKED(결과 기록 후 종료).
     _env_untrusted_blocked = _finding_env_untrusted > 0
 
-    # 수렴성 circuit breaker: contract migration(review_epoch)이 기록된 경우에만 활성화한다.
+    # Defect 8: circuit breaker를 항상 활성화한다 (review_epoch가 없으면 "epoch_legacy" 사용).
+    #   기존에는 review_epoch가 없으면 circuit breaker가 비활성화됐음.
     #   현재 attempt를 포함해 history를 평가하여 same_category_3x 또는 reject_count_5x이면 NON_CONVERGING.
     _migration = state.get("codex_review_contract_migration") if isinstance(state, dict) else None
     _review_epoch = (
         str(_migration.get("review_epoch", "") or "") if isinstance(_migration, dict) else ""
     )
+    _effective_cb_epoch = _review_epoch or "epoch_legacy"  # Defect 8: epoch_legacy fallback
     _non_converging = False
     _non_converging_reason = ""
-    if _review_epoch:
-        _cb_hist: List[Dict[str, Any]] = []
-        try:
-            _hist_p = _codex_review_history_path()
-            if _hist_p.exists():
-                for _ln in _hist_p.read_text(encoding="utf-8").splitlines():
-                    _ln = _ln.strip()
-                    if not _ln:
-                        continue
-                    try:
-                        _obj = json.loads(_ln)
-                        if isinstance(_obj, dict):
-                            _cb_hist.append(_obj)
-                    except (json.JSONDecodeError, ValueError):
-                        continue
-        except OSError:
-            _cb_hist = []
-        _synthetic_current = {
-            "review_epoch": _review_epoch,
-            "status": review_status,
-            "verdict_scope": (
-                "OUT_OF_SCOPE_DIAGNOSTIC" if _finding_diagnostic_only
-                else ("IN_SCOPE" if (review_status == "REJECTED" and _reject_delta == 1) else "")
-            ),
-            "root_cause_category": _finding_categories[0] if _finding_categories else "",
-            "counts_toward_reject_rate_limit": _reject_delta == 1,
-        }
-        _cb = _check_codex_circuit_breaker(_cb_hist + [_synthetic_current], _review_epoch)
-        if _cb.get("triggered"):
-            _non_converging = True
-            _non_converging_reason = str(_cb.get("reason") or "circuit_breaker")
+    # Always activate circuit breaker (not conditioned on _review_epoch).
+    _cb_hist: List[Dict[str, Any]] = []
+    try:
+        _hist_p = _codex_review_history_path()
+        if _hist_p.exists():
+            for _ln in _hist_p.read_text(encoding="utf-8").splitlines():
+                _ln = _ln.strip()
+                if not _ln:
+                    continue
+                try:
+                    _obj = json.loads(_ln)
+                    if isinstance(_obj, dict):
+                        _cb_hist.append(_obj)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+    except OSError:
+        _cb_hist = []
+    _synthetic_current = {
+        "review_epoch": _effective_cb_epoch,
+        "status": review_status,
+        "verdict_scope": (
+            "OUT_OF_SCOPE_DIAGNOSTIC" if _finding_diagnostic_only
+            else ("IN_SCOPE" if (review_status == "REJECTED" and _reject_delta == 1) else "")
+        ),
+        "root_cause_category": _finding_categories[0] if _finding_categories else "",
+        "counts_toward_reject_rate_limit": _reject_delta == 1,
+    }
+    _cb = _check_codex_circuit_breaker(_cb_hist + [_synthetic_current], _effective_cb_epoch)
+    if _cb.get("triggered"):
+        _non_converging = True
+        _non_converging_reason = str(_cb.get("reason") or "circuit_breaker")
     # NON_CONVERGING이면 result status를 덮어쓴다(reject_count/history는 보존).
     _effective_status = "NON_CONVERGING" if _non_converging else review_status
 
