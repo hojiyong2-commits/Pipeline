@@ -5312,7 +5312,8 @@ def test_native_binary_missing_blocks_operational_trust() -> None:
         "model_verification_level": "invocation_verified",
         "codex_cli_command": f"codex exec --model {_model} -c model_reasoning_effort=xhigh",
         "codex_binary_path": "some_path",
-        "codex_binary_sha256": "abc123",
+        # REJECT#28 AC-4: binary SHA는 유효 64-hex여야 형식 검사를 통과하고 native 체인 검사에 도달한다.
+        "codex_binary_sha256": "a" * 64,
         # native binary 필드 비어있음 → BLOCKED 기대
         "codex_native_binary_path": "",
         "codex_native_binary_sha256": "",
@@ -5588,11 +5589,11 @@ class TestTC17PosixNpmSymlink:
             "trusted": True,
             "codex_install_type": "direct_native",
             "codex_binary_path": "/usr/local/bin/codex",
-            "codex_binary_sha256": "abc123",
+            "codex_binary_sha256": "a" * 64,
             "codex_js_entrypoint_path": "",
             "codex_js_entrypoint_sha256": "",
             "codex_native_binary_path": "/usr/local/bin/codex",
-            "codex_native_binary_sha256": "abc123",
+            "codex_native_binary_sha256": "e" * 64,
         }
         outcome = pipeline._check_codex_review_operational_trust(result)
         assert outcome.get("status") != "BLOCKED" or "native_binary" not in outcome.get(
@@ -5623,7 +5624,7 @@ class TestTC17PosixNpmSymlink:
             "model_verification_level": "invocation_verified",
             "codex_cli_command": f"codex exec --model {_model} -c model_reasoning_effort=high",
             "codex_binary_path": "/usr/bin/codex",
-            "codex_binary_sha256": "abc123",
+            "codex_binary_sha256": "a" * 64,
             # direct_native: native 체인 필드는 비어 있어도 면제된다.
             "codex_native_binary_path": "",
             "codex_native_binary_sha256": "",
@@ -5657,7 +5658,7 @@ class TestTC17PosixNpmSymlink:
             "model_verification_level": "invocation_verified",
             "codex_cli_command": f"codex exec --model {_model} -c model_reasoning_effort=high",
             "codex_binary_path": "/usr/bin/codex",
-            "codex_binary_sha256": "abc123",
+            "codex_binary_sha256": "a" * 64,
             "codex_native_binary_path": "",
             "codex_native_binary_sha256": "",
             # codex_install_type 미기록 → 면제 없음, native 체인 강제
@@ -7360,3 +7361,241 @@ class TestTC23Reject26FailOpenDefense:
         assert _result.get("ok") is True, (
             f"TC-23f: lockfile 없음 → ok=True 필요 (non-blocking). 실제: {_result!r}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# TC-24: REJECT#28 — 실제 실행 node 인터프리터 신뢰 검증 + SHA 형식 강제 + clean env 전파
+# --------------------------------------------------------------------------- #
+class TestTC24Reject28NodeInterpreterVerification:
+    """REJECT#28 — 실제 실행 체인 인터프리터 검증 5종 AC를 검증한다.
+
+    AC1: 정품 wrapper·JS·native + 악성 wrapper-local node → BLOCKED, acceptance_eligible=False.
+    AC2: POSIX PATH 선두 악성 node(홈 디렉토리) shebang 실행 → BLOCKED.
+    AC3: 실제 실행 인터프리터의 절대 경로/SHA가 trust result에 포함된다.
+    AC4: unreadable:/비-hex/64자리 아님 binary SHA → 운영 신뢰 검사 BLOCKED.
+    AC5: 모든 Codex subprocess(login/exec/version) 환경에 OPENAI_API_KEY가 없다.
+    """
+
+    def _make_fake_npm_wrapper(self, tmp_path: "Path", wrapper_name: str = "codex.cmd") -> "Path":
+        bin_dir = tmp_path / "npm_bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        wrapper = bin_dir / wrapper_name
+        wrapper.write_text(
+            '@echo off\nnode "%~dp0\\node_modules\\@openai\\codex\\bin\\codex.js" %*\n',
+            encoding="utf-8",
+        )
+        return wrapper
+
+    def _wire_genuine_chain(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> "Path":
+        """정품 wrapper/JS/native 체인 + provenance/authenticode/registry 모두 정상으로 mock."""
+        import tempfile as _tf_mod
+
+        pkg_dir = tmp_path / "node_modules" / "@openai" / "codex"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        bin_dir = pkg_dir / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        js_ep = bin_dir / "codex.js"
+        js_ep.write_text("#!/usr/bin/env node\nconsole.log('codex');\n", encoding="utf-8")
+        vendor_dir = pkg_dir / "vendor"
+        vendor_dir.mkdir(exist_ok=True)
+        native = vendor_dir / "codex_native_bin"
+        native.write_bytes(b"\x00GENUINE_NATIVE" * 20)
+
+        monkeypatch.setattr(_tf_mod, "gettempdir", lambda: "/nonexistent_temp_dir_for_tc24")
+        monkeypatch.setattr(
+            pipeline, "_check_npm_lockfile_integrity",
+            lambda _root: {"available": False, "ok": True, "reason": "lockfile_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_check_package_json_npm_integrity",
+            lambda _root: {"available": False, "ok": True, "reason": "integrity_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_get_npm_ls_integrity",
+            lambda _root=None: {"available": False, "ok": True, "reason": "npm_ls_absent"},
+        )
+        monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
+        monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
+        monkeypatch.setattr(
+            pipeline, "_check_authenticode_signature",
+            lambda _path: {"available": True, "ok": True, "subject": 'CN="OpenAI OpCo, LLC"', "reason": "authenticode_valid_openai"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_js_against_registry",
+            lambda _js, _ver, **_kw: {"ok": True, "available": True, "reason": "js_sha_matches_registry"},
+        )
+        npm_bin_dir = str(tmp_path / "npm_bin")
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
+        monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
+        monkeypatch.setattr(pipeline, "_verify_npm_wrapper_content", lambda _p: True)
+        return self._make_fake_npm_wrapper(tmp_path)
+
+    def test_tc24a_malicious_wrapper_local_node_blocked(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC1: 정품 wrapper/JS/native + 악성 wrapper-local node → acceptance_eligible=False, node_trusted=False."""
+        wrapper = self._wire_genuine_chain(tmp_path, monkeypatch)
+        # 실제 실행 node를 사용자 쓰기 가능 위치의 악성 node로 판정하도록 mock.
+        monkeypatch.setattr(
+            pipeline, "_verify_node_interpreter_trust",
+            lambda _wrap, _js: {
+                "node_interpreter_path": str(tmp_path / "npm_bin" / "node.exe"),
+                "node_interpreter_sha256": "f" * 64,
+                "node_interpreter_trusted": False,
+                "node_interpreter_reason": "node_in_user_writable_path:/home/evil/node.exe",
+            },
+        )
+        _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
+        assert _r.get("trusted") is True, f"TC-24a: 체인 구조 OK인데 trusted=False: {_r!r}"
+        assert _r.get("acceptance_eligible") is False, (
+            f"TC-24a: 악성 node인데 acceptance_eligible=True (차단되어야 함): {_r!r}"
+        )
+        assert _r.get("node_interpreter_trusted") is False, (
+            f"TC-24a: node_interpreter_trusted가 False여야 함: {_r!r}"
+        )
+        assert "node_interpreter_untrusted" in str(_r.get("provenance_reason") or ""), (
+            f"TC-24a: provenance_reason에 node_interpreter_untrusted 없음: {_r.get('provenance_reason')!r}"
+        )
+
+    def test_tc24b_posix_path_node_in_home_blocked(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC2: POSIX PATH의 node가 홈 디렉토리 하위이면 node_interpreter_trusted=False (BLOCKED)."""
+        import pytest
+        if pipeline.sys.platform == "win32":
+            pytest.skip("POSIX shebang PATH node 검증 전용 (win32 제외)")
+        # 홈 디렉토리 하위의 악성 node를 PATH가 반환하도록 mock.
+        _evil_node = os.path.join(os.path.expanduser("~"), ".nvm", "versions", "node", "bin", "node")
+        monkeypatch.setattr(pipeline.shutil, "which", lambda _n: _evil_node if "node" in _n else None)
+        wrapper = tmp_path / "codex"  # POSIX shebang wrapper (경로는 위치 검사에 무관)
+        wrapper.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+        _r = pipeline._verify_node_interpreter_trust(wrapper, None)
+        assert _r.get("node_interpreter_trusted") is False, (
+            f"TC-24b: 홈 디렉토리 node인데 trusted=True (차단되어야 함): {_r!r}"
+        )
+        assert "user_writable" in str(_r.get("node_interpreter_reason") or ""), (
+            f"TC-24b: reason에 user_writable 없음: {_r.get('node_interpreter_reason')!r}"
+        )
+
+    def test_tc24c_trust_result_contains_node_fields(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC3: trust result에 node_interpreter_path/sha256/trusted 필드가 포함된다."""
+        wrapper = self._wire_genuine_chain(tmp_path, monkeypatch)
+        # 정상 node 판정으로 mock — 필드 존재 + acceptance_eligible=True 확인.
+        monkeypatch.setattr(
+            pipeline, "_verify_node_interpreter_trust",
+            lambda _wrap, _js: {
+                "node_interpreter_path": "/usr/bin/node",
+                "node_interpreter_sha256": "a" * 64,
+                "node_interpreter_trusted": True,
+                "node_interpreter_reason": "node_interpreter_trusted",
+            },
+        )
+        _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
+        assert "node_interpreter_path" in _r and "node_interpreter_sha256" in _r, (
+            f"TC-24c: trust result에 node 필드 없음: {sorted(_r.keys())!r}"
+        )
+        assert _r.get("node_interpreter_path") == "/usr/bin/node", _r
+        assert _r.get("node_interpreter_sha256") == "a" * 64, _r
+        assert _r.get("node_interpreter_trusted") is True, _r
+        assert _r.get("acceptance_eligible") is True, (
+            f"TC-24c: 정품 체인 + 신뢰 node인데 acceptance_eligible=False: {_r!r}"
+        )
+
+    def test_tc24d_unreadable_binary_sha_operational_trust_blocked(self) -> None:
+        """AC4: codex_binary_sha256='unreadable:test' → 운영 신뢰 검사 BLOCKED (invalid format)."""
+        r = pipeline._check_codex_review_operational_trust(
+            _trust_base(codex_binary_sha256="unreadable:test")
+        )
+        assert r["status"] == "BLOCKED", f"TC-24d: unreadable SHA인데 통과: {r!r}"
+        assert r["failure_code"] == "codex_review_binary_sha_invalid_format", r
+
+    def test_tc24e_short_binary_sha_operational_trust_blocked(self) -> None:
+        """AC4: codex_binary_sha256이 32자리 → 운영 신뢰 검사 BLOCKED (invalid format)."""
+        r = pipeline._check_codex_review_operational_trust(
+            _trust_base(codex_binary_sha256="a" * 32)
+        )
+        assert r["status"] == "BLOCKED", f"TC-24e: 32자리 SHA인데 통과: {r!r}"
+        assert r["failure_code"] == "codex_review_binary_sha_invalid_format", r
+
+    def test_tc24e2_valid_helper_and_native_node_format(self) -> None:
+        """AC4 보강: _is_valid_sha256_hex 형식 + native/node SHA 형식도 운영 신뢰 검사에서 강제."""
+        assert pipeline._is_valid_sha256_hex("a" * 64) is True
+        assert pipeline._is_valid_sha256_hex("unreadable:x") is False
+        assert pipeline._is_valid_sha256_hex("A" * 64) is False  # 대문자 불허
+        # native SHA 비-hex → BLOCKED
+        r_native = pipeline._check_codex_review_operational_trust(
+            _trust_base(codex_native_binary_sha256="z" * 64)
+        )
+        assert r_native["status"] == "BLOCKED", r_native
+        assert r_native["failure_code"] == "codex_review_native_binary_sha_invalid_format", r_native
+
+    def test_tc24f_all_codex_subprocess_env_no_openai_api_key(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """AC5: login/exec/version 등 모든 Codex subprocess 환경에 OPENAI_API_KEY가 없다."""
+        import inspect
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-" + "EXAMPLE_DUMMY_" + "A" * 24)
+        _captured_envs: list = []
+
+        class _FakeProc:
+            returncode = 0
+            stdout = "codex-cli 1.0.0\n"
+            stderr = ""
+
+        def _fake_run(cmd, *a, **kw):
+            _captured_envs.append(kw.get("env"))
+            return _FakeProc()
+
+        monkeypatch.setattr(pipeline.subprocess, "run", _fake_run)
+
+        # (1) capability: --version 경로 (clean env 전달 필수)
+        pipeline._detect_codex_cli_capability(
+            verified_bin_path="/x/codex", env=pipeline._codex_clean_env()
+        )
+        # (2) exec: _invoke_codex_exec는 내부에서 OPENAI_API_KEY 제거 env를 구성
+        pipeline._invoke_codex_exec("gpt-5.6-sol", "high", "prompt", codex_bin="/x/codex")
+        # (3) login status: _check_codex_chatgpt_auth (명시 codex_bin은 trust 검증 bypass 위해 mock)
+        monkeypatch.setattr(pipeline, "_verify_codex_binary_path_trust", _mock_verify_trust_ok)
+        pipeline._check_codex_chatgpt_auth(codex_bin="/x/codex")
+
+        assert len(_captured_envs) >= 3, f"TC-24f: subprocess 호출이 3회 미만: {len(_captured_envs)}"
+        for _i, _env in enumerate(_captured_envs):
+            assert _env is not None, f"TC-24f: subprocess #{_i}에 env가 전달되지 않음(None)"
+            assert "OPENAI_API_KEY" not in _env, (
+                f"TC-24f: subprocess #{_i} 환경에 OPENAI_API_KEY가 남아 있음"
+            )
+        # --version(_cmd_gates_codex_review) 호출부가 clean env를 전달하는지 소스로 확인.
+        _src = inspect.getsource(pipeline._cmd_gates_codex_review)
+        assert '[_ver_bin, "--version"]' in _src and "_codex_clean_env()" in _src, (
+            "TC-24f: _cmd_gates_codex_review의 --version 호출부에 clean env 전파 누락"
+        )
+
+    def test_tc24g_node_interpreter_registered_in_critical(self) -> None:
+        """AC1 보강: _verify_node_interpreter_trust가 CRITICAL 보호 목록에 등록됨(단독 변경 감지)."""
+        assert "_verify_node_interpreter_trust" in pipeline.CODEX_CRITICAL_FUNCTIONS, (
+            "REJECT#28: _verify_node_interpreter_trust가 CRITICAL 보호 목록에 없음(우회 가능)"
+        )
+
+    def test_tc24h_operational_trust_node_chain_required_for_wrapper(self) -> None:
+        """AC3 보강: install_type=npm_wrapper인데 node 체인 부재 → 운영 신뢰 검사 BLOCKED."""
+        r = pipeline._check_codex_review_operational_trust(
+            _trust_base(codex_install_type="npm_wrapper")  # node 필드 미기록
+        )
+        assert r["status"] == "BLOCKED", f"TC-24h: wrapper인데 node 체인 부재 통과: {r!r}"
+        assert r["failure_code"] == "codex_review_node_interpreter_chain_missing", r
+
+    def test_tc24i_operational_trust_node_chain_present_passes(self) -> None:
+        """AC3 보강: install_type=npm_wrapper + 신뢰 node 체인 기록 → 운영 신뢰 검사 PASS."""
+        r = pipeline._check_codex_review_operational_trust(
+            _trust_base(
+                codex_install_type="npm_wrapper",
+                codex_node_interpreter_path="/usr/bin/node",
+                codex_node_interpreter_sha256="c" * 64,
+                codex_node_interpreter_trusted=True,
+            )
+        )
+        assert r["status"] == "PASS", f"TC-24i: 정상 node 체인인데 BLOCKED: {r!r}"

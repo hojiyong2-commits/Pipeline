@@ -2437,6 +2437,10 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   두 함수 모두 단독 변경으로 acceptance_eligible=True 우회 가능 → CRITICAL 분류 필수.
     "_check_authenticode_signature",
     "_verify_codex_js_against_registry",
+    # IMP-20260712-DAE1 REJECT#28: 실제 실행 체인 node 인터프리터 신뢰 검증 helper 등록.
+    #   _verify_node_interpreter_trust를 단독 변경하면 사용자 쓰기 가능 위치의 악성 node를
+    #   그대로 실행시켜 로그인·모델·APPROVE 출력을 위조할 수 있으므로 CRITICAL 분류 필수이다.
+    "_verify_node_interpreter_trust",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -10014,6 +10018,161 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
     return _r
 
 
+# [Purpose]: REJECT#28 AC-4 — 저장/전달되는 모든 binary SHA가 정확히 64자리 hex인지 강제한다.
+# [Assumptions]: 정상 SHA-256 hexdigest는 소문자 [0-9a-f] 64자리이다.
+# [Vulnerability & Risks]: unreadable:/비-hex/길이 불일치를 통과시키면 재검증을 우회할 수 있어
+#            fail-closed로 즉시 False를 반환한다.
+# [Improvement]: 대문자 hex 허용이 필요하면 str.lower() 후 비교하도록 확장 가능하나, 현재는
+#            hexdigest()가 항상 소문자를 생성하므로 소문자만 허용한다.
+def _is_valid_sha256_hex(sha: Any) -> bool:
+    """정확히 64자리 소문자 hex SHA-256만 유효로 판정한다(REJECT#28 AC-4, fail-closed).
+
+    Args:
+        sha: 검증할 SHA 문자열(또는 임의 값).
+    Returns:
+        True = 정확히 64자리 [0-9a-f]. unreadable:/비-hex/길이 불일치/비-str은 모두 False.
+    """
+    if not isinstance(sha, str):
+        return False
+    return re.fullmatch(r"[0-9a-f]{64}", sha) is not None
+
+
+# [Purpose]: REJECT#28 AC-5 — 모든 Codex subprocess(login/exec/capability/--version)에 전달할
+#            환경에서 OPENAI_API_KEY를 제거한다(ChatGPT Plus 인증만 사용, API key 인증 차단).
+# [Assumptions]: 환경변수 키는 대소문자를 구분하나, 방어적으로 두 형태 모두 제거한다.
+# [Vulnerability & Risks]: env를 전달하지 않는 subprocess는 현재 프로세스의 OPENAI_API_KEY를
+#            상속하여 API key 인증으로 우회될 수 있으므로, 모든 Codex 호출에 이 env를 전달해야 한다.
+# [Improvement]: 향후 다른 민감 변수(예: CODEX_TOKEN)도 제거 대상에 추가할 수 있다.
+def _codex_clean_env() -> Dict[str, str]:
+    """OPENAI_API_KEY를 제거한 Codex subprocess용 환경 dict를 반환한다(REJECT#28 AC-5).
+
+    Returns:
+        os.environ 복사본에서 OPENAI_API_KEY(대/소문자)를 제거한 dict.
+    """
+    _e = os.environ.copy()
+    _e.pop("OPENAI_API_KEY", None)
+    _e.pop("openai_api_key", None)
+    return _e
+
+
+# [Purpose]: REJECT#28 AC-1/2/3 — wrapper(.cmd)/POSIX shebang이 실제로 실행하는 node 인터프리터를
+#            결정적으로 해석하고, 위치(사용자 쓰기 가능)·Authenticode 서명·SHA를 검증한다.
+#            정품 wrapper/JS/native를 그대로 둔 채 사용자 쓰기 가능 위치의 악성 node로 로그인·모델·
+#            APPROVE 출력을 위조하는 공격 벡터를 차단한다.
+# [Assumptions]: Windows npm/codex 래퍼는 `%~dp0\node.exe`(래퍼 옆 node.exe)를 우선 실행하며, 없으면
+#            PATH의 node로 대체된다. POSIX shebang(env node)은 PATH의 node를 실행한다.
+# [Vulnerability & Risks]: PATH 선두에 주입된 사용자 쓰기 가능 node를 시스템 경로로 오인하면 우회
+#            가능하므로, 사용자 쓰기 가능 경로/서명 무효는 즉시 fail-closed(node_interpreter_trusted=False).
+# [Improvement]: package.json의 engines/실행 로그로 실제 spawn된 인터프리터를 관측하면 정밀도를 높일 수 있다.
+def _verify_node_interpreter_trust(
+    wrapper_path: "Path", js_entrypoint_path: "Optional[Path]"
+) -> Dict[str, Any]:
+    """wrapper/shebang이 실행하는 node 인터프리터를 해석하고 신뢰(위치·서명·SHA)를 검증한다.
+
+    차단(fail-closed) 대상:
+      - 사용자 쓰기 가능 경로(홈/AppData/.nvm/.npm/nvm/volta)의 node.
+      - POSIX PATH 선두에 주입된 비-시스템 경로 node.
+      - (Windows) Authenticode 서명이 유효(Valid)하지 않거나 조회 불가한 node.exe.
+
+    Args:
+        wrapper_path: 신뢰 위치로 판정된 래퍼/심볼릭/shebang 경로. None 불가.
+        js_entrypoint_path: JS 진입점 경로(참고용). None이면 native 직접 실행 → node 불필요.
+    Returns:
+        {"node_interpreter_path": str, "node_interpreter_sha256": str,
+         "node_interpreter_trusted": bool, "node_interpreter_reason": str}.
+    Raises:
+        TypeError: wrapper_path가 None인 경우.
+    """
+    if wrapper_path is None:
+        raise TypeError("wrapper_path must not be None")
+    _r: Dict[str, Any] = {
+        "node_interpreter_path": "",
+        "node_interpreter_sha256": "",
+        "node_interpreter_trusted": False,
+        "node_interpreter_reason": "",
+    }
+    try:
+        if not isinstance(wrapper_path, Path):
+            _r["node_interpreter_reason"] = "wrapper_path_invalid_type"
+            return _r
+        # 1) 실제 실행되는 node 경로를 결정적으로 해석한다.
+        _node_path = ""
+        if sys.platform == "win32":
+            # Windows npm/codex .cmd 래퍼는 `%~dp0\node.exe`(래퍼 옆 node.exe)를 우선 사용한다.
+            try:
+                _sibling = wrapper_path.parent / "node.exe"
+            except Exception:  # noqa: BLE001
+                _sibling = None
+            if _sibling is not None and _sibling.is_file():
+                _node_path = str(_sibling)
+            else:
+                _node_path = shutil.which("node.exe") or shutil.which("node") or ""
+        else:
+            # POSIX shebang(#!/usr/bin/env node)은 PATH에서 node를 해석한다.
+            _node_path = shutil.which("node") or shutil.which("node.exe") or ""
+        if not _node_path:
+            _r["node_interpreter_reason"] = "node_interpreter_not_found"
+            return _r
+        _node_abs = os.path.abspath(_node_path)
+        _node_norm = os.path.normcase(_node_abs)
+        _r["node_interpreter_path"] = _node_abs
+
+        # 2) 사용자 쓰기 가능 경로 차단(PATH 선두 주입/home nvm 방어).
+        _home_norm = os.path.normcase(os.path.abspath(os.path.expanduser("~")))
+        _appdata_norm = os.path.normcase(os.path.abspath(
+            os.environ.get("APPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Roaming"))
+        ))
+        _localappdata_norm = os.path.normcase(os.path.abspath(
+            os.environ.get("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local"))
+        ))
+        _user_writable = (
+            _node_norm.startswith(_home_norm + os.sep)
+            or _node_norm.startswith(_appdata_norm + os.sep)
+            or _node_norm.startswith(_localappdata_norm + os.sep)
+            or os.sep + ".nvm" + os.sep in _node_norm
+            or os.sep + ".npm" + os.sep in _node_norm
+            or os.sep + ".volta" + os.sep in _node_norm
+            or os.sep + "nvm" + os.sep in _node_norm
+        )
+        if _user_writable:
+            _r["node_interpreter_reason"] = f"node_in_user_writable_path:{_node_norm[:80]}"
+            return _r
+
+        # 3) SHA-256 계산.
+        try:
+            _node_sha = hashlib.sha256(Path(_node_path).read_bytes()).hexdigest()
+        except (OSError, PermissionError) as _exc:
+            _r["node_interpreter_reason"] = f"node_sha_read_error:{type(_exc).__name__}"
+            return _r
+        _r["node_interpreter_sha256"] = _node_sha
+
+        # 4) (Windows) Authenticode 서명 검증 — node.exe는 Node.js/OpenJS Foundation 서명이므로
+        #    openai 주체 검사(_check_authenticode_signature.ok)는 부적절하다. 서명 Status가 Valid인지만
+        #    확인한다(무효/미서명/조회 불가는 fail-closed). POSIX는 서명 부재가 정상 → 위치 검사만 신뢰.
+        if sys.platform == "win32":
+            _sig = _check_authenticode_signature(_node_path)
+            if not _sig.get("available"):
+                _r["node_interpreter_reason"] = (
+                    f"node_authenticode_unavailable_fail_closed:{str(_sig.get('reason', ''))[:60]}"
+                )
+                return _r
+            _sig_reason = str(_sig.get("reason", "") or "")
+            # ok=True(openai 서명; node엔 드묾) 또는 reason이 'authenticode_invalid:Valid:...'이면 Status=Valid.
+            _status_valid = bool(_sig.get("ok"))
+            if not _status_valid and _sig_reason.startswith("authenticode_invalid:"):
+                _parts = _sig_reason.split(":", 2)
+                _status_valid = (len(_parts) >= 2 and _parts[1] == "Valid")
+            if not _status_valid:
+                _r["node_interpreter_reason"] = f"node_authenticode_invalid:{_sig_reason[:60]}"
+                return _r
+        _r["node_interpreter_trusted"] = True
+        _r["node_interpreter_reason"] = "node_interpreter_trusted"
+        return _r
+    except Exception as _exc:  # noqa: BLE001
+        _r["node_interpreter_reason"] = f"node_interpreter_error:{type(_exc).__name__}"
+        return _r
+
+
 def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
     """REJECT#10: 공식 npm 설치 또는 시스템 경로만 신뢰; 임의 사용자 경로는 fail-closed.
 
@@ -10050,6 +10209,11 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
         # REJECT#LATEST AC#3: 최종 실행 native/vendor binary 경로/SHA (npm 래퍼용).
         "native_binary_path": "",
         "native_binary_sha256": "",
+        # REJECT#28 AC#1/2/3: 실제 실행되는 node 인터프리터 경로/SHA/신뢰 여부 (wrapper 체인용).
+        #   native 직접 실행(direct_native)에는 node가 관여하지 않으므로 빈 값/False로 남는다.
+        "node_interpreter_path": "",
+        "node_interpreter_sha256": "",
+        "node_interpreter_trusted": False,
         # REJECT#19: lockfile·package.json·npm ls 세 provenance 소스가 모두 absent이면 False.
         #   trusted=True(체인 구조 OK)이지만 독립 provenance 없음 → acceptance_eligible 자격 없음.
         "acceptance_eligible": True,
@@ -10249,6 +10413,22 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["acceptance_eligible"] = False
                 _r["provenance_reason"] = (
                     f"authenticode_unavailable_fail_closed:{_authenticode.get('reason', '')[:60]}"
+                )
+            # REJECT#28 AC#1/2/3: 실제 실행 체인의 node 인터프리터 신뢰 검증(wrapper 체인 전용).
+            #   정품 wrapper/JS/native를 그대로 두고 사용자 쓰기 가능 위치의 악성 node로 로그인·모델·
+            #   APPROVE 출력을 위조하는 공격을 차단한다. node 미신뢰 시 acceptance_eligible=False(fail-closed).
+            #   이 검사는 Authenticode/registry 판정 이후에 수행하여, node 실패가 최종적으로 승인 자격을
+            #   무효화하도록 한다(정품 native여도 악성 node면 차단).
+            _node_trust = _verify_node_interpreter_trust(_bin_p_lexical, _js_ep)
+            _r["node_interpreter_path"] = str(_node_trust.get("node_interpreter_path", "") or "")
+            _r["node_interpreter_sha256"] = str(_node_trust.get("node_interpreter_sha256", "") or "")
+            _r["node_interpreter_trusted"] = bool(_node_trust.get("node_interpreter_trusted"))
+            if not _r["node_interpreter_trusted"]:
+                _r["acceptance_eligible"] = False
+                _prev_prov = str(_r.get("provenance_reason", "") or "")
+                _node_reason = f"node_interpreter_untrusted:{str(_node_trust.get('node_interpreter_reason', ''))[:60]}"
+                _r["provenance_reason"] = (
+                    f"{_prev_prov}|{_node_reason}" if _prev_prov else _node_reason
                 )
             # REJECT#17 수정 B + REJECT#19: npm provenance 교차 검증 — 조작 양성(tamper) 탐지 전용.
             #   acceptance_eligible은 Authenticode로 결정; 아래는 trust(trusted=False) 판정만 수행.
@@ -11804,6 +11984,10 @@ def _check_codex_cache(
     # REJECT#LATEST AC#2: native/vendor binary SHA도 캐시 hit 전 재검증한다 (cache 우회 차단).
     _cached_native_path = str(cached.get("codex_native_binary_path", "") or "")
     _cached_native_sha = str(cached.get("codex_native_binary_sha256", "") or "")
+    # REJECT#28 AC#3: node 인터프리터 SHA도 캐시 hit 전 재검증한다 (악성 node 교체 탐지).
+    _cached_node_path = str(cached.get("codex_node_interpreter_path", "") or "")
+    _cached_node_sha = str(cached.get("codex_node_interpreter_sha256", "") or "")
+    _cached_node_trusted = bool(cached.get("codex_node_interpreter_trusted"))
     # REJECT#15 문제 B: 설치 유형도 캐시에서 복원하여 operational trust 면제를 승계한다.
     _cached_install_type = str(cached.get("codex_install_type", "") or "")
     if _cached_bin_path:
@@ -11844,6 +12028,27 @@ def _check_codex_cache(
                     f"native_path={_cached_native_path!r}"
                 )
                 return miss
+        # REJECT#28 AC#3: node 인터프리터가 저장돼 있으면 SHA 재검증 (악성 node 교체 탐지).
+        if _cached_node_path and _cached_node_sha:
+            if not _is_valid_sha256_hex(_cached_node_sha):
+                miss["reason"] = (
+                    "codex node interpreter SHA 형식 오류 — cache miss (fail-closed). "
+                    f"node_path={_cached_node_path!r}"
+                )
+                return miss
+            try:
+                _cur_node_sha = (
+                    _sha256_file(Path(_cached_node_path))
+                    if Path(_cached_node_path).exists() else ""
+                )
+            except Exception:  # noqa: BLE001
+                _cur_node_sha = ""
+            if not _cur_node_sha or _cur_node_sha != _cached_node_sha:
+                miss["reason"] = (
+                    "codex node interpreter SHA 불일치 또는 파일 부재 — cache miss (fail-closed). "
+                    f"node_path={_cached_node_path!r}"
+                )
+                return miss
 
     _live_snap = cached.get("live_sha_snapshot")
     return {
@@ -11873,6 +12078,10 @@ def _check_codex_cache(
         # REJECT#LATEST AC#2/#3: native binary 신뢰 증거를 hit 결과로 전달 (복원 후 재검증·기록용).
         "cached_codex_native_binary_path": _cached_native_path,
         "cached_codex_native_binary_sha256": _cached_native_sha,
+        # REJECT#28 AC#3: node 인터프리터 신뢰 증거를 hit 결과로 전달 (복원 후 재검증·기록용).
+        "cached_codex_node_interpreter_path": _cached_node_path,
+        "cached_codex_node_interpreter_sha256": _cached_node_sha,
+        "cached_codex_node_interpreter_trusted": _cached_node_trusted,
         # REJECT#15 문제 B: 설치 유형을 hit 결과로 전달 (복원 후 operational trust 면제 승계용).
         "cached_codex_install_type": _cached_install_type,
     }
@@ -26930,6 +27139,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             # REJECT#LATEST AC#2/#3: native binary 신뢰 증거 복원 (cache reuse 경로에서도 기록).
             _cached_native_path_restore = str(_cache_probe.get("cached_codex_native_binary_path") or "")
             _cached_native_sha_restore = str(_cache_probe.get("cached_codex_native_binary_sha256") or "")
+            # REJECT#28 AC#3: node 인터프리터 신뢰 증거 복원 (cache 재사용 경로에서도 기록).
+            _cached_node_path_restore = str(_cache_probe.get("cached_codex_node_interpreter_path") or "")
+            _cached_node_sha_restore = str(_cache_probe.get("cached_codex_node_interpreter_sha256") or "")
+            _cached_node_trusted_restore = bool(_cache_probe.get("cached_codex_node_interpreter_trusted"))
             # REJECT#15 문제 B: 설치 유형 복원 — direct_native 캐시 재사용 시 operational trust 면제 승계.
             _cached_install_type_restore = str(_cache_probe.get("cached_codex_install_type") or "")
             _codex_binary_trust = {
@@ -26940,6 +27153,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 "js_entrypoint_sha256": _cached_js_sha_restore,
                 "native_binary_path": _cached_native_path_restore,
                 "native_binary_sha256": _cached_native_sha_restore,
+                "node_interpreter_path": _cached_node_path_restore,
+                "node_interpreter_sha256": _cached_node_sha_restore,
+                "node_interpreter_trusted": _cached_node_trusted_restore,
                 "install_type": _cached_install_type_restore,
                 "install_source": "cached",
             }
@@ -27216,6 +27432,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     _post_snap_changed.append("codex_native_binary_sha_unverifiable")
                 elif _post_native_sha_now_v != _pre_native_sha_v:
                     _post_snap_changed.append("codex_native_binary_sha_changed")
+            # REJECT#28 AC#3: exec 후 node 인터프리터 SHA 재계산 — 악성 node 교체(TOCTOU) 차단 (fail-closed).
+            _post_node_path_v = str(_codex_binary_trust.get("node_interpreter_path", "") or "")
+            _pre_node_sha_v = str(_codex_binary_trust.get("node_interpreter_sha256", "") or "")
+            if _post_node_path_v and _pre_node_sha_v and not _fake_codex_bin:
+                try:
+                    import hashlib as _hashlib_node_v
+                    _post_node_bytes_v = Path(_post_node_path_v).read_bytes()
+                    _post_node_sha_now_v = _hashlib_node_v.sha256(_post_node_bytes_v).hexdigest()
+                except Exception:  # noqa: BLE001
+                    _post_node_sha_now_v = ""
+                if not _post_node_sha_now_v:
+                    _post_snap_changed.append("codex_node_interpreter_sha_unverifiable")
+                elif _post_node_sha_now_v != _pre_node_sha_v:
+                    _post_snap_changed.append("codex_node_interpreter_sha_changed")
             if _post_snap_changed:
                 # REJECT#23: post-CLI snapshot 변경 → codex_review_snapshot_changed로 effective 결과 저장 후 종료.
                 _write_codex_review_blocked_invalidation(
@@ -27679,6 +27909,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     [_ver_bin, "--version"],
                     capture_output=True, text=True, timeout=10,
                     encoding="utf-8", errors="replace",
+                    env=_codex_clean_env(),  # REJECT#28 AC-5: OPENAI_API_KEY 제거 env 전달
                 )
                 if _ver_r.returncode == 0 and _ver_r.stdout.strip():
                     _codex_cli_version_actual = _ver_r.stdout.strip().splitlines()[0]
@@ -27693,6 +27924,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 ("path", "sha256"),
                 ("js_entrypoint_path", "js_entrypoint_sha256"),
                 ("native_binary_path", "native_binary_sha256"),
+                # REJECT#28 AC#3: --version 조회 후 node 인터프리터 SHA도 최종 재검증한다.
+                ("node_interpreter_path", "node_interpreter_sha256"),
             ):
                 _vc_path = str(_codex_binary_trust.get(_vc_path_key, "") or "")
                 _vc_pre_sha = str(_codex_binary_trust.get(_vc_sha_key, "") or "")
@@ -27844,6 +28077,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # REJECT#LATEST AC#3: native binary 경로/SHA를 결과에 추가 기록
     result["codex_native_binary_path"] = str(_codex_binary_trust.get("native_binary_path", "") or "")
     result["codex_native_binary_sha256"] = str(_codex_binary_trust.get("native_binary_sha256", "") or "")
+    # REJECT#28 AC#3: 실제 실행 node 인터프리터 경로/SHA/신뢰 여부를 결과에 기록(wrapper 체인용).
+    result["codex_node_interpreter_path"] = str(_codex_binary_trust.get("node_interpreter_path", "") or "")
+    result["codex_node_interpreter_sha256"] = str(_codex_binary_trust.get("node_interpreter_sha256", "") or "")
+    result["codex_node_interpreter_trusted"] = bool(_codex_binary_trust.get("node_interpreter_trusted"))
     # REJECT#15 문제 B: 설치 유형을 결과에 기록 — operational trust step(6b)가 direct_native일 때
     #   native 체인 필드 부재를 허용하는 데 사용한다(시스템 경로 직접 native 설치).
     result["codex_install_type"] = str(_codex_binary_trust.get("install_type", "") or "")
@@ -28014,6 +28251,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             # REJECT#LATEST AC#2/#3: native binary 신뢰 증거도 캐시에 저장 (cache 우회 차단).
             "codex_native_binary_path": str(_codex_binary_trust.get("native_binary_path", "") or ""),
             "codex_native_binary_sha256": str(_codex_binary_trust.get("native_binary_sha256", "") or ""),
+            # REJECT#28 AC#3: node 인터프리터 신뢰 증거도 캐시에 저장 (cache 재사용 시 재검증·승계).
+            "codex_node_interpreter_path": str(_codex_binary_trust.get("node_interpreter_path", "") or ""),
+            "codex_node_interpreter_sha256": str(_codex_binary_trust.get("node_interpreter_sha256", "") or ""),
+            "codex_node_interpreter_trusted": bool(_codex_binary_trust.get("node_interpreter_trusted")),
             # REJECT#15 문제 B: 설치 유형도 캐시에 저장 — cache 재사용 시 operational trust 면제 승계.
             "codex_install_type": str(_codex_binary_trust.get("install_type", "") or ""),
             "cached_at": _now(),
@@ -28829,6 +29070,13 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             f"codex_binary_path={_bin_path_rec!r} 가 기록됐으나 "
             "codex_binary_sha256이 비어 있습니다 (fail-closed).",
         )
+    # REJECT#28 AC-4: 저장된 binary SHA 형식 강제 — unreadable:/비-hex/64자리 아님 → BLOCKED.
+    #   운영 신뢰 검사는 단순히 비어 있지 않은지만 확인하던 것을 정확한 64자리 hex 형식 강제로 강화한다.
+    if _bin_sha_rec and not _is_valid_sha256_hex(_bin_sha_rec):
+        return _blocked(
+            "codex_review_binary_sha_invalid_format",
+            f"codex_binary_sha256이 유효한 64자리 hex가 아닙니다: {_bin_sha_rec[:80]} (fail-closed).",
+        )
     # (6b) REJECT#LATEST AC#2/#3 + REJECT#15 문제 B: native binary chain 재검증 (fail-closed).
     #   verdict_source=codex_cli/verified_cache에서 native_binary_path/sha256이 비어있으면
     #   native binary 신뢰 보장 불가 → 운영 승인 자격 없음 (fail-closed).
@@ -28847,6 +29095,40 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
                 "codex_native_binary_sha256이 비어 있습니다 — "
                 "native binary 신뢰 미보장으로 운영 승인 자격 부여 불가 (fail-closed).",
             )
+    # REJECT#28 AC-4: 저장된 native SHA 형식 강제.
+    if _native_sha_rec and not _is_valid_sha256_hex(_native_sha_rec):
+        return _blocked(
+            "codex_review_native_binary_sha_invalid_format",
+            f"codex_native_binary_sha256이 유효한 64자리 hex가 아닙니다: {_native_sha_rec[:80]} (fail-closed).",
+        )
+    # (6c) REJECT#28 AC-1/2/3/4: 실제 실행 node 인터프리터 체인 검증 (fail-closed).
+    #   wrapper 설치(npm_wrapper/posix_npm_symlink)는 node가 실제 실행 인터프리터이므로 경로/SHA가
+    #   반드시 기록돼야 한다. direct_native/레거시 empty install_type은 node가 관여하지 않으므로 면제.
+    _node_path_rec = str(result.get("codex_node_interpreter_path", "") or "")
+    _node_sha_rec = str(result.get("codex_node_interpreter_sha256", "") or "")
+    if (
+        verdict_source in ("codex_cli", "verified_cache")
+        and _install_type_rec in ("npm_wrapper", "posix_npm_symlink")
+    ):
+        if not _node_path_rec or not _node_sha_rec:
+            return _blocked(
+                "codex_review_node_interpreter_chain_missing",
+                f"verdict_source={verdict_source}, install_type={_install_type_rec}에서 "
+                "codex_node_interpreter_path 또는 codex_node_interpreter_sha256이 비어 있습니다 — "
+                "실제 실행 인터프리터 신뢰 미보장으로 운영 승인 자격 부여 불가 (fail-closed).",
+            )
+        if not result.get("codex_node_interpreter_trusted"):
+            return _blocked(
+                "codex_review_node_interpreter_untrusted",
+                f"install_type={_install_type_rec}에서 codex_node_interpreter_trusted가 true가 "
+                "아닙니다 — 실제 실행 node가 신뢰되지 않았습니다 (fail-closed).",
+            )
+    # REJECT#28 AC-4: 저장된 node SHA 형식 강제.
+    if _node_sha_rec and not _is_valid_sha256_hex(_node_sha_rec):
+        return _blocked(
+            "codex_review_node_interpreter_sha_invalid_format",
+            f"codex_node_interpreter_sha256이 유효한 64자리 hex가 아닙니다: {_node_sha_rec[:80]} (fail-closed).",
+        )
     # (7) auth_source는 chatgpt여야 한다(요구9: ChatGPT Plus 인증 승계).
     if str(result.get("auth_source", "") or "") != "chatgpt":
         return _blocked(
@@ -29666,7 +29948,15 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             _cx_res = json.loads(_cx_result_path.read_text(encoding="utf-8", errors="replace"))
             _stored_bin_path = str(_cx_res.get("codex_binary_path", "") or "")
             _stored_bin_sha = str(_cx_res.get("codex_binary_sha256", "") or "")
-            if _stored_bin_path and _stored_bin_sha and not _stored_bin_sha.startswith("unreadable:"):
+            if _stored_bin_path and _stored_bin_sha:
+                # REJECT#28 AC-4: unreadable:/비-hex/64자리 아님 SHA는 재검증을 건너뛰지 않고 즉시 BLOCKED.
+                #   과거에는 startswith("unreadable:")이면 재검증을 건너뛰어 조작 우회 창이 있었다.
+                if not _is_valid_sha256_hex(_stored_bin_sha):
+                    _die(
+                        "[BLOCKED] failure_code=invalid_codex_binary_sha256\n"
+                        f"  codex_binary_sha256이 유효한 64자리 hex가 아닙니다: {_stored_bin_sha[:80]}\n"
+                        "  gates codex-review를 재실행하세요."
+                    )
                 _cur_trust = _verify_codex_binary_path_trust(_stored_bin_path)
                 # REJECT#10: 신뢰 실패 → fail-closed
                 if not _cur_trust["trusted"]:
@@ -29706,6 +29996,13 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 # REJECT#12 AC#3: JS 진입점 SHA 재검증 (npm 래퍼용; 없으면 skip).
                 _stored_js_sha = str(_cx_res.get("codex_js_entrypoint_sha256", "") or "")
                 if _stored_js_sha:
+                    # REJECT#28 AC-4: 저장된 JS SHA 형식 강제 (비-64hex → BLOCKED).
+                    if not _is_valid_sha256_hex(_stored_js_sha):
+                        _die(
+                            "[BLOCKED] failure_code=invalid_codex_js_entrypoint_sha256\n"
+                            f"  codex_js_entrypoint_sha256이 유효한 64자리 hex가 아닙니다: {_stored_js_sha[:80]}\n"
+                            "  gates codex-review를 재실행하세요."
+                        )
                     _cur_js_sha = _cur_trust.get("js_entrypoint_sha256", "")
                     if not _cur_js_sha or _cur_js_sha != _stored_js_sha:
                         _die(
@@ -29718,6 +30015,13 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 # REJECT#LATEST AC#2: native binary SHA 재검증 (fail-closed)
                 _stored_native_sha = str(_cx_res.get("codex_native_binary_sha256", "") or "")
                 if _stored_native_sha:
+                    # REJECT#28 AC-4: 저장된 native SHA 형식 강제 (비-64hex → BLOCKED).
+                    if not _is_valid_sha256_hex(_stored_native_sha):
+                        _die(
+                            "[BLOCKED] failure_code=invalid_codex_native_binary_sha256\n"
+                            f"  codex_native_binary_sha256이 유효한 64자리 hex가 아닙니다: {_stored_native_sha[:80]}\n"
+                            "  gates codex-review를 재실행하세요."
+                        )
                     _stored_native_path = str(_cx_res.get("codex_native_binary_path", "") or "")
                     if not _stored_native_path or not Path(_stored_native_path).exists():
                         _die(
@@ -29735,6 +30039,34 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                                 f"  현재 SHA: {_cur_native_sha[:16]}...\n"
                                 "  gates codex-review를 재실행하세요."
                             )
+                # REJECT#28 AC#3/AC#4: node 인터프리터 SHA 재검증 (wrapper 체인용; 없으면 skip).
+                #   실제 실행 인터프리터의 절대 경로와 SHA를 request-accept에서도 재검증하여
+                #   두 단계 사이 악성 node 교체를 차단한다(fail-closed).
+                _stored_node_sha = str(_cx_res.get("codex_node_interpreter_sha256", "") or "")
+                if _stored_node_sha:
+                    # REJECT#28 AC-4: 저장된 node SHA 형식 강제 (비-64hex/unreadable → BLOCKED).
+                    if not _is_valid_sha256_hex(_stored_node_sha):
+                        _die(
+                            "[BLOCKED] failure_code=invalid_codex_node_interpreter_sha256\n"
+                            f"  codex_node_interpreter_sha256이 유효한 64자리 hex가 아닙니다: {_stored_node_sha[:80]}\n"
+                            "  gates codex-review를 재실행하세요."
+                        )
+                    _stored_node_path = str(_cx_res.get("codex_node_interpreter_path", "") or "")
+                    if not _stored_node_path or not Path(_stored_node_path).exists():
+                        _die(
+                            "[BLOCKED] failure_code=codex_node_interpreter_missing\n"
+                            "  저장된 node 인터프리터 경로가 없거나 파일이 존재하지 않습니다.\n"
+                            "  gates codex-review를 재실행하세요."
+                        )
+                    _cur_node_sha = hashlib.sha256(Path(_stored_node_path).read_bytes()).hexdigest()
+                    if _cur_node_sha != _stored_node_sha:
+                        _die(
+                            "[BLOCKED] failure_code=codex_node_interpreter_sha_changed\n"
+                            f"  Codex node 인터프리터 SHA가 변경됐습니다.\n"
+                            f"  저장 시점 SHA: {_stored_node_sha[:16]}...\n"
+                            f"  현재 SHA: {_cur_node_sha[:16]}...\n"
+                            "  gates codex-review를 재실행하세요."
+                        )
             # REJECT#12 AC#3: 바이너리 경로는 있는데 SHA가 없으면 차단 (fail-closed).
             elif _stored_bin_path and not _stored_bin_sha:
                 _die(
