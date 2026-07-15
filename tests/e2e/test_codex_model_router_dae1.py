@@ -2631,7 +2631,7 @@ def test_tc42e_unknown_hunk_budget_exceeded_evidence_incomplete() -> None:
     from unittest.mock import patch, MagicMock
 
     # 예산을 크게 초과하는 unknown-named hunk (@@에 함수명 없음)
-    big_content = "+" + "x" * 850_000  # 850KB — 실제 예산(800000)을 크게 초과 (REJECT#29: 700000→800000)
+    big_content = "+" + "x" * (pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS + 50_000)  # 예산 초과 (budget-relative: REJECT-budget-fix budget 1200000 대응)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
@@ -3022,7 +3022,7 @@ def test_tc44d_multihunk_same_critical_function_detected(tmp_path: Path) -> None
     crit_func = "_cmd_gates_accept"  # CODEX_CRITICAL_FUNCTIONS에 있는 함수
     # 동일 함수명, 예산 초과 크기의 두 번째 hunk
     hunk1_content = f"@@ -100,5 +100,5 @@ def {crit_func}():\n+    pass1\n"
-    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * 850_000  # 예산 초과 (REJECT#29: budget 700K → 800K, 850K 필요)
+    hunk2_content = f"@@ -200,5 +200,5 @@ def {crit_func}():\n" + "+" + "x" * (pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS + 50_000)  # 예산 초과 (budget-relative: REJECT-budget-fix budget 1200000 대응)
 
     # 두 hunk 모두 동일 CRITICAL 함수에 귀속
     diff_output = (
@@ -3075,7 +3075,7 @@ def test_tc44e_new_critical_function_hunk_required(tmp_path: Path) -> None:
 
     new_func = "_canonicalize_effort"  # REJECT#30에서 추가된 CRITICAL 함수
     # 예산을 크게 초과하는 신규 함수 hunk
-    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * 850_000  # 예산 초과 (REJECT#29: budget 700K → 800K, 850K 필요)
+    big_hunk = f"@@ -0,0 +1,1 @@ def {new_func}():\n+" + "x" * (pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS + 50_000)  # 예산 초과 (budget-relative: REJECT-budget-fix budget 1200000 대응)
     diff_output = (
         "diff --git a/pipeline.py b/pipeline.py\n"
         "--- a/pipeline.py\n"
