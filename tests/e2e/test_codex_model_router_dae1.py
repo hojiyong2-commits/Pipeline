@@ -8486,15 +8486,21 @@ class TestTC65Reject14NativeBinaryTrust:
     """
 
     def test_tc65a_authenticode_self_signed_blocked(self):
-        """TC-65a: 자체 서명(Issuer==Subject) 인증서 + 알려진 CA 검증 로직 존재(AC#1)."""
+        """TC-65a: 자체 서명(Issuer==Subject) 인증서 차단 로직 존재(AC#1).
+
+        REJECT#15: Issuer 문자열 패턴(_CODEX_KNOWN_CERT_ISSUER_PATTERNS) gate는 사용자 CA 추가로
+        우회 가능하므로 제거됐다. 자체 서명 차단(Issuer==Subject)만 Authenticode secondary defense로
+        유지되며, primary trust는 native binary 원본 SHA 비교다. 따라서 이 테스트는 self-signed
+        차단 로직만 요구하고 Issuer 패턴 gate 존재는 더 이상 요구하지 않는다.
+        """
         import inspect
         import pipeline as _pl
         src = inspect.getsource(_pl._check_authenticode_signature)
-        assert "self_signed" in src or "issuer" in src.lower(), (
+        assert "self_signed" in src, (
             "_check_authenticode_signature must detect self-signed (Issuer==Subject) certs"
         )
-        assert "_CODEX_KNOWN_CERT_ISSUER_PATTERNS" in src, (
-            "_check_authenticode_signature must use _CODEX_KNOWN_CERT_ISSUER_PATTERNS for CA validation"
+        assert "issuer" in src.lower(), (
+            "_check_authenticode_signature must still collect issuer (for logging)"
         )
 
     def test_tc65b_known_cert_issuer_patterns_in_critical_constants(self):
@@ -8571,3 +8577,68 @@ class TestTC65Reject14NativeBinaryTrust:
         assert _r.get("ok") is False, f"nonexistent native must be ok=False: {_r!r}"
         for _k in ("ok", "available", "reason", "installed_sha", "registry_sha", "platform_pkg"):
             assert _k in _r, f"return dict must contain key {_k!r}: {sorted(_r.keys())!r}"
+
+
+class TestTC66Reject15NativeSHAUnconditional:
+    """REJECT#15: 패키지 크기 무관 native binary SHA 비교 + Authenticode Issuer 패턴 제거 검증"""
+
+    def test_tc66a_no_size_bypass_in_native_registry_fn(self):
+        """TC-66a: _verify_codex_native_binary_against_registry에 크기 우회(ok=True 조기 반환) 없음"""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._verify_codex_native_binary_against_registry)
+        # 크기 기반 ok=True 조기 반환 패턴 없어야 함
+        assert "provenance_metadata_verified" not in src, (
+            "Size-based metadata-only ok=True bypass must be removed"
+        )
+        assert "unpackedSize" not in src, (
+            "unpackedSize check (size bypass) must be removed from _verify_codex_native_binary_against_registry"
+        )
+
+    def test_tc66b_native_sha_cache_used(self):
+        """TC-66b: _verify_codex_native_binary_against_registry에 콘텐츠 주소형 캐시 로직 존재"""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._verify_codex_native_binary_against_registry)
+        assert "native_sha_cache" in src or "cache" in src.lower(), (
+            "Content-addressable cache must be present in _verify_codex_native_binary_against_registry"
+        )
+
+    def test_tc66c_authenticode_no_issuer_pattern_check(self):
+        """TC-66c: _check_authenticode_signature에서 _CODEX_KNOWN_CERT_ISSUER_PATTERNS 참조 제거됨"""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._check_authenticode_signature)
+        # Issuer 패턴 검사가 ok=True 분기에 없어야 함 (자체 서명 차단만 유지)
+        assert "_CODEX_KNOWN_CERT_ISSUER_PATTERNS" not in src, (
+            "_check_authenticode_signature must not use _CODEX_KNOWN_CERT_ISSUER_PATTERNS (Issuer pattern bypass)"
+        )
+
+    def test_tc66d_authenticode_still_blocks_self_signed(self):
+        """TC-66d: _check_authenticode_signature가 자체 서명 인증서를 여전히 차단"""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._check_authenticode_signature)
+        assert "self_signed" in src, (
+            "_check_authenticode_signature must still block self-signed certs"
+        )
+
+    def test_tc66e_native_registry_fn_large_pkg_not_ok_on_mismatch(self):
+        """TC-66e: _verify_codex_native_binary_against_registry가 SHA 불일치 시 ok=False (크기 무관)"""
+        # 소스 기반: native_sha_mismatch 경로가 있어야 하고 크기 조건으로 early-return하지 않아야 함
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._verify_codex_native_binary_against_registry)
+        assert "native_sha_mismatch" in src, (
+            "_verify_codex_native_binary_against_registry must have sha_mismatch path"
+        )
+
+    def test_tc66f_authenticode_issuer_is_logged_not_gatekeeping(self):
+        """TC-66f: _check_authenticode_signature에서 issuer 필드는 로깅용으로 유지되지만 ok=True를 막지 않음"""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._check_authenticode_signature)
+        # issuer 수집은 유지 (로깅/디버깅)
+        assert "issuer" in src.lower(), (
+            "_check_authenticode_signature should still collect issuer for logging"
+        )

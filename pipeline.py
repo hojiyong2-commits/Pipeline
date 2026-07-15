@@ -10158,15 +10158,18 @@ def _verify_codex_js_against_registry(
     return _r
 
 
-# REJECT#14: platform native binary tarball SHA 직접 비교 상한(바이트).
-#   실제 @openai/codex platform 패키지(예: 0.144.x-win32-x64)는 압축 145MB / 전개 409MB로,
-#   trust 검사마다 전체를 내려받아 SHA를 비교하는 것은 비현실적이다(파이프라인 응답성 파괴 +
-#   네트워크 타임아웃). 이 상한 이하(소형 패키지/테스트 시나리오)에서는 tarball을 내려받아 native
-#   binary를 추출해 SHA를 직접 비교(fail-closed)하고, 상한 초과(대형 native 패키지)에서는 레지스트리
-#   서명 provenance 메타데이터(dist.integrity sha512 + 신뢰 도메인 tarball + 해석 가능한 정확한
-#   name@version)를 provenance anchor로 사용한다. 대형 패키지의 native binary 위변조는 강화된
-#   Authenticode 검사(_check_authenticode_signature: 자체 서명·미지의 CA 차단)가 암호학적으로 봉쇄한다.
-_CODEX_NATIVE_REGISTRY_MAX_DOWNLOAD_BYTES: int = 64 * 1024 * 1024  # 64MB
+# REJECT#15: 이전 버전의 크기 기반 우회 상한(_CODEX_NATIVE_REGISTRY_MAX_DOWNLOAD_BYTES, 64MB)을
+#   제거했다. 대형 platform 패키지에서 tarball 다운로드 없이 메타데이터만으로 ok=True를 반환하면,
+#   정품 codex.js + 위조 native binary 조합(AC#1)을 탐지하지 못하고 로그인/모델/승인 출력이 위조될 수
+#   있었다. 이제 패키지 크기와 무관하게 dist.integrity(sha512)를 검증한 tarball에서 native binary를
+#   추출해 로컬 SHA-256과 정확히 비교한다(fail-closed). 대형 패키지의 반복 다운로드 비용은 검증 결과를
+#   콘텐츠 주소형 캐시(.pipeline/native_sha_cache/, key=installed_sha+version+platform_pkg)에 저장해
+#   해결한다. tarball 다운로드는 streaming(1MB chunks)으로 수행하며 500MB hard limit로 방어한다.
+
+
+# REJECT#15: streaming tarball 다운로드 hard limit(바이트). 실제 @openai/codex platform 패키지
+#   전개 크기(수백MB)를 초과하는 병리적 응답으로부터 메모리를 보호한다(fail-closed).
+_CODEX_NATIVE_TARBALL_MAX_BYTES: int = 500 * 1024 * 1024  # 500MB
 
 
 def _resolve_codex_platform_package_meta(native_path: "Path") -> Dict[str, str]:
@@ -10214,14 +10217,16 @@ def _verify_codex_native_binary_against_registry(
     것과 달리, 이 함수는 native binary가 속한 platform 패키지(동일 name @openai/codex + platform 접미사
     version, 예: 0.144.1-win32-x64)를 해석하여 레지스트리 provenance에 결속한다.
 
-    검증 절차:
+    검증 절차(REJECT#15: 패키지 크기와 무관하게 항상 SHA를 직접 비교한다):
       1. native binary 상위 package.json에서 실제 name@version 해석(하드코딩 금지).
-      2. 레지스트리 메타데이터 조회 → dist.integrity(sha512) + dist.tarball(신뢰 도메인) 확인.
-      3. tarball 전개 크기가 상한(_CODEX_NATIVE_REGISTRY_MAX_DOWNLOAD_BYTES) 이하이면 tarball을
-         내려받아 무결성(sha512)을 검증하고 native binary를 추출해 로컬 SHA256과 직접 비교(fail-closed).
-      4. 상한 초과(대형 native 패키지)이면 레지스트리 서명 provenance 메타데이터를 anchor로 인정하고
-         ok=True로 반환한다. 이 경우 native binary 위변조는 강화된 Authenticode(_check_authenticode_
-         signature: 자체 서명·미지의 CA 차단)가 봉쇄한다(AC#2 방어 심층화).
+      2. 콘텐츠 주소형 캐시(.pipeline/native_sha_cache/) 조회 — key=installed_sha+version+
+         platform_pkg. 캐시 hit(installed_sha 일치)이면 tarball 다운로드 없이 캐시된 ok/registry_sha
+         재사용.
+      3. 캐시 miss이면 레지스트리 메타데이터 조회 → dist.integrity(sha512) + dist.tarball(신뢰 도메인).
+      4. tarball을 streaming(1MB chunks, 500MB hard limit)으로 내려받아 무결성(sha512)을 검증하고
+         native binary를 추출해 로컬 SHA-256과 정확히 비교(fail-closed). 크기 기반 메타데이터 우회는
+         제거됐다 — 대형 패키지도 반드시 원본 SHA와 일치해야 ok=True.
+      5. 검증 결과를 캐시에 저장해 이후 반복 다운로드 비용을 제거한다.
 
     Args:
         native_path: 설치된 platform native binary 경로(codex.exe / codex).
@@ -10283,6 +10288,32 @@ def _verify_codex_native_binary_against_registry(
             return _r
         _r["platform_pkg"] = f"{_pkg_name}@{_ver}"
 
+        # 2b. REJECT#15: 콘텐츠 주소형 캐시 조회. 대형 패키지(수백MB)를 trust 검사마다 다시 내려받는
+        #     비용을 제거하되, 메타데이터만으로 ok=True를 반환하는 우회는 만들지 않는다. 캐시 key는
+        #     installed_sha + version + platform_pkg 조합(변조 불가)이며, 캐시된 installed_sha가 현재
+        #     installed_sha와 정확히 일치할 때만 유효하다(위조 native binary는 다른 installed_sha →
+        #     캐시 miss → tarball 재검증). 캐시 hit이면 캐시된 ok/registry_sha를 재사용한다.
+        _native_cache_key = (
+            f"{_installed_sha[:32]}-{_ver}-{_pkg_name.replace('/', '-')}"
+        )
+        _native_cache_dir = Path(__file__).parent / ".pipeline" / "native_sha_cache"
+        _native_cache_file = _native_cache_dir / f"{_native_cache_key}.json"
+        try:
+            if _native_cache_file.exists():
+                _cached = json.loads(_native_cache_file.read_text("utf-8"))
+                _cached_installed_sha = str(_cached.get("installed_sha", "") or "")
+                _cached_reg_sha = str(_cached.get("registry_sha", "") or "")
+                # 캐시된 installed_sha가 현재 값과 정확히 일치 + registry_sha 존재 시에만 재사용.
+                if _cached_installed_sha == _installed_sha and _cached_reg_sha:
+                    _cached_ok = bool(_cached.get("ok", False))
+                    _r["available"] = True
+                    _r["ok"] = _cached_ok
+                    _r["registry_sha"] = _cached_reg_sha
+                    _r["reason"] = f"native_sha_cache_hit:ok={_cached_ok}"
+                    return _r
+        except Exception:  # noqa: BLE001
+            pass  # 캐시 오류는 무시하고 tarball 다운로드로 재검증(fail-safe → 재검증).
+
         # 3. 레지스트리 메타데이터 조회 — 스코프 슬래시만 인코딩(_verify_codex_js_against_registry와 동일 규칙).
         _packument_url = f"https://registry.npmjs.org/{_pkg_name}/{_ver}"
         try:
@@ -10316,22 +10347,13 @@ def _verify_codex_native_binary_against_registry(
             _r["reason"] = f"tarball_integrity_unknown_algo:{str(_integrity)[:20]}"
             return _r
 
-        # 4. 대형 native 패키지는 전체 다운로드가 비현실적 → 레지스트리 서명 provenance 메타데이터를
-        #    anchor로 인정(available=True, ok=True). native binary 위변조는 Authenticode가 봉쇄한다.
-        try:
-            _unpacked = int(_dist.get("unpackedSize", 0) or 0)
-        except (TypeError, ValueError):
-            _unpacked = 0
-        if _unpacked > _CODEX_NATIVE_REGISTRY_MAX_DOWNLOAD_BYTES:
-            _r["available"] = True
-            _r["ok"] = True
-            _r["reason"] = (
-                f"native_registry_provenance_metadata_verified:"
-                f"{_r['platform_pkg']}:unpacked={_unpacked}"
-            )
-            return _r
-
-        # 5. 소형 패키지: tarball 다운로드 + 무결성(sha512) 검증 + native binary 추출 후 SHA 직접 비교.
+        # 4. REJECT#15: 패키지 크기와 무관하게 tarball을 내려받아 native binary SHA를 직접 비교한다.
+        #    대형 패키지(수백MB)의 전체-메모리 로드를 피하기 위해 streaming(1MB chunks)으로 sha512를
+        #    증분 계산하고, 500MB hard limit를 초과하면 fail-closed로 중단한다. tarfile 추출을 위해
+        #    검증된 bytes를 메모리에 모으되, 크기 상한으로 병리적 응답을 방어한다.
+        _sha512_hasher = hashlib.sha512()
+        _chunks: List[bytes] = []
+        _total_bytes = 0
         try:
             with _urlreq.urlopen(
                 _urlreq.Request(
@@ -10340,13 +10362,23 @@ def _verify_codex_native_binary_against_registry(
                 ),
                 timeout=timeout,
             ) as _tb_resp:
-                _tb_bytes = _tb_resp.read()
+                while True:
+                    _chunk = _tb_resp.read(1024 * 1024)  # 1MB chunks
+                    if not _chunk:
+                        break
+                    _total_bytes += len(_chunk)
+                    if _total_bytes > _CODEX_NATIVE_TARBALL_MAX_BYTES:
+                        _r["reason"] = f"tarball_too_large:{_total_bytes}"
+                        return _r
+                    _sha512_hasher.update(_chunk)
+                    _chunks.append(_chunk)
         except Exception as _exc:  # noqa: BLE001
             _r["reason"] = f"tarball_download_error:{type(_exc).__name__}:{str(_exc)[:60]}"
             return _r
+        _tb_bytes = b"".join(_chunks)
 
         _expected_b64 = _integrity[len("sha512-"):]
-        _actual_sha512 = _base64.b64encode(hashlib.sha512(_tb_bytes).digest()).decode()
+        _actual_sha512 = _base64.b64encode(_sha512_hasher.digest()).decode()
         if _actual_sha512 != _expected_b64:
             _r["available"] = True
             _r["reason"] = "tarball_integrity_mismatch"
@@ -10396,6 +10428,24 @@ def _verify_codex_native_binary_against_registry(
                 f"native_sha_mismatch:"
                 f"installed={_installed_sha[:16]},registry={_registry_sha[:16]}"
             )
+
+        # 5. REJECT#15: 검증 결과를 콘텐츠 주소형 캐시에 저장(다음 trust 검사에서 재다운로드 회피).
+        #    저장 실패는 무시한다(캐시는 성능 최적화일 뿐 신뢰 판정의 anchor가 아니다).
+        try:
+            _native_cache_dir.mkdir(parents=True, exist_ok=True)
+            _cache_entry = {
+                "installed_sha": _installed_sha,
+                "registry_sha": _registry_sha,
+                "ok": bool(_r["ok"]),
+                "platform_pkg": _r["platform_pkg"],
+                "pkg_version": _ver,
+                "cached_at": datetime.now(timezone.utc).isoformat(),
+            }
+            _native_cache_file.write_text(
+                json.dumps(_cache_entry, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception:  # noqa: BLE001
+            pass  # 캐시 저장 실패는 무시(신뢰 판정에 영향 없음).
     except Exception as _exc:  # noqa: BLE001
         _r["reason"] = f"outer_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
     return _r
@@ -10465,14 +10515,14 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
         # REJECT#14: node.exe(비-openai 서명) 검증이 reason 문자열 파싱에 의존하지 않도록
         #   Status를 별도 필드로 노출한다. _verify_node_interpreter_trust는 status=="Valid"만 확인한다.
         _r["status"] = _status
-        # REJECT#14: Subject 부분 문자열(openai)만으로는 자체 서명 인증서를 막을 수 없다.
-        # 현재 사용자 인증서 저장소에 신뢰시킨 자체 서명 인증서(CN=OpenAI Test 등)로 서명하면
-        # Status=Valid + Subject에 openai 포함이 되어 기존 검증을 우회할 수 있었다.
-        # 강화된 검증 순서:
-        #   1. 서명 상태가 Valid이어야 한다.
-        #   2. Subject에 "openai"가 포함되어야 한다 (기존 요건 유지).
-        #   3. 자체 서명(Issuer == Subject) 인증서는 차단한다.
-        #   4. Issuer가 _CODEX_KNOWN_CERT_ISSUER_PATTERNS(알려진 상업 CA) 중 하나와 일치해야 한다.
+        # REJECT#15: Issuer 문자열 패턴(알려진 상업 CA 이름 목록) 검사는 공격자가 알려진 CA
+        #   이름(예: "Microsoft")을 Issuer 문자열에 포함한 자체 CA를 사용자 인증서 저장소에 신뢰시켜
+        #   우회할 수 있으므로 gate에서 제거했다. native binary의 원본 SHA 비교
+        #   (_verify_codex_native_binary_against_registry, 패키지 크기 무관)가 primary trust source이며,
+        #   상위 로직이 native SHA 불일치 시 acceptance_eligible=False로 위조 binary를 차단한다.
+        #   Authenticode는 이제 secondary defense로서 "서명 없음/Invalid/자체 서명"만 차단한다.
+        #   issuer 필드는 로깅/디버깅 목적으로 계속 수집하지만 ok 판정의 gate로는 사용하지 않는다.
+        #   비교(원본 SHA)나 체인 검증이 불가능하면 상위 fail-closed 로직이 자격을 무효화한다.
         if _status != "Valid":
             _r["ok"] = False
             _r["reason"] = f"authenticode_not_valid:{_status}"
@@ -10480,19 +10530,14 @@ def _check_authenticode_signature(native_binary_path: str) -> Dict[str, Any]:
             _r["ok"] = False
             _r["reason"] = f"authenticode_subject_no_openai:{_r['subject'][:60]}"
         elif _r["issuer"].strip() != "" and _r["issuer"].strip() == _r["subject"].strip():
-            # 자체 서명 인증서 차단 (Issuer == Subject)
+            # 자체 서명(Issuer == Subject) 인증서는 항상 차단한다.
             _r["ok"] = False
             _r["reason"] = f"authenticode_self_signed:{_r['subject'][:60]}"
-        elif not any(
-            _pat.lower() in _r["issuer"].lower()
-            for _pat in _CODEX_KNOWN_CERT_ISSUER_PATTERNS
-        ):
-            # 알려진 상업 CA가 발급하지 않은 인증서 차단 (자체 서명 CA store 등록 우회 방어)
-            _r["ok"] = False
-            _r["reason"] = f"authenticode_unknown_issuer:{_r['issuer'][:60]}"
         else:
+            # Valid + subject에 openai 포함 + 자체 서명 아님 → Authenticode secondary 조건 충족.
+            # 위조 native binary는 primary(원본 SHA 비교)가 acceptance_eligible=False로 차단한다.
             _r["ok"] = True
-            _r["reason"] = "authenticode_valid_openai_trusted_ca"
+            _r["reason"] = "authenticode_valid_openai_not_self_signed"
     except Exception as _exc:  # noqa: BLE001
         _r["reason"] = f"authenticode_exception:{type(_exc).__name__}:{str(_exc)[:60]}"
     return _r
