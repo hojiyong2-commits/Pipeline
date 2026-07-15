@@ -12478,12 +12478,33 @@ def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
         _cat = str(_f.get("root_cause_category", "") or "").strip()
         if _cat:
             _cats.append(_cat)
-        if _scope == "OUT_OF_SCOPE_DIAGNOSTIC":
+        # REJECT#18(IMP-20260712-DAE1): scope를 Codex 출력에서 신뢰하지 않음.
+        # root_cause_category를 SSoT 목록에 매핑해 canonical_scope를 결정한다.
+        # 전달된 scope와 불일치해도 SSoT canonical scope를 사용한다(fail-closed).
+        # category가 비어 있으면 제공된 scope 필드를 fallback으로 사용(레거시 호환).
+        # 알 수 없는 category는 fail-closed로 IN_SCOPE 처리한다.
+        if _cat:
+            if _cat in CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED:
+                _canonical_scope = "ENVIRONMENT_UNTRUSTED"
+            elif _cat in CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC:
+                _canonical_scope = "OUT_OF_SCOPE_DIAGNOSTIC"
+            elif _cat in CODEX_BOUNDED_TRUST_IN_SCOPE:
+                _canonical_scope = "IN_SCOPE"
+            else:
+                # 알 수 없는 category → fail-closed로 IN_SCOPE 취급.
+                _canonical_scope = "IN_SCOPE"
+        else:
+            # category 없음 → 제공된 scope 필드 fallback (레거시 호환).
+            if _scope in ("OUT_OF_SCOPE_DIAGNOSTIC", "ENVIRONMENT_UNTRUSTED"):
+                _canonical_scope = _scope
+            else:
+                _canonical_scope = "IN_SCOPE"
+        if _canonical_scope == "OUT_OF_SCOPE_DIAGNOSTIC":
             out["out_of_scope_diagnostic_count"] += 1
-        elif _scope == "ENVIRONMENT_UNTRUSTED":
+        elif _canonical_scope == "ENVIRONMENT_UNTRUSTED":
             out["environment_untrusted_count"] += 1
         else:
-            # IN_SCOPE 또는 알 수 없는 scope(fail-closed → IN_SCOPE 취급).
+            # IN_SCOPE 또는 알 수 없는 canonical scope(fail-closed → IN_SCOPE 취급).
             out["in_scope_all_count"] += 1
             if _sev in ("P0", "P1") or _sev == "":
                 out["in_scope_count"] += 1

@@ -7937,3 +7937,57 @@ class TestBoundedTrustModelV2:
         assert "_finding_in_scope > 0" in src
         # Case 2: REJECT + OUT_OF_SCOPE_DIAGNOSTIC-only → acceptance_eligible=True 허용
         assert "_finding_diagnostic_only" in src
+
+    def test_reject36a_in_scope_category_overrides_out_of_scope_reported_scope(self):
+        """REJECT#18 AC-1: fake_codex_exec을 OUT_OF_SCOPE_DIAGNOSTIC scope로 제출해도 IN_SCOPE로 분류된다."""
+        cls = pipeline._classify_codex_findings([
+            {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+             "root_cause_category": "fake_codex_exec"},
+        ])
+        # root_cause_category SSoT 결정: fake_codex_exec ∈ CODEX_BOUNDED_TRUST_IN_SCOPE
+        assert cls["in_scope_count"] == 1       # IN_SCOPE P0 → 승인 차단
+        assert cls["out_of_scope_diagnostic_count"] == 0
+        assert cls["diagnostic_only"] is False  # IN_SCOPE 있으므로 diagnostic_only 불가
+        assert cls["reject_count_delta"] == 1   # IN_SCOPE → reject_count 증가
+
+    def test_reject36b_environment_untrusted_category_overrides_reported_scope(self):
+        """REJECT#18 AC-2: repo_internal_fake_codex을 IN_SCOPE scope로 제출해도 ENVIRONMENT_UNTRUSTED 분류."""
+        cls = pipeline._classify_codex_findings([
+            {"severity": "P0", "scope": "IN_SCOPE",
+             "root_cause_category": "repo_internal_fake_codex"},
+        ])
+        # root_cause_category SSoT: repo_internal_fake_codex ∈ CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED
+        assert cls["environment_untrusted_count"] == 1  # 즉시 BLOCKED 대상
+        assert cls["in_scope_count"] == 0
+        assert cls["diagnostic_only"] is False
+
+    def test_reject36c_diagnostic_only_only_when_all_categories_out_of_scope(self):
+        """REJECT#18 AC-3: diagnostic_only=True는 모든 root_cause_category가 OUT_OF_SCOPE SSoT에 포함될 때만."""
+        # 혼합: 하나는 OUT_OF_SCOPE(npm_tarball), 하나는 IN_SCOPE(fake_codex_exec)로 scope 속임
+        cls_mixed = pipeline._classify_codex_findings([
+            {"severity": "P1", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+             "root_cause_category": "npm_tarball_supply_chain_proof"},
+            {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+             "root_cause_category": "fake_codex_exec"},  # ← IN_SCOPE임에도 scope 속임
+        ])
+        assert cls_mixed["diagnostic_only"] is False  # fake_codex_exec가 IN_SCOPE → diagnostic_only 불가
+        assert cls_mixed["in_scope_count"] == 1       # fake_codex_exec P0 → IN_SCOPE 계수
+        # 순수 OUT_OF_SCOPE_DIAGNOSTIC(SSoT): diagnostic_only=True 허용
+        cls_pure = pipeline._classify_codex_findings([
+            {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+             "root_cause_category": "npm_tarball_supply_chain_proof"},
+            {"severity": "P1", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+             "root_cause_category": "native_binary_origin_proof"},
+        ])
+        assert cls_pure["diagnostic_only"] is True
+        assert cls_pure["in_scope_count"] == 0
+
+    def test_reject36d_unknown_category_fail_closed_as_in_scope(self):
+        """REJECT#18: 알 수 없는 root_cause_category는 fail-closed로 IN_SCOPE 처리."""
+        cls = pipeline._classify_codex_findings([
+            {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
+             "root_cause_category": "some_unknown_new_category"},
+        ])
+        assert cls["in_scope_count"] == 1        # 알 수 없는 category → IN_SCOPE fail-closed
+        assert cls["out_of_scope_diagnostic_count"] == 0
+        assert cls["diagnostic_only"] is False
