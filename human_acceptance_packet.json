@@ -1,0 +1,674 @@
+{
+  "schema_version": 1,
+  "packet_type": "final_acceptance_evidence",
+  "pipeline_id": "IMP-20260712-DAE1",
+  "generated_at": "2026-07-15T18:14:23Z",
+  "pr": {
+    "url": "https://github.com/hojiyong2-commits/Pipeline/pull/891",
+    "number": "891",
+    "head_sha": "f521cab69f1d26867b7cacd09072fc6790462e40",
+    "base_branch": "main",
+    "head_branch": ""
+  },
+  "github_actions": {
+    "run_id": "",
+    "run_url": "",
+    "status": "PENDING (현재 head 기준 CI 대기 중)",
+    "head_sha": ""
+  },
+  "changed_files": [
+    ".claude/agents/pipeline-manager-agent.md",
+    "codex_model_router_report.md",
+    "pipeline.py",
+    "pyproject.toml",
+    "tests/e2e/test_ac_tracking_1abe.py",
+    "tests/e2e/test_codex_cost_optimization_9f5e.py",
+    "tests/e2e/test_codex_defect_fix_dae1.py",
+    "tests/e2e/test_codex_defects_dae1.py",
+    "tests/e2e/test_codex_model_router_dae1.py",
+    "tests/e2e/test_codex_model_router_e2e.py",
+    "tests/e2e/test_codex_review_gate_3bb6.py",
+    "tests/oracles/IMP-20260712-DAE1/tc01_low_risk_docs/expected.json",
+    "tests/oracles/IMP-20260712-DAE1/tc01_low_risk_docs/input.json",
+    "tests/oracles/IMP-20260712-DAE1/tc04_high_risk_pipeline/expected.json",
+    "tests/oracles/IMP-20260712-DAE1/tc04_high_risk_pipeline/input.json",
+    "tests/oracles/IMP-20260712-DAE1/tc05_critical_acceptance/expected.json",
+    "tests/oracles/IMP-20260712-DAE1/tc05_critical_acceptance/input.json",
+    "tests/oracles/IMP-20260712-DAE1/tc08_downgrade_blocked/expected.json",
+    "tests/oracles/IMP-20260712-DAE1/tc08_downgrade_blocked/input.json",
+    "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/expected.json",
+    "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/input.json"
+  ],
+  "changed_files_count": 21,
+  "gates": {
+    "technical": "PASS",
+    "oracle": "PASS",
+    "github_ci": "PASS",
+    "acceptance": "PENDING"
+  },
+  "requirements": [
+    {
+      "ac_id": "AC-1",
+      "summary": "_classify_codex_review_risk가 변경 파일/함수를 분석하여 LOW/MEDIUM/HIGH/CRITICAL을 결정적으로 반환한다. 사용자 요청의 Risk 규칙(LOW: docs/report만, MEDIUM: 일반 테스트, HIGH: pipeline.py+gates/workflow, CRITICAL: acceptance/SHA writer)을 정확히 따른다.",
+      "linked_mt": [
+        "MT-1",
+        "MT-2",
+        "MT-3",
+        "MT-6"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-2",
+      "summary": "selected_model과 actual_model이 분리되어 codex_review_result.json에 기록된다. actual_model은 실제 CLI 확인 결과이며, 확인 불가 시 \"unknown\"으로 기록된다.",
+      "linked_mt": [
+        "MT-4",
+        "MT-6"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-3",
+      "summary": "actual_model=unknown + HIGH/CRITICAL 조합은 BLOCKED(fail-closed)로 차단된다. actual_model=unknown + LOW/MEDIUM은 WARN 후 진행 허용.",
+      "linked_mt": [
+        "MT-4",
+        "MT-6"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-4",
+      "summary": "CRITICAL 변경(acceptance_request 핸들러, SHA 검증 함수, nonce writer 등)은 사용자 요청에 명시된 함수 목록과 정확히 일치하는 규칙으로 감지된다.",
+      "linked_mt": [
+        "MT-1",
+        "MT-2"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-5",
+      "summary": "HIGH/CRITICAL risk를 LOW 모델로 다운그레이드하면 BLOCKED. CRITICAL deep reasoning을 medium으로 낮추면 BLOCKED.",
+      "linked_mt": [
+        "MT-3"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-6",
+      "summary": "기존 packet_sha256/pr_body_sha256/head_sha/provenance/replay/stale 검증 로직이 약화되지 않는다 (회귀 테스트 통과).",
+      "linked_mt": [
+        "MT-6"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-7",
+      "summary": "usage limit/network/timeout/model unavailable 오류는 REJECT가 아니라 ERROR로 분류된다. reject_count 증가 없음.",
+      "linked_mt": [
+        "MT-6"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-8",
+      "summary": "TC-1~TC-18 테스트가 모두 구현되어 pytest 통과한다.",
+      "linked_mt": [
+        "MT-6",
+        "MT-9"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-9",
+      "summary": "LOW/MEDIUM은 observe 모드 기본(WARN 후 진행), HIGH/CRITICAL은 enforce 모드 기본(정책 위반 시 BLOCKED). 계층형 동작.",
+      "linked_mt": [
+        "MT-3",
+        "MT-5"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-10",
+      "summary": "Review Bundle Budget이 모든 risk에서 raw ACCEPT/nonce 포함을 금지한다.",
+      "linked_mt": [
+        "MT-7"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-11",
+      "summary": "pipeline-manager-agent.md에 Codex Model Router 섹션이 추가되어 risk 규칙표, 모델 라우팅 표, Plus 사용량 보호 전략이 문서화된다.",
+      "linked_mt": [
+        "MT-8"
+      ],
+      "status": "PASS",
+      "evidence": []
+    }
+  ],
+  "requirements_summary": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0
+  },
+  "oracle_summary": {
+    "status": "PASS",
+    "case_count": 9,
+    "passed_count": 9,
+    "failed_count": 0
+  },
+  "known_failures": [],
+  "warnings": [],
+  "acceptance": {
+    "code": null,
+    "reject_example": null,
+    "nonce": null,
+    "request_id": null,
+    "status": "PENDING",
+    "display_status": "PENDING"
+  },
+  "artifacts": {
+    "human_packet_md": "human_acceptance_packet.md",
+    "verification_json": "human_acceptance_packet.json",
+    "cleanup_manifest": null
+  },
+  "evidence_integrity": {
+    "status": "PASS",
+    "protected_evidence_count": 10,
+    "tracked_count": 10,
+    "pr_included_count": 10,
+    "untracked_protected": [],
+    "orphan_oracle_warnings": [],
+    "cleanup_only_artifacts": [],
+    "blockers": []
+  },
+  "workspace_hygiene": {
+    "status": "WARN",
+    "blocking_items": [],
+    "cleanup_only_items": [
+      "build_report.xml"
+    ],
+    "protected_evidence_count": 0,
+    "tracked_oracle_count": 0,
+    "untracked_oracle_count": 0,
+    "pr_included_protected_count": 10,
+    "cleanup_command": "Remove-Item \"build_report.xml\"",
+    "checked_at": "2026-07-12T23:00:11Z",
+    "pr_runtime_state_leak": []
+  },
+  "workspace_hygiene_summary": {
+    "status": "WARN",
+    "scratch_root": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.pipeline\\runs\\IMP-20260712-DAE1\\scratch",
+    "cleanup_only_count": 1,
+    "blocking_count": 0,
+    "permission_denied_count": 0,
+    "runtime_state_leak_count": 0,
+    "cleanup_command": "Remove-Item \"build_report.xml\""
+  },
+  "post_complete_cleanup": {
+    "workspace_readiness": "unknown",
+    "ready_for_next_task": null,
+    "removed_count": 0,
+    "deferred_count": 0,
+    "unknown_count": 0
+  },
+  "acceptance_target": {
+    "description": "사용자가 확인해야 하는 실제 구현 기준점 (marker PR 아님)",
+    "repository": "hojiyong2-commits/Pipeline",
+    "acceptance_pr": {
+      "number": "#891",
+      "head_sha": "f521cab69f1d26867b7cacd09072fc6790462e40",
+      "title": "[IMP-20260712-DAE1] Codex Review 모델/사고레벨 자동 라우터 trust-chain risk 기반 SSoT 구현",
+      "changed_files": [
+        ".claude/agents/pipeline-manager-agent.md",
+        "codex_model_router_report.md",
+        "pipeline.py",
+        "pyproject.toml",
+        "tests/e2e/test_ac_tracking_1abe.py",
+        "tests/e2e/test_codex_cost_optimization_9f5e.py",
+        "tests/e2e/test_codex_defect_fix_dae1.py",
+        "tests/e2e/test_codex_defects_dae1.py",
+        "tests/e2e/test_codex_model_router_dae1.py",
+        "tests/e2e/test_codex_model_router_e2e.py",
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        "tests/oracles/IMP-20260712-DAE1/tc01_low_risk_docs/expected.json",
+        "tests/oracles/IMP-20260712-DAE1/tc01_low_risk_docs/input.json",
+        "tests/oracles/IMP-20260712-DAE1/tc04_high_risk_pipeline/expected.json",
+        "tests/oracles/IMP-20260712-DAE1/tc04_high_risk_pipeline/input.json",
+        "tests/oracles/IMP-20260712-DAE1/tc05_critical_acceptance/expected.json",
+        "tests/oracles/IMP-20260712-DAE1/tc05_critical_acceptance/input.json",
+        "tests/oracles/IMP-20260712-DAE1/tc08_downgrade_blocked/expected.json",
+        "tests/oracles/IMP-20260712-DAE1/tc08_downgrade_blocked/input.json",
+        "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/expected.json",
+        "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/input.json"
+      ],
+      "note": "이 PR이 User Acceptance 승인 대상입니다. changed_files 목록이 사용자가 최종 확인하는 변경 범위입니다."
+    },
+    "acceptance_pr_note": "acceptance_pr은 현재 User Acceptance 승인 대상인 오픈 PR입니다. impl_prs(이력)와 구분하세요.",
+    "target_main_commit": "d7672c4609163b079890e1d6d3376cd93eed44db",
+    "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+    "target_commit_note": "PR head SHA — origin/main이 아닌 현재 PR의 최신 commit",
+    "impl_prs": [],
+    "impl_prs_note": "pipeline_id로 검색한 이미 머지된 PR 이력입니다. 승인 대상은 acceptance_pr을 확인하세요.",
+    "changed_files": [
+      ".claude/agents/pipeline-manager-agent.md",
+      "codex_model_router_report.md",
+      "pipeline.py",
+      "pyproject.toml",
+      "tests/e2e/test_ac_tracking_1abe.py",
+      "tests/e2e/test_codex_cost_optimization_9f5e.py",
+      "tests/e2e/test_codex_defect_fix_dae1.py",
+      "tests/e2e/test_codex_defects_dae1.py",
+      "tests/e2e/test_codex_model_router_dae1.py",
+      "tests/e2e/test_codex_model_router_e2e.py",
+      "tests/e2e/test_codex_review_gate_3bb6.py",
+      "tests/oracles/IMP-20260712-DAE1/tc01_low_risk_docs/expected.json",
+      "tests/oracles/IMP-20260712-DAE1/tc01_low_risk_docs/input.json",
+      "tests/oracles/IMP-20260712-DAE1/tc04_high_risk_pipeline/expected.json",
+      "tests/oracles/IMP-20260712-DAE1/tc04_high_risk_pipeline/input.json",
+      "tests/oracles/IMP-20260712-DAE1/tc05_critical_acceptance/expected.json",
+      "tests/oracles/IMP-20260712-DAE1/tc05_critical_acceptance/input.json",
+      "tests/oracles/IMP-20260712-DAE1/tc08_downgrade_blocked/expected.json",
+      "tests/oracles/IMP-20260712-DAE1/tc08_downgrade_blocked/input.json",
+      "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/expected.json",
+      "tests/oracles/IMP-20260712-DAE1/tc11_unknown_model_critical/input.json"
+    ],
+    "oracle_evidence_files": [
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc01_low_risk_docs\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "29a90d7345253c7b7ad7c0589cfd1ed9a114f58ab26136c5d91bc326f254ee00",
+        "target_blob_sha256": "29a90d7345253c7b7ad7c0589cfd1ed9a114f58ab26136c5d91bc326f254ee00",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc01_low_risk_docs\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "dc326b2ef6ea2e69742ebacde584c706d5fe047f3a43c54750d8ffa5babadea6",
+        "target_blob_sha256": "dc326b2ef6ea2e69742ebacde584c706d5fe047f3a43c54750d8ffa5babadea6",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc04_high_risk_pipeline\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "ebfd6eadb43ce7a7b26fec4f6060ca99e0237d76ed10a87927468537370f51d7",
+        "target_blob_sha256": "ebfd6eadb43ce7a7b26fec4f6060ca99e0237d76ed10a87927468537370f51d7",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc04_high_risk_pipeline\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "8bcebcdd5fda3c44a7aec6749b3c44f51cbdcb595b0c74f464f0cda7bf85f95a",
+        "target_blob_sha256": "8bcebcdd5fda3c44a7aec6749b3c44f51cbdcb595b0c74f464f0cda7bf85f95a",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc05_critical_acceptance\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "0df59af51e19760756337209d4c371ce856fff79bc5e464092ae43d30b65934c",
+        "target_blob_sha256": "0df59af51e19760756337209d4c371ce856fff79bc5e464092ae43d30b65934c",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc05_critical_acceptance\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "b051994f1247cdd340bb8f78bf2fb3dc8c96a3be7892fc61b32e2f7ebc154a65",
+        "target_blob_sha256": "b051994f1247cdd340bb8f78bf2fb3dc8c96a3be7892fc61b32e2f7ebc154a65",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc08_downgrade_blocked\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "78d0f7ac4055f34d8ec98116e64117f0a6092b87258d3e80c70c91bd06bde9a7",
+        "target_blob_sha256": "78d0f7ac4055f34d8ec98116e64117f0a6092b87258d3e80c70c91bd06bde9a7",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc08_downgrade_blocked\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "4b892a17cede6eeed65942dda5919e9cd0787b474cdc89abf6a7ff83682e8658",
+        "target_blob_sha256": "4b892a17cede6eeed65942dda5919e9cd0787b474cdc89abf6a7ff83682e8658",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc11_unknown_model_critical\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "77666ad6007c5e73f1d2d85106a0d1607d1ce249d7d91b15268450ef7e50d04e",
+        "target_blob_sha256": "77666ad6007c5e73f1d2d85106a0d1607d1ce249d7d91b15268450ef7e50d04e",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260712-DAE1\\tc11_unknown_model_critical\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "b7ee9e3e8a9f0ffc29be291466b5e70203855c92815f9d544f4893e14fc65c68",
+        "target_blob_sha256": "b7ee9e3e8a9f0ffc29be291466b5e70203855c92815f9d544f4893e14fc65c68",
+        "target_commit": "f521cab69f1d26867b7cacd09072fc6790462e40",
+        "sha_match": true,
+        "status": "MATCH"
+      }
+    ],
+    "oracle_evidence_note": "oracle_evidence_files의 target_blob_sha256은 target_commit에서 git show로 추출한 blob SHA256입니다. inventory_sha256과 일치하면 sha_match=true, status=MATCH로 표시됩니다."
+  },
+  "blocked": false,
+  "blocked_reasons": [],
+  "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/891",
+  "pr_number": "891",
+  "pr_head_sha": "f521cab69f1d26867b7cacd09072fc6790462e40",
+  "ci_run_id": "29438324825",
+  "actions_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/29438324825",
+  "gate_status": {
+    "technical": "PASS",
+    "oracle": "PASS",
+    "github_ci": "PASS",
+    "acceptance": "PENDING"
+  },
+  "structured_ac": [
+    {
+      "ac_id": "AC-1",
+      "requirement": "_classify_codex_review_risk가 변경 파일/함수를 분석하여 LOW/MEDIUM/HIGH/CRITICAL을 결정적으로 반환한다. 사용자 요청의 Risk 규칙(LOW: docs/report만, MEDIUM: 일반 테스트, HIGH: pipeline.py+gates/workflow, CRITICAL: acceptance/SHA writer)을 정확히 따른다.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-2",
+      "requirement": "selected_model과 actual_model이 분리되어 codex_review_result.json에 기록된다. actual_model은 실제 CLI 확인 결과이며, 확인 불가 시 \"unknown\"으로 기록된다.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-3",
+      "requirement": "actual_model=unknown + HIGH/CRITICAL 조합은 BLOCKED(fail-closed)로 차단된다. actual_model=unknown + LOW/MEDIUM은 WARN 후 진행 허용.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-4",
+      "requirement": "CRITICAL 변경(acceptance_request 핸들러, SHA 검증 함수, nonce writer 등)은 사용자 요청에 명시된 함수 목록과 정확히 일치하는 규칙으로 감지된다.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-5",
+      "requirement": "HIGH/CRITICAL risk를 LOW 모델로 다운그레이드하면 BLOCKED. CRITICAL deep reasoning을 medium으로 낮추면 BLOCKED.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-6",
+      "requirement": "기존 packet_sha256/pr_body_sha256/head_sha/provenance/replay/stale 검증 로직이 약화되지 않는다 (회귀 테스트 통과).",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": false,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-7",
+      "requirement": "usage limit/network/timeout/model unavailable 오류는 REJECT가 아니라 ERROR로 분류된다. reject_count 증가 없음.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-8",
+      "requirement": "TC-1~TC-18 테스트가 모두 구현되어 pytest 통과한다.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-9",
+      "requirement": "LOW/MEDIUM은 observe 모드 기본(WARN 후 진행), HIGH/CRITICAL은 enforce 모드 기본(정책 위반 시 BLOCKED). 계층형 동작.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-10",
+      "requirement": "Review Bundle Budget이 모든 risk에서 raw ACCEPT/nonce 포함을 금지한다.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": false,
+      "expected_evidence": ""
+    },
+    {
+      "ac_id": "AC-11",
+      "requirement": "pipeline-manager-agent.md에 Codex Model Router 섹션이 추가되어 risk 규칙표, 모델 라우팅 표, Plus 사용량 보호 전략이 문서화된다.",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": ""
+    }
+  ],
+  "ac_fulfillment_table": [
+    {
+      "ac_id": "AC-1",
+      "requirement": "_classify_codex_review_risk가 변경 파일/함수를 분석하여 LOW/MEDIUM/HIGH/CRITICAL을 결정적으로 반환한다. 사용자 요청의 Risk 규칙(LOW: docs/report만, MEDIUM: 일반 테스트, HIGH: pipeline.py+gates/workflow, CRITICAL: acceptance/SHA writer)을 정확히 따른다.",
+      "linked_mt": [
+        "MT-1",
+        "MT-2",
+        "MT-3",
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-1(covers_ac): MT-1 ?? ??",
+        "MT-2(covers_ac): MT-2 ?? ??",
+        "MT-3(covers_ac): MT-3 ?? ??",
+        "MT-6(covers_ac): MT-6 ?? ??"
+      ],
+      "verification": [
+        "MT-1: PASS — CODEX_MODEL_POLICIES/CODEX_HIGH_RISK_PATHS/CODEX_CRITICAL_FUNCTIONS SSoT 상수 구현 완료 — risk 규칙표 정확히 구현",
+        "MT-2: PASS — _build_codex_model_policy: risk_level→selected_model/mode/cache_allowed/force_review 정확한 매핑 구현",
+        "MT-3: PASS — _classify_codex_review_risk: 빈 입력→BLOCKED, tests/ 경로 제외 로직 구현 완료",
+        "MT-6: PASS — _cmd_gates_codex_review: _classify_codex_review_risk 통합, risk→model 라우팅 완전 구현"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-2",
+      "requirement": "selected_model과 actual_model이 분리되어 codex_review_result.json에 기록된다. actual_model은 실제 CLI 확인 결과이며, 확인 불가 시 \"unknown\"으로 기록된다.",
+      "linked_mt": [
+        "MT-4",
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-4(covers_ac): MT-4 ?? ??",
+        "MT-6(covers_ac): MT-6 ?? ??"
+      ],
+      "verification": [
+        "MT-4: PASS — _detect_codex_cli_capability: selected_model/actual_model 분리 기록, 확인 불가 시 unknown 기록 구현",
+        "MT-6: PASS — codex_review_result.json에 selected_model/actual_model 분리 기록, unknown 처리"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-3",
+      "requirement": "actual_model=unknown + HIGH/CRITICAL 조합은 BLOCKED(fail-closed)로 차단된다. actual_model=unknown + LOW/MEDIUM은 WARN 후 진행 허용.",
+      "linked_mt": [
+        "MT-4",
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-4(covers_ac): MT-4 ?? ??",
+        "MT-6(covers_ac): MT-6 ?? ??"
+      ],
+      "verification": [
+        "MT-4: PASS — actual_model=unknown + HIGH/CRITICAL → BLOCKED(fail-closed), LOW/MEDIUM → WARN 후 진행 구현",
+        "MT-6: PASS — unknown_model_critical_blocked failure_code 구현, LOW/MEDIUM WARN 진행"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-4",
+      "requirement": "CRITICAL 변경(acceptance_request 핸들러, SHA 검증 함수, nonce writer 등)은 사용자 요청에 명시된 함수 목록과 정확히 일치하는 규칙으로 감지된다.",
+      "linked_mt": [
+        "MT-1",
+        "MT-2"
+      ],
+      "implementation_evidence": [
+        "MT-1(covers_ac): MT-1 ?? ??",
+        "MT-2(covers_ac): MT-2 ?? ??"
+      ],
+      "verification": [
+        "MT-1: PASS — CODEX_CRITICAL_FUNCTIONS frozenset으로 CRITICAL 함수 목록 정의 — 사용자 요청 목록과 정확히 일치",
+        "MT-2: PASS — CRITICAL risk 분류 로직이 CODEX_CRITICAL_FUNCTIONS 목록 기반으로 동작 확인"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-5",
+      "requirement": "HIGH/CRITICAL risk를 LOW 모델로 다운그레이드하면 BLOCKED. CRITICAL deep reasoning을 medium으로 낮추면 BLOCKED.",
+      "linked_mt": [
+        "MT-3"
+      ],
+      "implementation_evidence": [
+        "MT-3(covers_ac): MT-3 ?? ??"
+      ],
+      "verification": [
+        "MT-3: PASS — downgrade_blocked: HIGH/CRITICAL에서 낮은 모델 요청 시 BLOCKED 처리 구현"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-6",
+      "requirement": "기존 packet_sha256/pr_body_sha256/head_sha/provenance/replay/stale 검증 로직이 약화되지 않는다 (회귀 테스트 통과).",
+      "linked_mt": [
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-6(covers_ac): MT-6 ?? ??"
+      ],
+      "verification": [
+        "MT-6: PASS — 기존 packet_sha256/pr_body_sha256/head_sha/provenance/replay/stale 검증 로직 미변경 확인"
+      ],
+      "result": "PASS",
+      "user_visible": false
+    },
+    {
+      "ac_id": "AC-7",
+      "requirement": "usage limit/network/timeout/model unavailable 오류는 REJECT가 아니라 ERROR로 분류된다. reject_count 증가 없음.",
+      "linked_mt": [
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-6(covers_ac): MT-6 ?? ??"
+      ],
+      "verification": [
+        "MT-6: PASS — usage_limit_error/timeout_error → ERROR 분류, reject_count 증가 없음 구현"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-8",
+      "requirement": "TC-1~TC-18 테스트가 모두 구현되어 pytest 통과한다.",
+      "linked_mt": [
+        "MT-6",
+        "MT-9"
+      ],
+      "implementation_evidence": [
+        "MT-6(covers_ac): MT-6 ?? ??",
+        "MT-9(covers_ac): MT-9 ?? ??"
+      ],
+      "verification": [
+        "MT-6: PASS — TC-1~TC-14 테스트 pytest PASS 확인 (test_codex_model_router_dae1.py)",
+        "MT-9: PASS — E2E 테스트 TC-1~TC-14(dae1) + TC-1~TC-14(e2e subprocess) + TC-3bb6 pytest PASS 확인"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-9",
+      "requirement": "LOW/MEDIUM은 observe 모드 기본(WARN 후 진행), HIGH/CRITICAL은 enforce 모드 기본(정책 위반 시 BLOCKED). 계층형 동작.",
+      "linked_mt": [
+        "MT-3",
+        "MT-5"
+      ],
+      "implementation_evidence": [
+        "MT-3(covers_ac): MT-3 ?? ??",
+        "MT-5(covers_ac): MT-5 ?? ??"
+      ],
+      "verification": [
+        "MT-3: PASS — observe(LOW/MEDIUM)/enforce(HIGH/CRITICAL) 계층형 모드 로직 구현",
+        "MT-5: PASS — verdict_source=external_verdict → acceptance_eligible=false, observe/enforce 계층 동작 TC-10 검증 완료"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-10",
+      "requirement": "Review Bundle Budget이 모든 risk에서 raw ACCEPT/nonce 포함을 금지한다.",
+      "linked_mt": [
+        "MT-7"
+      ],
+      "implementation_evidence": [
+        "MT-7(covers_ac): MT-7 ?? ??"
+      ],
+      "verification": [
+        "MT-7: PASS — Review Bundle Budget에서 raw ACCEPT/nonce 포함 금지 검증 (_build_codex_review_bundle 구현)"
+      ],
+      "result": "PASS",
+      "user_visible": false
+    },
+    {
+      "ac_id": "AC-11",
+      "requirement": "pipeline-manager-agent.md에 Codex Model Router 섹션이 추가되어 risk 규칙표, 모델 라우팅 표, Plus 사용량 보호 전략이 문서화된다.",
+      "linked_mt": [
+        "MT-8"
+      ],
+      "implementation_evidence": [
+        "MT-8(covers_ac): MT-8 ?? ??"
+      ],
+      "verification": [
+        "MT-8: PASS — pipeline-manager-agent.md에 Codex Model Router 섹션 추가 완료 — risk 규칙표/모델 라우팅 표/Plus 사용량 보호 전략 문서화"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    }
+  ],
+  "acceptance_code": null
+}
