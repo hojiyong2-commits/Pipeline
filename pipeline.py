@@ -2646,6 +2646,49 @@ CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED: List[str] = [
 CODEX_CB_MAX_SAME_CATEGORY_REPEATS: int = 3   # 같은 root_cause_category 3회 반복 → NON_CONVERGING
 CODEX_CB_MAX_EFFECTIVE_REJECTS: int = 5        # review_epoch 내 실제(IN_SCOPE) REJECT 5회 → NON_CONVERGING
 
+# [Purpose]: 결함6(IMP-20260712-DAE1) — Codex Review Contract SSoT. 핵심 계약 상수를 구조화된
+#            불변 struct로 하드코딩하고, 이 struct의 canonical JSON SHA256을 contract_sha256으로
+#            사용한다. pipeline.py 전체 SHA를 contract_sha256으로 쓰던 방식(계약과 무관한 코드
+#            변경에도 SHA가 바뀌어 캐시가 무효화되던 문제)을 제거한다.
+# [Assumptions]: 참조하는 SSoT 목록/임계값 상수는 이 지점 이전에 모두 정의되어 있다.
+# [Vulnerability & Risks]: struct에 포함되지 않은 계약 요소를 나중에 추가하면 SHA에 반영되지
+#            않으므로, 계약 의미가 있는 상수는 반드시 이 struct에 등록해야 한다.
+# [Improvement]: struct 필드 목록을 검사하는 회귀 테스트를 추가해 신규 계약 상수 누락을 조기 탐지.
+CODEX_REVIEW_CONTRACT_STRUCT: Dict[str, Any] = {
+    "schema_version": 1,
+    "contract_id": "IMP-20260712-DAE1-codex-review-contract",
+    "critical_functions": CODEX_CRITICAL_FUNCTIONS,
+    "high_risk_paths": CODEX_HIGH_RISK_PATHS,
+    "bounded_trust_in_scope": CODEX_BOUNDED_TRUST_IN_SCOPE,
+    "bounded_trust_out_of_scope_diagnostic": CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC,
+    "bounded_trust_environment_untrusted": CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED,
+    "circuit_breaker_max_same_category": CODEX_CB_MAX_SAME_CATEGORY_REPEATS,
+    "circuit_breaker_max_effective_rejects": CODEX_CB_MAX_EFFECTIVE_REJECTS,
+    "finding_required_fields": [
+        "scope", "severity", "root_cause_category", "evidence",
+        "reproduction", "required_fix", "acceptance_criteria",
+    ],
+    "verdict_schema_version": CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+}
+
+
+def _compute_codex_contract_sha256() -> str:
+    """CODEX_REVIEW_CONTRACT_STRUCT의 canonical JSON SHA256을 계산한다(결함6).
+
+    pipeline.py 전체 SHA가 아닌, 구조화된 계약 상수만의 SHA를 반환한다. 계약과 무관한
+    코드 변경은 이 값을 바꾸지 않으며, 계약 struct 내용이 바뀔 때만 SHA가 변한다.
+
+    Returns:
+        64자 hex SHA256 문자열. 직렬화 실패 시 빈 문자열(fail-safe).
+    """
+    try:
+        _contract_bytes = json.dumps(
+            CODEX_REVIEW_CONTRACT_STRUCT, sort_keys=True, ensure_ascii=True
+        ).encode("utf-8")
+        return hashlib.sha256(_contract_bytes).hexdigest()
+    except Exception:  # noqa: BLE001 — 직렬화 실패는 빈 문자열로 fail-safe
+        return ""
+
 # IMP-20260712-DAE1 REJECT#4: Codex Review semantic evidence 예산 제한(문자수).
 #   실제 unified diff hunk를 Codex prompt(stdin)에 실어 보낼 때의 총 문자 예산이다.
 #   CRITICAL 함수 hunk를 예산보다 먼저 채우고, 초과 시 truncated_critical_hunks로 계수하여
@@ -11533,13 +11576,12 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         except Exception:  # noqa: BLE001
             bundle["verification_json_sha256"] = ""
 
-        # contract_sha256
-        try:
-            _cp = CONTRACTS_DIR / pipeline_id / "task_contract.json"
-            if _cp.exists():
-                bundle["contract_sha256"] = _sha256_file(_cp)
-        except Exception:  # noqa: BLE001
-            bundle["contract_sha256"] = ""
+        # contract_sha256: 결함6 — 구조화된 Codex Review 계약 상수(CODEX_REVIEW_CONTRACT_STRUCT)의
+        #   canonical JSON SHA를 사용한다. pipeline.py 전체 SHA나 task_contract.json SHA가 아니라,
+        #   실제 Codex Review 계약 의미(critical functions/high-risk paths/bounded trust/CB 임계값/
+        #   finding 필수 필드)만 반영한다. 계약과 무관한 코드 변경은 이 값을 바꾸지 않는다.
+        _contract_sha = _compute_codex_contract_sha256()
+        bundle["contract_sha256"] = _contract_sha if _contract_sha else ""
 
         # pr_body_candidate_sha256: staged_packet_content로 PR body 블록을 교체한
         #   최종 body의 canonical SHA. staged_packet_sha256(패킷 파일 SHA)와는 의미가 다르다.
@@ -12634,14 +12676,44 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     #   APPROVED, REJECT/BLOCKED면 REJECTED로 매핑하되, diagnostic_only/environment_untrusted 플래그로
     #   downstream(_cmd_gates_codex_review)이 reject_count 증가/즉시 BLOCKED를 결정한다.
     _findings = obj.get("findings")
-    # Defect 6: findings가 빈 리스트인 REJECT는 parse_failure (findings=[] REJECT는 invalid).
-    #   findings=[] + REJECT/BLOCKED → ERROR/invalid_verdict_schema (reject_count 미증가, fail-closed).
-    if isinstance(_findings, list) and len(_findings) == 0 and verdict in ("REJECT", "BLOCKED"):
-        return None
+    # 결함4(IMP-20260712-DAE1): REJECT/BLOCKED verdict는 findings 필드가 필수다.
+    #   findings가 없음(None)/list 아님/빈 리스트([])이면 invalid_verdict_schema(parse_failure)로
+    #   None을 반환한다(reject_count 미증가, fail-closed). legacy 4-필드 REJECT(findings 없이
+    #   root_cause/reproduction/required_fix/acceptance_criteria만 있는 형식)는 더 이상 허용하지
+    #   않는다 — Codex가 구조화된 findings[]를 반드시 제출해야 REJECT/BLOCKED가 유효하다.
+    if verdict in ("REJECT", "BLOCKED"):
+        if _findings is None:
+            return None
+        if not isinstance(_findings, list):
+            return None
+        if len(_findings) == 0:
+            return None
     if isinstance(_findings, list) and len(_findings) > 0:
-        # Defect 5: 각 finding의 필수 필드 검증은 _classify_codex_findings가 담당한다.
-        #   root_cause_category가 없거나 SSoT 목록에 없는 finding은 _classify_codex_findings에서
-        #   이미 IN_SCOPE P0으로 fail-closed 처리되므로, 여기서는 분류 결과를 그대로 신뢰한다.
+        # 결함5(IMP-20260712-DAE1): 각 finding의 7개 필수 필드를 실제로 검증한다.
+        #   scope/severity/root_cause_category/evidence/reproduction/required_fix는 non-empty str,
+        #   acceptance_criteria는 non-empty list여야 한다. 하나라도 누락/빈 문자열/잘못된 타입이면
+        #   invalid_verdict_schema(parse_failure)로 None을 반환한다(reject_count 미증가, fail-closed).
+        #   불완전한 finding을 신뢰해 verdict를 확정하지 않는다.
+        _finding_required_fields = (
+            "scope", "severity", "root_cause_category", "evidence",
+            "reproduction", "required_fix", "acceptance_criteria",
+        )
+        for _fi in _findings:
+            if not isinstance(_fi, dict):
+                return None  # finding이 dict가 아님 → parse_failure
+            for _req_field in _finding_required_fields:
+                _fval = _fi.get(_req_field)
+                if _fval is None:
+                    return None  # 필드 누락 → parse_failure
+                if _req_field == "acceptance_criteria":
+                    if not isinstance(_fval, list) or len(_fval) == 0:
+                        return None  # non-empty list 아님 → parse_failure
+                    if not all(isinstance(_x, str) and str(_x).strip() for _x in _fval):
+                        return None  # 빈/비str 원소 → parse_failure
+                else:
+                    if not isinstance(_fval, str) or not str(_fval).strip():
+                        return None  # 빈 문자열/비str → parse_failure
+        # 7개 필드 검증 통과 후 scope 분류를 수행한다.
         _cls = _classify_codex_findings(_findings)
         if verdict == "APPROVE_TO_USER":
             _mapped = "APPROVED"
@@ -27267,6 +27339,23 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   _record_user_authorized_contract_migration을 호출하여 새 review_epoch를 시작한다.
     _start_epoch_reason = str(getattr(args, "start_epoch", None) or "").strip()
     if _start_epoch_reason:
+        # 결함7(IMP-20260712-DAE1): --start-epoch 자동 실행 금지 guard.
+        #   --start-epoch은 사용자가 직접 터미널에서 실행하는 유일한 운영 진입점이다. 에이전트/자동
+        #   흐름이 circuit breaker NON_CONVERGING을 우회하려 자동으로 새 epoch를 시작하는 것을 코드
+        #   레벨에서 차단한다. 환경변수 CODEX_START_EPOCH_USER_CONFIRMED=1 이 없으면 fail-closed BLOCKED.
+        #   이 환경변수는 사용자가 직접 설정해야 하며, 에이전트가 자동으로 설정해선 안 된다.
+        _user_confirmed_env = str(
+            os.environ.get("CODEX_START_EPOCH_USER_CONFIRMED", "") or ""
+        ).strip()
+        if _user_confirmed_env != "1":
+            _die(
+                "[BLOCKED] failure_code=start_epoch_auto_run_blocked\n"
+                "  --start-epoch은 사용자 직접 실행만 허용됩니다.\n"
+                "  에이전트/자동 흐름의 실행은 차단됩니다 (fail-closed).\n"
+                "  사용자가 직접 실행하려면 환경변수를 설정한 뒤 실행하세요:\n"
+                "  CODEX_START_EPOCH_USER_CONFIRMED=1 python pipeline.py gates codex-review "
+                "--start-epoch '이유를 입력하세요'"
+            )
         _migration_old_sha = str(
             (state.get("codex_review_contract_migration") or {}).get("new_contract_sha256", "") or ""
         )
@@ -27330,11 +27419,49 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         _legacy_cb = _check_codex_circuit_breaker(_legacy_hist, "epoch_legacy")
         _legacy_nc_msg = ""
         if _legacy_cb.get("triggered"):
+            # 결함1(IMP-20260712-DAE1): circuit breaker 발동 시 NON_CONVERGING 상태를
+            #   codex_review_result.json에 영속 기록한다. 기존 reject_count/cli_error_count는
+            #   직전 result 파일에서 보존한다(초기화 금지). append-only history는 삭제하지 않는다.
+            #   파일 기록 실패는 무시하고 BLOCKED는 항상 발동한다(fail-closed).
+            _d1_prev: Dict[str, Any] = {}
+            try:
+                _d1_prev_path = _codex_review_result_path()
+                if _d1_prev_path.exists():
+                    with open(_d1_prev_path, encoding="utf-8") as _d1_pfh:
+                        _d1_loaded = json.load(_d1_pfh)
+                    if isinstance(_d1_loaded, dict) and str(
+                        _d1_loaded.get("pipeline_id", "") or ""
+                    ) == pipeline_id:
+                        _d1_prev = _d1_loaded
+            except (OSError, json.JSONDecodeError, ValueError, TypeError):
+                _d1_prev = {}
+            _nc_result = {
+                "schema_version": CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+                "pipeline_id": pipeline_id,
+                "status": "NON_CONVERGING",
+                "review_epoch": "epoch_legacy",
+                "effective_rejects": int(_legacy_cb.get("effective_rejects", 0) or 0),
+                "non_converging_reason": str(
+                    _legacy_cb.get("reason") or "circuit_breaker_triggered"
+                ),
+                "acceptance_eligible": False,
+                "recorded_at": _now(),
+                # reject_count/cli_error_count: 직전 result 파일에서 보존(초기화 금지).
+                "reject_count": int(_d1_prev.get("reject_count", 0) or 0),
+                "cli_error_count": int(_d1_prev.get("cli_error_count", 0) or 0),
+            }
+            try:
+                _nc_result_path = _codex_review_result_path()
+                _nc_result_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(_nc_result_path, "w", encoding="utf-8") as _nc_fh:
+                    json.dump(_nc_result, _nc_fh, ensure_ascii=False, indent=2)
+            except OSError:
+                pass  # 파일 기록 실패는 무시 — BLOCKED는 항상 발동(fail-closed)
             _legacy_nc_msg = (
                 f"\n  epoch_legacy 이력에서 circuit breaker 발동: reason={_legacy_cb.get('reason')}, "
                 f"effective_rejects={_legacy_cb.get('effective_rejects')}, "
                 f"same_category_max={_legacy_cb.get('same_category_max')}\n"
-                "  이 이력은 NON_CONVERGING 상태입니다."
+                "  이 이력은 NON_CONVERGING 상태로 codex_review_result.json에 기록되었습니다."
             )
         _die(
             "[BLOCKED] failure_code=codex_review_epoch_missing\n"
@@ -27344,12 +27471,44 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "  python pipeline.py gates codex-review --start-epoch '이유를 입력하세요'"
         )
 
-    # BUG-20260702-E69E: 직전 기록에서 reject/CLI-error 누적 카운터를 읽는다.
-    #   reject_count는 status==REJECTED일 때만, cli_error_count는 status==ERROR일 때만 누적한다.
+    # BUG-20260702-E69E: 직전 기록에서 CLI-error 누적 카운터/상태를 읽는다.
     retry_cli_error = bool(getattr(args, "retry_cli_error", False))
     force_review = bool(getattr(args, "force_review", False))
     _codex_exec_timeout = int(getattr(args, "codex_timeout", 600) or 600)
-    prev_reject_count = 0
+
+    # 결함2(IMP-20260712-DAE1): reject_count SSoT를 mutable result 파일이 아닌 append-only
+    #   history(codex_review_history.jsonl)에서 계산한다. result 파일은 사용자/에이전트가 삭제·수정
+    #   가능하므로, 삭제 후 reject_count가 0으로 리셋되어 circuit breaker를 우회하는 취약점이 있었다.
+    #   history는 append-only이며 현재 epoch에 대한 effective(IN_SCOPE) reject 수를 SSoT로 삼는다.
+    #   history 파일 읽기 실패(손상/권한)는 fail-closed BLOCKED로 처리한다.
+    _hist_for_count: List[Dict[str, Any]] = []
+    _hist_path_for_count = _codex_review_history_path()
+    if _hist_path_for_count.exists():
+        try:
+            for _hl in _hist_path_for_count.read_text(encoding="utf-8").splitlines():
+                _hl = _hl.strip()
+                if not _hl:
+                    continue
+                try:
+                    _ho = json.loads(_hl)
+                    if isinstance(_ho, dict):
+                        _hist_for_count.append(_ho)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+        except OSError:
+            _die(
+                "[BLOCKED] failure_code=history_file_unreadable\n"
+                "  codex_review_history.jsonl 읽기 실패 — history 손상 또는 권한 문제 (fail-closed).\n"
+                "  reject_count SSoT를 관측할 수 없어 Codex CLI를 호출하지 않습니다."
+            )
+
+    # 현재 epoch의 effective reject_count를 history에서 계산(epoch 격리 — 다른 epoch 항목 제외).
+    _count_epoch = _current_epoch if _current_epoch else "epoch_legacy"
+    _prev_cb_result = _check_codex_circuit_breaker(_hist_for_count, _count_epoch)
+    prev_reject_count = int(_prev_cb_result.get("effective_rejects", 0) or 0)
+
+    # result 파일은 최신 상태 pointer로만 사용한다(prev_status, prev_cli_error_count).
+    #   reject_count는 위 history SSoT에서 이미 계산했으므로 result 파일 값을 신뢰하지 않는다.
     prev_cli_error_count = 0
     prev_status = ""
     _prev: Dict[str, Any] = {}
@@ -27360,12 +27519,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 _prev_loaded = json.load(_pfh)
             if isinstance(_prev_loaded, dict) and str(_prev_loaded.get("pipeline_id", "") or "") == pipeline_id:
                 _prev = _prev_loaded
-                prev_reject_count = int(_prev.get("reject_count", 0) or 0)
                 prev_cli_error_count = int(_prev.get("cli_error_count", 0) or 0)
                 prev_status = str(_prev.get("status", "") or "")
         except (OSError, json.JSONDecodeError, ValueError, TypeError):
             _prev = {}
-            prev_reject_count = 0
             prev_cli_error_count = 0
             prev_status = ""
 
@@ -27378,6 +27535,45 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "  사용자 결정으로 새 epoch를 시작하세요:\n"
             "  python pipeline.py gates codex-review --start-epoch '이유를 입력하세요'"
         )
+
+    # 결함3(IMP-20260712-DAE1): Codex CLI 호출 전 circuit breaker를 history 기반으로 검사한다.
+    #   result 파일을 삭제해 NON_CONVERGING pointer를 지워도, append-only history가 이미 임계값에
+    #   도달했으면 CLI를 호출하지 않고 fail-closed BLOCKED한다. NON_CONVERGING을 result 파일에
+    #   다시 영속 기록하여 이후 재실행도 차단한다. (named epoch에서만 동작 — 명시적 주입/test
+    #   경로는 _current_epoch가 비어 있어 이 검사를 건너뛴다.)
+    if _current_epoch:
+        _pre_cli_cb = _check_codex_circuit_breaker(_hist_for_count, _current_epoch)
+        if _pre_cli_cb.get("triggered"):
+            _pre_cli_nc_result = {
+                "schema_version": CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+                "pipeline_id": pipeline_id,
+                "status": "NON_CONVERGING",
+                "review_epoch": _current_epoch,
+                "effective_rejects": int(_pre_cli_cb.get("effective_rejects", 0) or 0),
+                "non_converging_reason": str(
+                    _pre_cli_cb.get("reason") or "circuit_breaker_triggered"
+                ),
+                "acceptance_eligible": False,
+                "recorded_at": _now(),
+                "reject_count": prev_reject_count,
+                "cli_error_count": prev_cli_error_count,
+            }
+            try:
+                _nc_path = _codex_review_result_path()
+                _nc_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(_nc_path, "w", encoding="utf-8") as _nc_wfh:
+                    json.dump(_pre_cli_nc_result, _nc_wfh, ensure_ascii=False, indent=2)
+            except OSError:
+                pass  # 파일 기록 실패는 무시 — BLOCKED는 항상 발동(fail-closed)
+            _die(
+                "[BLOCKED] failure_code=codex_review_non_converging_pre_cli\n"
+                "  circuit breaker 발동 — Codex CLI를 호출하지 않습니다 (fail-closed).\n"
+                f"  reason={_pre_cli_cb.get('reason')}, "
+                f"effective_rejects={_pre_cli_cb.get('effective_rejects')}\n"
+                "  result 파일을 삭제해도 append-only history에 의해 차단됩니다.\n"
+                "  사용자 결정으로 새 epoch를 시작하세요:\n"
+                "  python pipeline.py gates codex-review --start-epoch '이유를 입력하세요'"
+            )
 
     # BUG-20260702-E69E: Codex Review 입력 bundle을 SSoT artifact로 먼저 materialize한다(fail-closed).
     #   이 write가 review_bundle_sha256을 non-empty로 만들어, 이후 _codex_snapshot_identity가

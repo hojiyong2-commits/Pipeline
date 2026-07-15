@@ -93,10 +93,14 @@ def _approve_json() -> str:
 
 
 def _reject_json_full() -> str:
+    # 결함4·5(IMP-20260712-DAE1): REJECT는 findings[7필드] 필수. legacy 4필드 스키마는 폐기됨.
     return (
-        '{"verdict": "REJECT", "root_cause": "널 역참조", '
-        '"reproduction": "빈 입력으로 호출", "required_fix": "None 가드 추가", '
-        '"acceptance_criteria": ["빈 입력에서 예외 없음"]}'
+        '{"verdict": "REJECT", "findings": [{'
+        '"scope": "IN_SCOPE", "severity": "P0", '
+        '"root_cause_category": "verdict_parse_failure", '
+        '"evidence": "널 역참조 관측", "reproduction": "빈 입력으로 호출", '
+        '"required_fix": "None 가드 추가", '
+        '"acceptance_criteria": ["빈 입력에서 예외 없음"]}]}'
     )
 
 
@@ -198,11 +202,14 @@ def test_verification_unverified_when_not_invoked() -> None:
 # TC-16: root_cause 없는 REJECT → parse_failure(None).
 # --------------------------------------------------------------------------- #
 def test_tc15_structured_reject_ok() -> None:
+    # 결함4·5 갱신: findings[7필드] REJECT → REJECTED + scope 분류 필드 반환.
     r = pipeline._parse_json_verdict(_reject_json_full())
     assert r is not None
     assert r["verdict"] == "REJECTED"
-    assert r["root_cause"] == "널 역참조"
-    assert isinstance(r["acceptance_criteria"], list) and r["acceptance_criteria"]
+    assert r["source"] == "json_protocol_findings_v2"
+    assert r["in_scope_count"] == 1
+    assert r["reject_count_delta"] == 1
+    assert isinstance(r["findings"], list) and len(r["findings"]) == 1
 
 
 def test_tc16_reject_missing_root_cause_parse_failure() -> None:
@@ -248,10 +255,14 @@ def test_tc15c_ndjson_approve_json_in_text_ok() -> None:
 
 
 def test_tc15c_ndjson_reject_json_in_text_ok() -> None:
-    """agent_message.text = '{verdict:REJECT,4필드}' → REJECTED (bugfix#5 회귀 테스트)."""
+    """agent_message.text = '{verdict:REJECT, findings[7필드]}' → REJECTED (bugfix#5 회귀 테스트)."""
+    # 결함4·5 갱신: findings[7필드] REJECT.
     verdict_json = (
-        '{"verdict":"REJECT","root_cause":"rc","reproduction":"rp",'
-        '"required_fix":"rf","acceptance_criteria":["ac1"]}'
+        '{"verdict":"REJECT","findings":[{'
+        '"scope":"IN_SCOPE","severity":"P1",'
+        '"root_cause_category":"verdict_parse_failure",'
+        '"evidence":"e","reproduction":"rp","required_fix":"rf",'
+        '"acceptance_criteria":["ac1"]}]}'
     )
     stdout = _ndjson_agent_json(verdict_json)
     r = pipeline._run_codex_cli_review(0, stdout, "")
@@ -842,32 +853,40 @@ def test_tc26b_plaintext_reject_legacy_becomes_parse_failure() -> None:
 
 
 def test_tc26c_json_reject_preserves_structured_fields() -> None:
-    """REJECT#9: JSON verdict REJECT가 _parse_json_verdict를 통과하면
-    root_cause/reproduction/required_fix/acceptance_criteria가 반환 dict에 보존돼야 한다."""
+    """REJECT#9(결함4·5 갱신): findings[7필드] REJECT가 파싱을 통과하면
+    findings/scope 분류 필드(in_scope_count/root_cause_categories)가 결과 dict에 보존돼야 한다."""
     verdict_json = (
-        '{"verdict":"REJECT","root_cause":"test root","reproduction":"repro","'
-        'required_fix":"fix desc","acceptance_criteria":["criteria1"]}'
+        '{"verdict":"REJECT","findings":[{'
+        '"scope":"IN_SCOPE","severity":"P0",'
+        '"root_cause_category":"verdict_parse_failure",'
+        '"evidence":"test evidence","reproduction":"repro",'
+        '"required_fix":"fix desc","acceptance_criteria":["criteria1"]}]}'
     )
     result = pipeline._run_codex_cli_review(0, verdict_json, "")
-    assert result["status"] == "REJECTED", f"유효한 JSON REJECT는 REJECTED여야 한다. got {result['status']!r}"
-    assert result.get("root_cause") == "test root", f"root_cause 보존 실패: {result.get('root_cause')!r}"
-    assert result.get("reproduction") == "repro", f"reproduction 보존 실패: {result.get('reproduction')!r}"
-    assert result.get("required_fix") == "fix desc", f"required_fix 보존 실패: {result.get('required_fix')!r}"
-    assert result.get("acceptance_criteria") == ["criteria1"], (
-        f"acceptance_criteria 보존 실패: {result.get('acceptance_criteria')!r}"
+    assert result["status"] == "REJECTED", f"유효한 findings REJECT는 REJECTED여야 한다. got {result['status']!r}"
+    assert result["verdict"] == "REJECT"
+    assert isinstance(result.get("findings"), list) and len(result["findings"]) == 1, (
+        f"findings 보존 실패: {result.get('findings')!r}"
+    )
+    assert result.get("in_scope_count") == 1, f"in_scope_count 보존 실패: {result.get('in_scope_count')!r}"
+    assert result.get("reject_count_delta") == 1
+    assert "verdict_parse_failure" in (result.get("root_cause_categories") or []), (
+        f"root_cause_categories 보존 실패: {result.get('root_cause_categories')!r}"
     )
 
 
 def test_tc26d_ndjson_json_reject_preserves_structured_fields() -> None:
-    """REJECT#9: NDJSON agent_message.text가 JSON verdict인 경우에도
-    structured 필드가 반환 dict에 보존돼야 한다."""
+    """REJECT#9(결함4·5 갱신): NDJSON agent_message.text의 findings[7필드] REJECT도
+    findings/scope 분류 필드가 반환 dict에 보존돼야 한다."""
     import json as _json
     inner_json_str = _json.dumps({
         "verdict": "REJECT",
-        "root_cause": "rc",
-        "reproduction": "rp",
-        "required_fix": "rf",
-        "acceptance_criteria": ["ac1", "ac2"],
+        "findings": [{
+            "scope": "IN_SCOPE", "severity": "P0",
+            "root_cause_category": "verdict_parse_failure",
+            "evidence": "e", "reproduction": "rp", "required_fix": "rf",
+            "acceptance_criteria": ["ac1", "ac2"],
+        }],
     })
     # NDJSON 라인을 올바르게 JSON 직렬화한다 (text 안의 큰따옴표가 이스케이프됨).
     ndjson_line = _json.dumps({
@@ -875,12 +894,12 @@ def test_tc26d_ndjson_json_reject_preserves_structured_fields() -> None:
         "item": {"type": "agent_message", "text": inner_json_str},
     })
     result = pipeline._run_codex_cli_review(0, ndjson_line, "")
-    assert result["status"] == "REJECTED", f"NDJSON JSON REJECT는 REJECTED여야 한다. got {result['status']!r}"
-    assert result.get("root_cause") == "rc", f"root_cause 보존 실패: {result.get('root_cause')!r}"
-    assert result.get("reproduction") == "rp", f"reproduction 보존 실패: {result.get('reproduction')!r}"
-    assert result.get("required_fix") == "rf", f"required_fix 보존 실패: {result.get('required_fix')!r}"
-    assert result.get("acceptance_criteria") == ["ac1", "ac2"], (
-        f"acceptance_criteria 보존 실패: {result.get('acceptance_criteria')!r}"
+    assert result["status"] == "REJECTED", f"NDJSON findings REJECT는 REJECTED여야 한다. got {result['status']!r}"
+    assert result["verdict"] == "REJECT"
+    assert isinstance(result.get("findings"), list) and len(result["findings"]) == 1
+    assert result.get("in_scope_count") == 1
+    assert "verdict_parse_failure" in (result.get("root_cause_categories") or []), (
+        f"root_cause_categories 보존 실패: {result.get('root_cause_categories')!r}"
     )
 
 
@@ -1391,9 +1410,14 @@ def _ndjson_two_agent_messages(text1: str, text2: str) -> str:
     return "\n".join(lines)
 
 
+# 결함4·5(IMP-20260712-DAE1): findings[7필드] REJECT (단일 유효 REJECT). tc33a/tc33b의
+#   복수-판정 충돌(APPROVE+REJECT) 검증은 이 값이 유효 REJECT이므로 그대로 parse_failure가 된다.
 _REJECT_JSON_33 = (
-    '{"verdict":"REJECT","root_cause":"rc","reproduction":"rp",'
-    '"required_fix":"rf","acceptance_criteria":["ac1"]}'
+    '{"verdict":"REJECT","findings":[{'
+    '"scope":"IN_SCOPE","severity":"P0",'
+    '"root_cause_category":"verdict_parse_failure",'
+    '"evidence":"rc evidence","reproduction":"rp",'
+    '"required_fix":"rf","acceptance_criteria":["ac1"]}]}'
 )
 
 
@@ -1443,7 +1467,9 @@ def test_tc33c_single_approve_and_single_reject_preserved() -> None:
         f"REJECT#19 AC#4: 단일 구조화 REJECT가 REJECTED를 반환하지 않음\n  result={r_reject}"
     )
     assert r_reject["error_type"] is None
-    assert r_reject["root_cause"] == "rc"
+    # 결함4·5 갱신: findings 기반 REJECT — scope 분류 필드로 검증(top-level root_cause 미사용).
+    assert r_reject["in_scope_count"] == 1
+    assert "verdict_parse_failure" in (r_reject.get("root_cause_categories") or [])
 
 
 # --------------------------------------------------------------------------- #
@@ -7735,27 +7761,55 @@ class TestBoundedTrustModelV2:
         assert cls["diagnostic_only"] is False
 
     def test_findings_schema_parse_with_findings(self):
-        """findings[] 스키마 파싱 성공 + scope 분류 필드 반환(backward compat 유지)."""
+        """findings[7필드] 스키마 파싱 성공 + scope 분류 필드 반환(결함4·5 갱신)."""
         import json
+
+        def _finding(**over):
+            base = {
+                "scope": "IN_SCOPE", "severity": "P1",
+                "root_cause_category": "verdict_parse_failure",
+                "evidence": "e", "reproduction": "r", "required_fix": "f",
+                "acceptance_criteria": ["a"],
+            }
+            base.update(over)
+            return base
+
+        # OUT_OF_SCOPE_DIAGNOSTIC-only REJECT → diagnostic_only=True, reject 미계수.
         pv = pipeline._parse_json_verdict(json.dumps({
             "verdict": "REJECT",
-            "findings": [{"severity": "P1", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
-                          "root_cause_category": "native_binary_origin_proof"}],
+            "findings": [_finding(
+                scope="OUT_OF_SCOPE_DIAGNOSTIC",
+                root_cause_category="native_binary_origin_proof",
+            )],
         }))
         assert pv is not None and pv["verdict"] == "REJECTED"
         assert pv["reject_count_delta"] == 0 and pv["diagnostic_only"] is True
         assert pv["source"] == "json_protocol_findings_v2"
+
+        # APPROVE_TO_USER + OUT_OF_SCOPE-only finding → APPROVED.
         pv_ok = pipeline._parse_json_verdict(json.dumps({
             "verdict": "APPROVE_TO_USER",
-            "findings": [{"severity": "P3", "scope": "OUT_OF_SCOPE_DIAGNOSTIC"}],
+            "findings": [_finding(
+                scope="OUT_OF_SCOPE_DIAGNOSTIC", severity="P3",
+                root_cause_category="native_binary_origin_proof",
+            )],
         }))
         assert pv_ok is not None and pv_ok["verdict"] == "APPROVED"
+        assert pv_ok["in_scope_count"] == 0
+
+        # 결함4: findings 없는 legacy 4필드 REJECT는 이제 parse_failure(None).
         pv_legacy = pipeline._parse_json_verdict(json.dumps({
             "verdict": "REJECT", "root_cause": "x", "reproduction": "y",
             "required_fix": "z", "acceptance_criteria": ["a"],
         }))
-        assert pv_legacy is not None and pv_legacy["verdict"] == "REJECTED"
-        assert pv_legacy.get("root_cause") == "x"
+        assert pv_legacy is None
+
+        # findings[7필드] IN_SCOPE REJECT → REJECTED + in_scope_count 계수.
+        pv_in = pipeline._parse_json_verdict(json.dumps({
+            "verdict": "REJECT", "findings": [_finding()],
+        }))
+        assert pv_in is not None and pv_in["verdict"] == "REJECTED"
+        assert pv_in["in_scope_count"] == 1 and pv_in["reject_count_delta"] == 1
 
     def test_circuit_breaker_same_category_3x(self):
         """같은 root_cause_category 3회 → NON_CONVERGING(same_category_3x)."""
@@ -7905,11 +7959,14 @@ class TestBoundedTrustModelV2:
         """REJECT#LATEST Case 1: APPROVE_TO_USER + IN_SCOPE P0/P1 finding → in_scope_count > 0 반환.
         _cmd_gates_codex_review는 이 in_scope_count > 0을 보고 acceptance_eligible=False로 강제한다."""
         import json
+        # 결함5 갱신: IN_SCOPE finding에 7필드 모두 채움.
         pv = pipeline._parse_json_verdict(json.dumps({
             "verdict": "APPROVE_TO_USER",
             "findings": [
                 {"severity": "P0", "scope": "IN_SCOPE",
-                 "root_cause_category": "fake_codex_exec"},
+                 "root_cause_category": "fake_codex_exec",
+                 "evidence": "fake exec 관측", "reproduction": "재현 절차",
+                 "required_fix": "실제 exec 강제", "acceptance_criteria": ["실제 실행 증거"]},
             ],
         }))
         assert pv is not None
@@ -7921,11 +7978,14 @@ class TestBoundedTrustModelV2:
         """REJECT#LATEST Case 2: REJECT + OUT_OF_SCOPE_DIAGNOSTIC-only → diagnostic_only=True, reject 미계수.
         _cmd_gates_codex_review는 diagnostic_only=True이면 acceptance_eligible=True로 허용한다."""
         import json
+        # 결함5 갱신: OUT_OF_SCOPE_DIAGNOSTIC finding에 7필드 모두 채움.
         pv = pipeline._parse_json_verdict(json.dumps({
             "verdict": "REJECT",
             "findings": [
                 {"severity": "P1", "scope": "OUT_OF_SCOPE_DIAGNOSTIC",
-                 "root_cause_category": "npm_tarball_supply_chain_proof"},
+                 "root_cause_category": "npm_tarball_supply_chain_proof",
+                 "evidence": "공급망 증명 요구", "reproduction": "npm tarball 검증 시도",
+                 "required_fix": "외부 서명 서비스 필요", "acceptance_criteria": ["진단 기록"]},
             ],
         }))
         assert pv is not None
@@ -8006,17 +8066,24 @@ class TestBoundedTrustModelV2:
         assert cls["out_of_scope_diagnostic_count"] == 0
         assert cls["diagnostic_only"] is False
 
-    def test_reject37b_no_category_finding_blocks_acceptance_eligible(self):
-        """REJECT#19 AC-2: category 없는 APPROVE 결과는 acceptance_eligible=false."""
+    def test_reject37b_in_scope_finding_blocks_acceptance_eligible(self):
+        """REJECT#19 AC-2(결함4·5 갱신): APPROVE_TO_USER + IN_SCOPE finding은 acceptance_eligible=false.
+
+        결함5로 인해 category 없는 finding은 이제 parse_failure(None)이므로, category-less
+        fail-closed 검증은 _classify_codex_findings 직접 호출 테스트(test_reject37a)로 이관됐다.
+        여기서는 명시적 IN_SCOPE category 7필드 finding이 APPROVE에서도 승인을 차단함을 검증한다."""
         import json
         pv = pipeline._parse_json_verdict(json.dumps({
             "verdict": "APPROVE_TO_USER",
             "findings": [
-                {"severity": "P0", "scope": "OUT_OF_SCOPE_DIAGNOSTIC"},  # category 없음
+                {"severity": "P0", "scope": "IN_SCOPE",
+                 "root_cause_category": "fake_codex_exec",
+                 "evidence": "fake exec 관측", "reproduction": "재현 절차",
+                 "required_fix": "실제 exec 강제", "acceptance_criteria": ["실제 실행 증거"]},
             ],
         }))
         assert pv is not None
-        # category 없음 → IN_SCOPE → in_scope_count > 0 → APPROVE에서도 acceptance 차단
+        # IN_SCOPE finding → in_scope_count > 0 → APPROVE에서도 acceptance 차단
         assert pv["in_scope_count"] > 0
         assert pv["reject_count_delta"] == 1
 
