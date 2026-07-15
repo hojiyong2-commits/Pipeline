@@ -9775,9 +9775,9 @@ def _verify_codex_js_against_registry(
             "installed_sha": str,
             "registry_sha": str,
         }
-        available=False: npm/네트워크 불가 → Authenticode fallback 적용 (경고).
+        available=False: npm/네트워크 불가 또는 비-semver 버전 → JS 무결성 미확인 → acceptance_eligible=False (fail-closed).
         available=True, ok=False: 위조 JS 탐지 → acceptance_eligible=False (fail-closed).
-        available=True, ok=True: 정품 JS 확인 → Authenticode로 acceptance_eligible 결정.
+        available=True, ok=True: 정품 JS 확인 → Authenticode + registry 모두 valid 시 acceptance_eligible=True.
     """
     _r: Dict[str, Any] = {
         "ok": False,
@@ -9797,9 +9797,15 @@ def _verify_codex_js_against_registry(
         except (OSError, PermissionError) as _exc:
             _r["reason"] = f"installed_sha_error:{type(_exc).__name__}:{str(_exc)[:60]}"
             return _r
-        # 2. pkg_version 없으면 레지스트리 비교 불가 → available=False (fallback)
+        # 2. pkg_version 없으면 레지스트리 비교 불가 → available=False (fail-closed)
         if not pkg_version or not pkg_version.strip():
             _r["reason"] = "pkg_version_unknown"
+            return _r
+        # REJECT#25 AC-3: pkg_version semver 검증 — file:, URL, 태그 injection 차단.
+        #   file:../local, https://..., latest, next 등 비-semver는 npm install 인자로 거부한다.
+        _ver_stripped = pkg_version.strip()
+        if not re.match(r"^\d+\.\d+\.\d+(?:[+.\-][a-zA-Z0-9.+\-]*)?$", _ver_stripped):
+            _r["reason"] = "pkg_version_not_semver"
             return _r
         # 3. npm 레지스트리에서 해당 버전 임시 설치 후 JS SHA 비교
         import tempfile as _tf_reg
@@ -10094,11 +10100,12 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["trusted"] = False
                 _r["untrusted_reason"] = f"native_binary_sha_error:{type(_exc).__name__}"
                 return _r
-            # REJECT#24 AC-1/2/4: npm 레지스트리 JS SHA 교차검증 — 의미론적 분석(우회 가능) 대체.
+            # REJECT#25 AC-1/2: npm 레지스트리 JS SHA 교차검증 (fail-closed).
             #   임시 디렉토리에 @openai/codex를 설치하여 JS SHA를 직접 비교한다.
-            #   - available=True, ok=False: 위조 JS 탐지 → acceptance_eligible=False (fail-closed)
-            #   - available=True, ok=True: 정품 JS → Authenticode로 acceptance_eligible 결정
-            #   - available=False: npm/네트워크 불가 → Authenticode fallback (경고 기록)
+            #   - available=True, ok=False: 위조 JS 탐지 → acceptance_eligible=False
+            #   - available=True, ok=True: 정품 JS 확인 → Authenticode로 최종 결정
+            #   - available=False: npm/네트워크 불가 → fail-closed (Authenticode로 대체 불가)
+            #   Authenticode는 native binary 체인만 증명; JS 무결성 대체 불가.
             _pkg_version = ""
             for _pkg_json_cand in (
                 _js_ep.parent.parent / "package.json",
@@ -10122,26 +10129,25 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                 _r["provenance_reason"] = (
                     f"js_sha_mismatch_vs_registry:{_js_registry_check.get('reason', '')[:80]}"
                 )
-            # REJECT#22: Authenticode 독립 신뢰 소스 검증 (항상 실행 — npm provenance와 독립).
-            #   npm 7+ 글로벌 설치는 lockfile·package.json·npm ls provenance가 모두 absent이 정상.
-            #   OS 수준 서명(Authenticode)이 유일한 독립 신뢰 소스: 공격자는 OpenAI 서명을 위조 불가.
-            #   레지스트리 확인 성공 + SHA 일치 시, 또는 네트워크 불가(fallback) 시에만
-            #   Authenticode로 acceptance_eligible 결정. 위조 JS 탐지 시 Authenticode를 무시.
+            elif not _js_registry_available:
+                # REJECT#25: JS 레지스트리 검증 불가(npm 미설치/네트워크 오류/버전 누락/timeout/비-semver)
+                #   → fail-closed. Authenticode는 native binary만 증명하며 JS 무결성 대체 불가.
+                _r["acceptance_eligible"] = False
+                _r["provenance_reason"] = (
+                    f"js_registry_unavailable_fail_closed:{_js_registry_check.get('reason', '')[:80]}"
+                )
+            # REJECT#22/#25: Authenticode — native binary 체인 검증 전용.
+            #   acceptance_eligible=True는 registry OK + Authenticode valid 모두 확인 시에만 허용.
             _authenticode = _check_authenticode_signature(str(_native_bin))
             if _authenticode.get("available"):
                 if _authenticode.get("ok"):
-                    if not _js_registry_available or _js_registry_ok:
-                        # 레지스트리 확인 통과(정품) 또는 네트워크 불가(fallback) + Authenticode valid
+                    if _js_registry_available and _js_registry_ok:
+                        # 레지스트리 정품 확인 + Authenticode valid → acceptance_eligible=True
                         _r["acceptance_eligible"] = True
-                        _fallback_note = (
-                            "" if _js_registry_available
-                            else f"+registry_unavailable_fallback:{_js_registry_check.get('reason', '')[:40]}"
-                        )
                         _r["provenance_reason"] = (
-                            f"authenticode_valid:{_authenticode.get('subject', '')[:40]}"
-                            + _fallback_note
+                            f"authenticode_valid+registry_ok:{_authenticode.get('subject', '')[:40]}"
                         )
-                    # else: 위조 JS 탐지됨 → acceptance_eligible=False 유지
+                    # else: registry 실패/불가 → acceptance_eligible=False 유지 (위에서 설정됨)
                 else:
                     # Authenticode 실행됐으나 실패 → fake/tampered binary → fail-closed
                     _r["acceptance_eligible"] = False
@@ -10150,7 +10156,6 @@ def _verify_codex_binary_path_trust(bin_path: str) -> Dict[str, Any]:
                     )
             else:
                 # REJECT#23: Authenticode 미사용 환경(비Windows POSIX + Win32 오류) → fail-closed.
-                # non-Windows에서 npm provenance 부재 시 ~/.nvm 가짜 체인 우회 가능 — 차단 필수.
                 _r["acceptance_eligible"] = False
                 _r["provenance_reason"] = (
                     f"authenticode_unavailable_fail_closed:{_authenticode.get('reason', '')[:60]}"

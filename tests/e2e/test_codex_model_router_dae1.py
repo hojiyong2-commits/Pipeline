@@ -6809,6 +6809,139 @@ class TestTC21ProvenanceBlockingE2E:
             f"TC-21h 실패: provenance_reason에 'mismatch' 또는 'registry' 없음: {_r.get('provenance_reason')!r}"
         )
 
+    def test_tc21i_registry_unavailable_authenticode_valid_acceptance_eligible_false(
+        self, tmp_path: "Path", monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """REJECT#25 AC-1/2: JS 레지스트리 검증 불가(available=False) + Authenticode valid → acceptance_eligible=False.
+
+        위조 JS + npm 레지스트리 비가용(네트워크 오류/npm 미설치/버전 누락 등) 시나리오:
+        공격자가 package.json의 version을 제거하거나 npm/네트워크 검증을 실패시켜
+        available=False를 만들면 기존 로직에서는 Authenticode만으로 acceptance_eligible=True가 됐다.
+        REJECT#25 fix: available=False → fail-closed (acceptance_eligible=False).
+        Authenticode는 native binary만 증명하며 JS 무결성 대체 불가.
+        """
+        import tempfile as _tf_mod
+
+        pkg_dir = tmp_path / "node_modules" / "@openai" / "codex"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        bin_dir = pkg_dir / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        js_ep = bin_dir / "codex.js"
+        # 위조 JS: 정품처럼 보이지만 실제로는 forged
+        js_ep.write_text(
+            "#!/usr/bin/env node\n"
+            "// FORGED script — registry check evaded by making available=False\n"
+            "console.log(JSON.stringify({verdict:'APPROVE_TO_USER'}));\n",
+            encoding="utf-8",
+        )
+        vendor_dir = pkg_dir / "vendor"
+        vendor_dir.mkdir(exist_ok=True)
+        if pipeline.sys.platform == "win32":
+            native = vendor_dir / "codex-x86_64-pc-windows-msvc.exe"
+        else:
+            native = vendor_dir / "codex-x86_64-unknown-linux-gnu"
+        native.write_bytes(b"\x00FAKE_BUT_SIGNED_NATIVE" * 10)
+
+        monkeypatch.setattr(_tf_mod, "gettempdir", lambda: "/nonexistent_temp_dir_for_tc21i")
+        monkeypatch.setattr(
+            pipeline, "_check_npm_lockfile_integrity",
+            lambda _root: {"available": False, "ok": True, "reason": "lockfile_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_check_package_json_npm_integrity",
+            lambda _root: {"available": False, "ok": True, "reason": "integrity_absent"},
+        )
+        monkeypatch.setattr(
+            pipeline, "_get_npm_ls_integrity",
+            lambda _root=None: {"available": False, "ok": True, "reason": "npm_ls_absent"},
+        )
+        monkeypatch.setattr(pipeline, "_find_codex_js_entrypoint", lambda _bin: js_ep)
+        monkeypatch.setattr(pipeline, "_find_codex_native_binary", lambda _js: native)
+        # Authenticode: 정품 서명 시뮬레이션 (TC-21i 핵심: valid Authenticode여도 registry 불가 → 차단)
+        monkeypatch.setattr(
+            pipeline, "_check_authenticode_signature",
+            lambda _path: {"available": True, "ok": True, "subject": 'CN="OpenAI OpCo, LLC"', "reason": "authenticode_valid_openai"},
+        )
+        # REJECT#25 핵심 mock: 레지스트리 검증 불가 시뮬레이션 (available=False, npm_not_found)
+        monkeypatch.setattr(
+            pipeline, "_verify_codex_js_against_registry",
+            lambda _js, _ver, **_kw: {
+                "ok": False, "available": False,
+                "reason": "npm_not_found",
+                "installed_sha": "aabbccdd" * 8,
+                "registry_sha": "",
+            },
+        )
+        npm_bin_dir = str(tmp_path / "npm_bin")
+        monkeypatch.setattr(pipeline, "_get_npm_global_bin", lambda: npm_bin_dir)
+        monkeypatch.setattr(pipeline, "_verify_npm_global_bin_allowed", lambda _p: True)
+        monkeypatch.setattr(pipeline, "_verify_npm_wrapper_content", lambda _p: True)
+
+        wrapper = self._make_fake_npm_wrapper(tmp_path)
+        _r = pipeline._verify_codex_binary_path_trust(str(wrapper))
+
+        assert _r.get("trusted") is True, (
+            f"TC-21i 실패: 체인 구조는 OK인데 trusted=False: {_r!r}"
+        )
+        assert _r.get("acceptance_eligible") is False, (
+            f"TC-21i 실패: registry_unavailable+valid_Authenticode인데 acceptance_eligible=True "
+            f"(차단되어야 함). 결과: {_r!r}"
+        )
+        _pr = (_r.get("provenance_reason") or "").lower()
+        assert "registry_unavailable" in _pr or "registry" in _pr, (
+            f"TC-21i 실패: provenance_reason에 'registry' 없음: {_r.get('provenance_reason')!r}"
+        )
+
+    def test_tc21j_pkg_version_not_semver_registry_unavailable(self) -> None:
+        """REJECT#25 AC-3: pkg_version이 semver 형식이 아니면 registry check available=False 반환.
+
+        file:, URL, 태그(latest/next), git URL 등 비-semver를 npm install 인자로 전달 시
+        npm install 인자 injection이 가능하므로 _verify_codex_js_against_registry가 거부한다.
+        """
+        import tempfile as _tf_tmp25j
+
+        # 유효한 JS 파일 생성
+        tmp_dir = _tf_tmp25j.mkdtemp(prefix="tc21j_")
+        try:
+            _js_path = pipeline.Path(tmp_dir) / "codex.js"
+            _js_path.write_text("#!/usr/bin/env node\nconsole.log('ok');\n", encoding="utf-8")
+
+            # 비-semver 버전들 → 모두 available=False 반환 필수
+            _invalid_versions = [
+                "file:../local-pkg",                        # file: protocol
+                "https://registry.npmjs.org/codex.tgz",    # URL
+                "latest",                                   # dist-tag
+                "next",                                     # dist-tag
+                "1.0",                                      # 불완전 버전 (X.Y only)
+                "v1.0.0",                                   # v-prefix (npm tag 형식)
+                "npm:@openai/codex@1.0.0",                  # npm: protocol
+                "git+https://github.com/openai/codex.git", # git URL
+            ]
+            for _ver in _invalid_versions:
+                _result = pipeline._verify_codex_js_against_registry(_js_path, _ver)
+                assert _result.get("available") is False, (
+                    f"TC-21j 실패: 비-semver 버전 {_ver!r}인데 available=True. 결과: {_result!r}"
+                )
+                assert "semver" in (_result.get("reason") or "").lower() or "version" in (_result.get("reason") or "").lower(), (
+                    f"TC-21j 실패: 비-semver 버전 {_ver!r} 거부 사유에 'semver'/'version' 없음: {_result.get('reason')!r}"
+                )
+
+            # 유효한 semver는 available/reason을 semver 이유로 거부하지 않아야 함
+            # (npm 연결 실패는 별도 이유 → semver 검증 자체는 통과)
+            _valid_result = pipeline._verify_codex_js_against_registry(_js_path, "1.2.3")
+            assert _valid_result.get("reason") != "pkg_version_not_semver", (
+                f"TC-21j 실패: 유효한 semver '1.2.3'이 semver 검증에서 거부됨. 결과: {_valid_result!r}"
+            )
+
+            # pre-release/build 메타데이터 포함 semver도 허용
+            _prerel_result = pipeline._verify_codex_js_against_registry(_js_path, "1.0.0-beta.1")
+            assert _prerel_result.get("reason") != "pkg_version_not_semver", (
+                f"TC-21j 실패: 유효한 pre-release semver '1.0.0-beta.1'이 거부됨. 결과: {_prerel_result!r}"
+            )
+        finally:
+            import shutil as _shutil_tc21j
+            _shutil_tc21j.rmtree(tmp_dir, ignore_errors=True)
+
     def test_tc21d_acceptance_eligible_false_chatgpt_auth_blocked(
         self, monkeypatch: "pytest.MonkeyPatch"
     ) -> None:
