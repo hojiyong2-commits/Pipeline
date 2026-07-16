@@ -1,0 +1,390 @@
+{
+  "pipeline_id": "IMP-20260712-DAE1",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "CODEX_MODEL_ROUTER_SSoT 상수 + risk 규칙 상수"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-1 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_classify_codex_review_risk (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-2 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_build_codex_model_policy (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-3 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_detect_codex_cli_capability (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-4 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_check_codex_cache (rework#2: cache hit 시 cached_actual_model/effort 반환)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-9"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_check_codex_cache 반환에 cached_actual_model/cached_actual_effort 추가 (verified_cache 신뢰 승계)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_review (rework#2: 기본 경로=실제 codex exec, capability gate 재배치, external injection 차단)",
+        "_check_codex_review_operational_trust (신규: request-accept fail-closed 신뢰 게이트)",
+        "_cmd_gates_request_accept (신뢰 게이트 배선)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-6",
+            "AC-7",
+            "AC-9"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "cache miss + 비명시 주입 시 --auto-codex-cli 없이 실제 codex exec 자동 실행 (기본 경로)",
+            "CLI 실행 전 _check_codex_capability_gate 호출 제거 → 실제 실행 후 _check_codex_model_capability_match로 actual_model 검증",
+            "verdict_source in (external_verdict, external_cli_injection) + 비 PIPELINE_TEST_MODE → acceptance_eligible=False 강제",
+            "cache hit 재사용 시 verdict_source=verified_cache + cached actual_model/effort 복원",
+            "신규 _check_codex_review_operational_trust: verdict_source/selected==actual/HIGH·CRITICAL actual!=unknown/router_version·risk_level·model_policy_signature/codex_cli_command placeholder 검증",
+            "_cmd_gates_request_accept에서 router-era 결과에 운영 신뢰 게이트 배선 (PIPELINE_TEST_MODE=1은 생략)",
+            "result에 model_policy_signature 기록"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_build_codex_review_bundle (기존 확장)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "MT-7 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": [
+        "pipeline-manager-agent.md 문서"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8",
+          "implemented_ac": [],
+          "changed_files": [
+            ".claude/agents/pipeline-manager-agent.md"
+          ],
+          "implementation_evidence": [
+            "MT-8 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [
+        "tests/e2e/test_codex_model_router_dae1.py",
+        "tests/e2e/test_codex_model_router_e2e.py",
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        "tests/e2e/test_codex_cost_optimization_9f5e.py"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_codex_model_router_dae1.py (기존)",
+        "tests/e2e/test_codex_model_router_e2e.py (신규 operational trust + ops gating E2E 13종 추가)",
+        "tests/e2e/test_codex_review_gate_3bb6.py (기존)",
+        "tests/e2e/test_codex_cost_optimization_9f5e.py (요구3 반영: tc7/tc9 PIPELINE_TEST_MODE=1)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-9",
+          "implemented_ac": [
+            "AC-8"
+          ],
+          "changed_files": [
+            "tests/e2e/test_codex_model_router_e2e.py",
+            "tests/e2e/test_codex_cost_optimization_9f5e.py"
+          ],
+          "implementation_evidence": [
+            "test_codex_model_router_e2e.py: _check_codex_review_operational_trust 11종 + acceptance_eligible ops gating parametrized 6종 추가",
+            "test_codex_cost_optimization_9f5e.py: tc7/tc9를 PIPELINE_TEST_MODE=1로 격리 (요구3 --codex-cli-* 주입 승인 자격 차단 반영)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-10",
+      "files": [
+        "codex_model_router_report.md"
+      ],
+      "affected_functions": [
+        "codex_model_router_report.md (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-10",
+          "implemented_ac": [],
+          "changed_files": [
+            "codex_model_router_report.md"
+          ],
+          "implementation_evidence": [
+            "MT-10 complete"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-11",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_codex_model_router_dae1.py",
+        "tests/e2e/test_codex_model_router_e2e.py",
+        "tests/e2e/test_codex_defects_dae1.py"
+      ],
+      "affected_functions": [
+        "pipeline._find_codex_native_binary (신규)",
+        "pipeline._verify_codex_binary_path_trust (native chain fail-closed 확장)",
+        "pipeline._check_codex_review_operational_trust (step 6b native chain 검증)",
+        "pipeline._check_codex_cache (native SHA 재검증 + cached_ 노출)",
+        "pipeline._cmd_gates_codex_review (native 필드 기록/캐시 저장·복원/post-exec snapshot; REJECT#LATEST rework: start-epoch struct SHA + result top-level contract_sha256)",
+        "pipeline._cmd_gates_request_accept (native SHA 재검증)",
+        "pipeline._check_codex_review_gate (REJECT#LATEST rework: 7개 결함 fail-closed 강화)",
+        "pipeline._get_current_review_epoch_from_state (신규: review_epoch 불변식 헬퍼)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-11",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-8"
+          ],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_codex_model_router_dae1.py",
+            "tests/e2e/test_codex_model_router_e2e.py"
+          ],
+          "implementation_evidence": [
+            "REJECT#LATEST: 신규 _find_codex_native_binary()가 codex.js가 spawn하는 vendor native codex[.exe]를 (플랫폼,아키텍처)->(npm suffix, vendor triple) 결정적 매핑으로 산출; CODEX_CRITICAL_FUNCTIONS 등록",
+            "_verify_codex_binary_path_trust(): npm 래퍼에서 JS 진입점 또는 native binary 미발견/해시실패를 fail-closed 처리(native_binary_not_found_for/js_entrypoint_not_found_for_npm_wrapper), 반환 dict에 native_binary_path/sha256 추가",
+            "_check_codex_review_operational_trust step(6b): codex_cli/verified_cache에서 native 필드 비면 codex_review_native_binary_chain_missing BLOCKED",
+            "post-exec snapshot + request-accept 재검증 + _check_codex_cache에 native SHA 재검증 추가로 vendor native 교체(래퍼+JS SHA 불변) 공격 차단",
+            "TC-14(가짜 래퍼 JS/native 체인 끊김) + TC-15(native 필드 누락 BLOCKED) 추가, dae1/e2e positive-path 픽스처에 native dummy 필드 동기화"
+          ]
+        },
+        {
+          "mt_id": "MT-11",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-5"
+          ],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_codex_defects_dae1.py"
+          ],
+          "implementation_evidence": [
+            "REJECT#LATEST rework 결함1: _check_codex_review_gate에서 acceptance_eligible을 'is not True'로 검사하여 None/False/'true' 문자열 모두 codex_review_not_eligible로 BLOCKED",
+            "결함2: pr_body_sha256 필수화 — result(pr_body_sha256|pr_body_candidate_sha256)/acceptance_request 양쪽 값 필요, 부재 시 pr_body_sha256_required_but_absent, 불일치 시 pr_body_sha256_mismatch",
+            "결함3: schema_version==CODEX_REVIEW_RESULT_SCHEMA_VERSION, status=='APPROVED', verdict=='APPROVE_TO_USER', acceptance_eligible is True, verdict_source in CODEX_REVIEW_TRUSTED_VERDICT_SOURCES 5개 동시 요구(각 별도 failure_code)",
+            "결함4: 신규 _get_current_review_epoch_from_state 헬퍼 + pipeline_id/review_epoch/contract_sha256/acceptance-status-PENDING 불변식(codex_review_stale_pipeline_id/_epoch/_contract, codex_review_acceptance_already_consumed)",
+            "결함5: --start-epoch 핸들러의 _migration_new_sha를 _sha256_file(pipeline.py)에서 _compute_codex_contract_sha256()으로 변경(비계약 코드 변경이 contract SHA를 바꾸지 않음)",
+            "결함6: CODEX_START_EPOCH_USER_CONFIRMED 주석에 operational ceremony(비암호학적 provenance) 명시",
+            "결함7: .claude/codex_review_contract.md 삭제(코드 미사용 stale 잔재)",
+            "producer 정합: _cmd_gates_codex_review result dict top-level contract_sha256을 _compute_codex_contract_sha256()으로 기록(중첩 snapshot_identity.contract_sha256은 retry-snapshot 일관성 위해 불변 유지)",
+            "신규 상수 CODEX_REVIEW_TRUSTED_VERDICT_SOURCES={codex_cli,verified_cache,codex_cli_cached,cache_hit}",
+            "회귀 테스트 16개 추가(요구 15개 + schema_version 보강 1개), test_codex_defects_dae1.py 26개 전부 PASS"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-12",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_codex_defect_fix_dae1.py"
+      ],
+      "affected_functions": [
+        "pipeline._parse_json_verdict (Defect 5/6: findings 스키마 검증 + 빈 findings REJECT→ERROR)",
+        "pipeline._run_codex_cli_review (Defect 4: NDJSON REJECT 경로 findings 분류 필드 전파)",
+        "pipeline._cmd_gates_codex_review (Defect 1: epoch_missing BLOCKED, Defect 10: NON_CONVERGING 재실행 차단, Defect 7: reject_count_delta 불변식, Defect 8: circuit breaker 항상 활성화)",
+        "pipeline._record_user_authorized_contract_migration (Defect 3: docstring guard 강화)",
+        "tests.e2e.test_codex_defect_fix_dae1 (신규 회귀 테스트 11종)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-12",
+          "implemented_ac": [],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_codex_defect_fix_dae1.py"
+          ],
+          "implementation_evidence": [
+            "Defect 1: review_epoch 비어있으면 codex_review_epoch_missing으로 CLI 미호출 BLOCKED (epoch_legacy 이력 circuit breaker 상태 함께 보고)",
+            "Defect 4: _run_codex_cli_review NDJSON REJECT 분기에서 in_scope_count/reject_count_delta/diagnostic_only 등 findings 분류 필드 전파 (기존 reject_count_delta=1 기본값 버그 해소)",
+            "Defect 6: _parse_json_verdict에서 findings=[] + REJECT/BLOCKED는 None(parse_failure) 반환 → reject_count 미증가",
+            "Defect 7: in_scope_count=0 and environment_untrusted_count=0 and REJECTED이면 reject_count_delta=0 불변식 강제",
+            "Defect 8: circuit breaker를 review_epoch 유무와 무관하게 항상 활성화 (없으면 epoch_legacy fallback)",
+            "Defect 10: 이전 상태 NON_CONVERGING이면 codex_review_non_converging_blocked BLOCKED",
+            "Defect 3: _record_user_authorized_contract_migration docstring에 --start-epoch 전용 호출 guard 명시",
+            "회귀 테스트 11종 전부 PASS (test_codex_defect_fix_dae1.py)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-13",
+      "files": [
+        "pipeline.py",
+        ".claude/agents/pipeline-manager-agent.md",
+        "codex_model_router_report.md",
+        "tests/e2e/test_codex_model_router_e2e.py",
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        "tests/e2e/test_codex_defects_dae1.py",
+        "tests/e2e/test_codex_model_router_dae1.py"
+      ],
+      "affected_functions": [
+        "_classify_codex_findings",
+        "_parse_json_verdict",
+        "_check_codex_review_operational_trust",
+        "_compute_codex_contract_sha256",
+        "_check_codex_review_gate",
+        "CODEX_CRITICAL_CONSTANTS",
+        "CODEX_CRITICAL_FUNCTIONS"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-13",
+          "implemented_ac": [],
+          "implementation_evidence": "Finding 1-5 security rework: severity validation, in_scope_all_count enforcement, strict bool, schema_version/review_epoch/contract_sha256 validation, RuntimeError fail-closed, legacy dead code removal, CRITICAL protection lists"
+        }
+      ]
+    },
+    {
+      "id": "MT-14",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_codex_defects_dae1.py"
+      ],
+      "affected_functions": [
+        "_trim_codex_input",
+        "CODEX_CLI_INPUT_MAX_CHARS"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-14",
+          "implemented_ac": ["AC-1"],
+          "implementation_evidence": "pipeline.py에 CODEX_CLI_INPUT_MAX_CHARS=1048576 상수 추가, _trim_codex_input 함수 구현, _cmd_gates_codex_review 내 CLI 호출 직전 크기 검사 배선, 회귀 테스트 11개 추가"
+        }
+      ]
+    }
+  ]
+}
