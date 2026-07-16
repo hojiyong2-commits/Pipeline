@@ -41,11 +41,38 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
 - `model_verification_level`: `actual_verified` | `invocation_verified` | `unverified`.
   - HIGH/CRITICAL 최소: `invocation_verified`.
 
-### verdict 스키마 (요구6)
+### verdict 스키마 (IMP-20260712-DAE1 MT-13 Finding 4: 7-field findings[])
 
 - 승인: `{"verdict": "APPROVE_TO_USER"}`
-- 거절: `{"verdict": "REJECT", "root_cause": "...", "reproduction": "...", "required_fix": "...", "acceptance_criteria": ["..."]}`
-- REJECT 4필드 중 하나라도 누락 → parse_failure ERROR.
+- 거절: `REJECT`/`BLOCKED`는 구조화된 `findings[]`가 필수다(구 4-필드 포맷 제거).
+
+```json
+{
+  "schema_version": 6,
+  "verdict": "REJECT",
+  "findings": [
+    {
+      "scope": "IN_SCOPE",
+      "severity": "P0",
+      "root_cause_category": "error_misclassified_as_approved",
+      "evidence": "...",
+      "reproduction": "...",
+      "required_fix": "...",
+      "acceptance_criteria": ["..."]
+    }
+  ],
+  "pipeline_id": "IMP-YYYYMMDD-XXXX",
+  "reviewed_at": "ISO8601",
+  "model_used": "gpt-5.6-sol",
+  "review_id": "UUID"
+}
+```
+
+- `REJECT`/`BLOCKED`인데 `findings`가 없거나(비-list/빈 배열), finding의 7개 필수 필드
+  (`scope`/`severity`/`root_cause_category`/`evidence`/`reproduction`/`required_fix`/`acceptance_criteria`)
+  중 하나라도 누락되거나 `severity`가 `P0/P1/P2/P3` 외 값이면 → parse_failure ERROR(REJECT 아님).
+- Finding 1: `APPROVE_TO_USER`라도 IN_SCOPE finding(P2/P3 포함)이 있으면 `REJECTED`로 강제 +
+  `acceptance_eligible=false`(reject_count 증가는 P0/P1일 때만).
 
 ### 승인 자격/테스트 seam (요구5)
 

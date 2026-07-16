@@ -110,7 +110,15 @@ def make_fake_codex(
         "    txt = 'APPROVE_TO_USER'\n"
         "else:\n"
         "    r = cfg.get('reason', 'test rejection') or 'test rejection'\n"
-        "    txt = json.dumps({'verdict': 'REJECT', 'root_cause': r, 'reproduction': r, 'required_fix': r, 'acceptance_criteria': [r]})\n"
+        # IMP-20260712-DAE1 MT-13 Finding 4: 구 4-필드 REJECT 포맷 제거 — pipeline.py
+        # _parse_json_verdict가 요구하는 7-필드 findings[] 스키마(scope/severity/root_cause_category/
+        # evidence/reproduction/required_fix/acceptance_criteria)로 shim 출력을 교체한다.
+        "    txt = json.dumps({'schema_version': 6, 'verdict': 'REJECT',\n"
+        "        'findings': [{'id': 'F-1', 'scope': 'IN_SCOPE', 'severity': 'P0',\n"
+        "            'root_cause_category': 'test_reject', 'evidence': r, 'reproduction': r,\n"
+        "            'required_fix': r, 'acceptance_criteria': [r]}],\n"
+        "        'pipeline_id': 'TEST-PIPELINE', 'reviewed_at': '2026-01-01T00:00:00Z',\n"
+        "        'model_used': 'gpt-5.6-sol', 'review_id': 'test-review-id'})\n"
         "sys.stdout.write(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': txt}}) + '\\n')\n"
         "if cfg['stderr_text']:\n"
         "    sys.stderr.write(cfg['stderr_text'])\n"
@@ -565,9 +573,15 @@ def _run_trust(tmp_path: Path, result: dict) -> dict:
     state_file = tmp_path / "state.json"
     final_state = tmp_path / "trust_out.json"
     env = _harness_env(state_file)
+    # IMP-20260712-DAE1 MT-13 Finding 2: 강화된 운영 신뢰 게이트는 schema_version/contract_sha256을
+    #   검증한다. 실제 codex_review_result는 이 값을 포함하므로, 테스트 result에 없으면 실제 계약값을
+    #   setdefault로 주입한다(명시적으로 다른 값을 준 테스트는 그 값을 유지 → mismatch 검증 가능).
     code = (
         "res = %r\n" % (json.dumps(result),) +
-        "chk = p._check_codex_review_operational_trust(json.loads(res))\n"
+        "_r = json.loads(res)\n"
+        "_r.setdefault('schema_version', p.CODEX_REVIEW_RESULT_SCHEMA_VERSION)\n"
+        "_r.setdefault('contract_sha256', p._compute_codex_contract_sha256())\n"
+        "chk = p._check_codex_review_operational_trust(_r)\n"
         "open(%r,'w',encoding='utf-8').write(json.dumps(chk))\n" % str(final_state)
     )
     r = run_harness(code, env)
@@ -713,6 +727,9 @@ def test_acceptance_eligible_ops_gating(
         "  'model_verification_level': 'invocation_verified', 'auth_source': 'chatgpt',\n"
         "  'codex_native_binary_path': %r, 'codex_native_binary_sha256': %r,\n" % (_nat_path, _nat_sha) +
         "  'codex_binary_path': %r, 'codex_binary_sha256': %r}\n" % (_bin_path, _bin_sha) +
+        # IMP-20260712-DAE1 MT-13 Finding 2: 강화된 게이트가 요구하는 schema_version/contract_sha256 주입.
+        "res.setdefault('schema_version', p.CODEX_REVIEW_RESULT_SCHEMA_VERSION)\n"
+        "res.setdefault('contract_sha256', p._compute_codex_contract_sha256())\n"
         "chk = p._check_codex_review_operational_trust(res)\n"
         "open(%r,'w',encoding='utf-8').write(json.dumps(chk))\n" % str(final_state)
     )

@@ -2457,6 +2457,12 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     "_check_codex_circuit_breaker",
     "_classify_codex_findings",
     "_record_user_authorized_contract_migration",
+    # IMP-20260712-DAE1 MT-13 Finding 5: trust-chain helper 추가 등록.
+    #   이 함수들을 단독 변경하면 계약 SHA 계산·review_epoch SSoT 판독을 우회할 수 있으므로 CRITICAL.
+    #   - _compute_codex_contract_sha256: 계약 struct SHA 계산 — 변조 시 stale contract 검증 우회.
+    #   - _get_current_review_epoch_from_state: 현재 epoch 판독 SSoT — 변조 시 stale epoch 검증 우회.
+    "_compute_codex_contract_sha256",
+    "_get_current_review_epoch_from_state",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -2521,6 +2527,11 @@ CODEX_CRITICAL_CONSTANTS: List[str] = [
     "CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED",
     "CODEX_CB_MAX_SAME_CATEGORY_REPEATS",
     "CODEX_CB_MAX_EFFECTIVE_REJECTS",
+    # IMP-20260712-DAE1 MT-13 Finding 5: trust-chain 상수 추가 등록. 이 상수들을 단독 변경하면
+    #   신뢰 verdict_source 판정·result 스키마 버전·계약 struct 정의를 우회할 수 있으므로 CRITICAL.
+    "CODEX_REVIEW_TRUSTED_VERDICT_SOURCES",
+    "CODEX_REVIEW_RESULT_SCHEMA_VERSION",
+    "CODEX_REVIEW_CONTRACT_STRUCT",
 ]
 
 
@@ -2690,15 +2701,21 @@ def _compute_codex_contract_sha256() -> str:
     코드 변경은 이 값을 바꾸지 않으며, 계약 struct 내용이 바뀔 때만 SHA가 변한다.
 
     Returns:
-        64자 hex SHA256 문자열. 직렬화 실패 시 빈 문자열(fail-safe).
+        64자 hex SHA256 문자열.
+    Raises:
+        RuntimeError: 직렬화 실패 시 — 빈 문자열 반환 금지(fail-closed). 빈 문자열을
+            반환하면 result의 빈 contract_sha256과 ""=="" 비교로 통과하는 버그가 생기므로
+            (IMP-20260712-DAE1 MT-13 Finding 3) 직렬화 실패는 예외로 전파한다.
     """
     try:
         _contract_bytes = json.dumps(
             CODEX_REVIEW_CONTRACT_STRUCT, sort_keys=True, ensure_ascii=True
         ).encode("utf-8")
         return hashlib.sha256(_contract_bytes).hexdigest()
-    except Exception:  # noqa: BLE001 — 직렬화 실패는 빈 문자열로 fail-safe
-        return ""
+    except Exception as _e:  # noqa: BLE001 — fail-closed: 빈 문자열 반환 금지, 예외 전파.
+        raise RuntimeError(
+            f"codex_contract_sha256 직렬화 실패 — fail-closed: {_e}"
+        ) from _e
 
 # IMP-20260712-DAE1 REJECT#4: Codex Review semantic evidence 예산 제한(문자수).
 #   실제 unified diff hunk를 Codex prompt(stdin)에 실어 보낼 때의 총 문자 예산이다.
@@ -12740,10 +12757,18 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
                 else:
                     if not isinstance(_fval, str) or not str(_fval).strip():
                         return None  # 빈 문자열/비str → parse_failure
+            # Finding 1(IMP-20260712-DAE1 MT-13): severity 값 검증. P0/P1/P2/P3 외 값이면
+            #   신뢰할 수 없는 finding이므로 parse_failure(None)로 처리한다(fail-closed).
+            if str(_fi.get("severity", "") or "").strip().upper() not in {"P0", "P1", "P2", "P3"}:
+                return None
         # 7개 필드 검증 통과 후 scope 분류를 수행한다.
         _cls = _classify_codex_findings(_findings)
+        _in_scope_all = int(_cls.get("in_scope_all_count", 0) or 0)
         if verdict == "APPROVE_TO_USER":
-            _mapped = "APPROVED"
+            # Finding 1(IMP-20260712-DAE1 MT-13): APPROVE_TO_USER라도 IN_SCOPE finding이 하나라도
+            #   있으면(P2/P3 포함, in_scope_all_count>=1) 승인 불가 — REJECTED로 강제한다(fail-closed).
+            #   reject_count 증가(reject_count_delta)는 여전히 P0/P1(in_scope_count>0)일 때만 유지된다.
+            _mapped = "REJECTED" if _in_scope_all >= 1 else "APPROVED"
         elif verdict in ("REJECT", "BLOCKED"):
             _mapped = "REJECTED"
         else:
@@ -12755,6 +12780,8 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
             "source": "json_protocol_findings_v2",
             "findings": [dict(f) if isinstance(f, dict) else {"raw": str(f)} for f in _findings],
             "in_scope_count": _cls["in_scope_count"],
+            "in_scope_all_count": _in_scope_all,
+            "acceptance_eligible": (_mapped == "APPROVED"),
             "out_of_scope_diagnostic_count": _cls["out_of_scope_diagnostic_count"],
             "environment_untrusted_count": _cls["environment_untrusted_count"],
             "reject_count_delta": _cls["reject_count_delta"],
@@ -12765,34 +12792,13 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
 
     if verdict == "APPROVE_TO_USER":
         return {"verdict": "APPROVED", "reason": reason, "source": "json_protocol"}
-    if verdict == "REJECT":
-        # IMP-20260712-DAE1 REJECT#3(요구6): REJECT 스키마는 4개 필수 필드를 강제한다.
-        #   root_cause, reproduction, required_fix, acceptance_criteria 중 하나라도 누락되면
-        #   parse_failure(None 반환)로 처리한다(임의 REJECT 승격 금지, fail-closed).
-        _root_cause = str(obj.get("root_cause", "") or "").strip()
-        _reproduction = str(obj.get("reproduction", "") or "").strip()
-        _required_fix = str(obj.get("required_fix", "") or "").strip()
-        _acceptance = obj.get("acceptance_criteria")
-        _acceptance_ok = isinstance(_acceptance, list) and len(_acceptance) > 0 and all(
-            str(x).strip() for x in _acceptance
-        )
-        if not (_root_cause and _reproduction and _required_fix and _acceptance_ok):
-            return None
-        _reason_text = reason or (
-            f"root_cause={_root_cause}; reproduction={_reproduction}; "
-            f"required_fix={_required_fix}"
-        )
-        return {
-            "verdict": "REJECTED",
-            "reason": _reason_text,
-            "root_cause": _root_cause,
-            "reproduction": _reproduction,
-            "required_fix": _required_fix,
-            "acceptance_criteria": [str(x).strip() for x in (_acceptance or [])],
-            "source": "json_protocol",
-        }
+    # IMP-20260712-DAE1 MT-13 Finding 4: legacy 4-필드 REJECT 분기 제거.
+    #   REJECT/BLOCKED verdict는 위(findings 필수 검증)에서 findings 없이는 이미 None을 반환하므로,
+    #   findings 없는 REJECT가 이 지점에 도달하는 것은 불가능했다(dead code). Codex는 구조화된
+    #   findings[] 스키마만 제출해야 REJECT/BLOCKED가 유효하다 — 구 root_cause/reproduction/
+    #   required_fix/acceptance_criteria 4-필드 포맷은 더 이상 허용되지 않는다.
 
-    # 알 수 없는 verdict 값 → 파싱 실패로 처리(임의 문자열 승격 방지).
+    # 알 수 없는 verdict 값(또는 findings 없는 REJECT/BLOCKED) → 파싱 실패로 처리(임의 문자열 승격 방지).
     return None
 
 
@@ -13557,7 +13563,18 @@ def _check_codex_review_gate(
         }
     # (4-3) contract_sha256 일치 — 구조화된 계약 상수(CODEX_REVIEW_CONTRACT_STRUCT)의 실시간
     #   재계산값과 대조한다. 계약이 변경되면 이전 승인은 stale로 간주하여 BLOCKED한다.
-    _expected_contract_sha = _compute_codex_contract_sha256()
+    # IMP-20260712-DAE1 MT-13 Finding 3: 계약 SHA 계산 실패는 fail-closed BLOCKED (빈 문자열 통과 금지).
+    try:
+        _expected_contract_sha = _compute_codex_contract_sha256()
+    except RuntimeError:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_contract_sha_compute_failure",
+            "message": (
+                "현재 codex 계약 SHA-256 계산에 실패했습니다 (fail-closed). "
+                "gates codex-review를 다시 실행하세요."
+            ),
+        }
     if str(result_data.get("contract_sha256", "") or "") != _expected_contract_sha:
         return {
             "status": "BLOCKED",
@@ -29989,12 +30006,18 @@ def _codex_review_error_blocker(pipeline_id: str) -> Optional[Dict[str, Any]]:
 #            router_version/risk_level/selected_model/actual_model 등을 포함한다.
 # [Vulnerability & Risks]: router_version이 없는 legacy 결과(구 스키마)는 이 게이트가 아니라
 #            호출자(운영 모드 판정)에서 처리한다. 이 함수는 순수 판정만 수행한다(파일 IO 없음).
+#            IMP-20260712-DAE1 MT-13 Finding 2: review_epoch 대조를 위해 state를 인자로 받되,
+#            내부 _load()는 하지 않는다(순수성 보존). state 미제공 시 epoch 검증만 생략된다.
 # [Improvement]: effort 동의어 정규화 테이블을 도입하면 CLI 표기 편차를 흡수할 수 있다.
-def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, Any]:
+def _check_codex_review_operational_trust(
+    result: Dict[str, Any], state: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """codex_review_result가 실제 codex 실행/검증된 cache 기반 승인인지 fail-closed 검증한다.
 
     Args:
         result: codex_review_result.json에서 로드한 dict.
+        state: pipeline_state dict(선택). 제공되면 review_epoch 불변식을 대조한다(운영 경로).
+            미제공(None)이면 epoch 검증을 생략한다 — 순수 단위 검증 호출 호환용. 파일 IO는 하지 않는다.
     Returns:
         {"status": "PASS"} 또는 {"status": "BLOCKED", "failure_code": str, "message": str}.
     Raises:
@@ -30021,11 +30044,14 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             + ("제거된 alias입니다. " if verdict_source in _legacy_aliases else "")
             + "맨몸 --verdict/--codex-cli-* 주입은 운영 승인 자격이 없습니다 (fail-closed).",
         )
-    # (2) 승인 자격 플래그가 반드시 true여야 한다.
-    if not result.get("acceptance_eligible"):
+    # (2) IMP-20260712-DAE1 MT-13 Finding 2 Fix A: 승인 자격 플래그는 정확히 bool True여야 한다.
+    #   truthiness(True/"true"/1 등)로 통과시키지 않는다 — is True 정체성 비교(fail-closed).
+    #   (Fix B schema_version / Fix C review_epoch / Fix D contract_sha256 불변식은 함수 말미에서
+    #    PASS 반환 직전에 그룹으로 검증한다 — 기존 정책/모델 실패 코드가 우선 노출되도록 배치.)
+    if result.get("acceptance_eligible") is not True:
         return _blocked(
             "codex_review_not_acceptance_eligible",
-            "codex_review_result.acceptance_eligible이 true가 아닙니다 — 승인 코드 발급 불가 (fail-closed).",
+            "codex_review_result.acceptance_eligible이 정확히 True(bool)가 아닙니다 — 승인 코드 발급 불가 (fail-closed).",
         )
     # (3) 정책 메타데이터 존재 검증.
     if not str(result.get("router_version", "") or "").strip():
@@ -30331,6 +30357,52 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
             "codex_review_non_converging",
             f"codex_review_result.non_converging_at={_stored_ot_nc_at!r} — "
             "수렴하지 않은 결과는 운영 경로 진입 불가 (fail-closed).",
+        )
+    # (9) IMP-20260712-DAE1 MT-13 Finding 2/3: 계약/스키마/epoch 불변식 — PASS 반환 직전 최종 검증.
+    #   여기서 검증하는 이유: 기존 정책/모델/binary 실패 코드가 우선 노출되도록 새 검사를 말미에 둔다.
+    #   어떤 result도 아래 3개 불변식을 통과하지 못하면 PASS로 승인되지 않는다(fail-closed 보장 동일).
+    # (9-a) Fix B: schema_version 정확 일치 — 계약 버전 불일치 result 차단.
+    _result_schema_version = result.get("schema_version")
+    if _result_schema_version != CODEX_REVIEW_RESULT_SCHEMA_VERSION:
+        return _blocked(
+            "codex_review_schema_version_mismatch",
+            f"schema_version={_result_schema_version!r} != 현재 스키마 버전 "
+            f"{CODEX_REVIEW_RESULT_SCHEMA_VERSION!r} (fail-closed).",
+        )
+    # (9-b) Fix C: review_epoch 불변식 — state가 제공된 운영 경로에서만 대조(순수성 보존).
+    if state is not None:
+        _expected_review_epoch = _get_current_review_epoch_from_state(
+            state if isinstance(state, dict) else {}
+        )
+        _result_review_epoch = str(result.get("review_epoch", "") or "")
+        if _expected_review_epoch and _result_review_epoch != _expected_review_epoch:
+            return _blocked(
+                "codex_review_epoch_mismatch",
+                f"review_epoch={_result_review_epoch or '(없음)'} != 현재 epoch "
+                f"{_expected_review_epoch!r} (stale 승인 재사용 차단, fail-closed).",
+            )
+    # (9-c) Fix D: contract_sha256 불변식 — 구조화된 계약 상수의 실시간 재계산값과 대조.
+    #   계산 실패도 fail-closed BLOCKED이며, 빈 문자열 통과("" == "")는 발생하지 않는다(Finding 3 연계).
+    try:
+        _expected_contract_sha256 = _compute_codex_contract_sha256()
+    except Exception as _e:  # noqa: BLE001 — 계약 SHA 계산 실패는 fail-closed BLOCKED.
+        return _blocked(
+            "codex_review_contract_sha_compute_failure",
+            f"현재 codex contract SHA-256 계산 실패 (fail-closed): {_e}",
+        )
+    if len(_expected_contract_sha256) != 64 or not all(
+        _c in "0123456789abcdef" for _c in _expected_contract_sha256
+    ):
+        return _blocked(
+            "codex_review_contract_sha_compute_failure",
+            "현재 codex contract SHA-256이 유효한 64자 hex가 아닙니다 (fail-closed).",
+        )
+    _result_contract_sha256 = str(result.get("contract_sha256", "") or "")
+    if _result_contract_sha256 != _expected_contract_sha256:
+        return _blocked(
+            "codex_review_contract_sha_mismatch",
+            f"contract_sha256={_result_contract_sha256 or '(없음)'} != 현재 contract 해시 "
+            f"{_expected_contract_sha256!r} — 계약 변경으로 stale (fail-closed).",
         )
     return {"status": "PASS"}
 
@@ -32144,7 +32216,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 )
                 return  # unreachable
             # (D) 전체 운영 신뢰 검증(router_version/risk/model/effort/verification_level 등).
-            _cx_trust = _check_codex_review_operational_trust(_cx_trust_raw)
+            #   IMP-20260712-DAE1 MT-13 Finding 2: state를 전달하여 review_epoch 불변식을 대조한다.
+            _cx_trust = _check_codex_review_operational_trust(_cx_trust_raw, state)
             if _cx_trust.get("status") != "PASS":
                 _log_event(
                     state,

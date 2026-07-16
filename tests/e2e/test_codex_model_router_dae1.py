@@ -472,6 +472,9 @@ def _trust_base(**over) -> dict:
     base = {
         "verdict_source": "codex_cli",
         "acceptance_eligible": True,
+        # IMP-20260712-DAE1 MT-13 Finding 2: 강화된 게이트가 schema_version/contract_sha256을 검증한다.
+        "schema_version": pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+        "contract_sha256": pipeline._compute_codex_contract_sha256(),
         "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
         "risk_level": "CRITICAL",
         "model_policy_signature": _correct_sig,   # "CRITICAL:gpt-5.6-sol:max:enforce"
@@ -1548,6 +1551,9 @@ def test_tc35b_critical_invocation_verified_passes_operational_trust() -> None:
         "status": "APPROVED",
         "verdict_source": "codex_cli",
         "acceptance_eligible": True,
+        # IMP-20260712-DAE1 MT-13 Finding 2: 강화된 게이트가 schema_version/contract_sha256을 검증한다.
+        "schema_version": pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+        "contract_sha256": pipeline._compute_codex_contract_sha256(),
         "router_version": "2.0.0",
         "risk_level": "CRITICAL",
         "model_policy_signature": "CRITICAL:gpt-5.6-sol:max:enforce",
@@ -2182,6 +2188,9 @@ def _make_valid_result_for_operational_trust(
         "status": "APPROVED",
         "verdict_source": verdict_source,
         "acceptance_eligible": True,
+        # IMP-20260712-DAE1 MT-13 Finding 2: 강화된 게이트가 schema_version/contract_sha256을 검증한다.
+        "schema_version": pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+        "contract_sha256": pipeline._compute_codex_contract_sha256(),
         "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
         "risk_level": risk_level,
         "model_policy_signature": _sig,
@@ -3168,6 +3177,10 @@ def _make_trust_base_for_risk(risk_level: str) -> dict:
         "status": "APPROVED",
         "verdict_source": "codex_cli",
         "acceptance_eligible": True,
+        # IMP-20260712-DAE1 MT-13 Finding 2: 강화된 운영 신뢰 게이트가 schema_version/contract_sha256을
+        #   검증한다. 실제 codex_review_result는 두 값을 포함하므로 정상 통과 기준 결과에도 채운다.
+        "schema_version": pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+        "contract_sha256": pipeline._compute_codex_contract_sha256(),
         "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
         "risk_level": risk_level,
         "model_policy_signature": sig,
@@ -5653,6 +5666,9 @@ class TestTC17PosixNpmSymlink:
         result = {
             "verdict_source": "codex_cli",
             "acceptance_eligible": True,
+            # IMP-20260712-DAE1 MT-13 Finding 2: 강화된 게이트가 schema_version/contract_sha256을 검증한다.
+            "schema_version": pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+            "contract_sha256": pipeline._compute_codex_contract_sha256(),
             "router_version": pipeline.CODEX_MODEL_ROUTER_VERSION,
             "risk_level": "HIGH",
             "model_policy_signature": sig,
@@ -7956,8 +7972,9 @@ class TestBoundedTrustModelV2:
         assert "self_signed" in src
 
     def test_reject35a_approve_with_in_scope_finding_blocks_acceptance(self):
-        """REJECT#LATEST Case 1: APPROVE_TO_USER + IN_SCOPE P0/P1 finding → in_scope_count > 0 반환.
-        _cmd_gates_codex_review는 이 in_scope_count > 0을 보고 acceptance_eligible=False로 강제한다."""
+        """REJECT#LATEST Case 1 + IMP-20260712-DAE1 MT-13 Finding 1: APPROVE_TO_USER + IN_SCOPE P0/P1
+        finding → verdict가 REJECTED로 강제된다(in_scope_all_count>=1). in_scope_count > 0이므로
+        acceptance_eligible=False, reject_count도 증가한다."""
         import json
         # 결함5 갱신: IN_SCOPE finding에 7필드 모두 채움.
         pv = pipeline._parse_json_verdict(json.dumps({
@@ -7970,8 +7987,10 @@ class TestBoundedTrustModelV2:
             ],
         }))
         assert pv is not None
-        assert pv["verdict"] == "APPROVED"  # 원본 verdict는 APPROVED이지만
+        # Finding 1: IN_SCOPE finding이 있으면 APPROVE_TO_USER라도 REJECTED로 강제(승인 불가).
+        assert pv["verdict"] == "REJECTED"
         assert pv["in_scope_count"] > 0     # IN_SCOPE finding 있음 → acceptance_eligible=False 트리거
+        assert pv.get("in_scope_all_count", 0) >= 1
         assert pv["reject_count_delta"] == 1  # IN_SCOPE P0 → reject_count도 증가
 
     def test_reject35b_reject_with_out_of_scope_only_no_acceptance_block(self):

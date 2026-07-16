@@ -847,8 +847,9 @@ class TestReject15FindingsTypeValidation:
         assert result is not None
         assert result["verdict"] == "APPROVED"
 
-    def test_approve_to_user_with_valid_in_scope_finding_returns_approved_with_count(self) -> None:
-        """유효한 IN_SCOPE finding 포함 APPROVE_TO_USER → APPROVED + in_scope_count/reject_count_delta 보존."""
+    def test_approve_to_user_with_valid_in_scope_finding_is_forced_rejected(self) -> None:
+        """IMP-20260712-DAE1 MT-13 Finding 1: 유효한 IN_SCOPE finding이 있으면 APPROVE_TO_USER라도
+        REJECTED로 강제된다(in_scope_all_count>=1). reject_count_delta는 P0/P1일 때만 1로 보존된다."""
         finding = {
             "scope": "IN_SCOPE",
             "severity": "P0",
@@ -861,9 +862,12 @@ class TestReject15FindingsTypeValidation:
         payload = json.dumps({"verdict": "APPROVE_TO_USER", "findings": [finding]})
         result = pipeline._parse_json_verdict(payload)
         assert result is not None
-        assert result["verdict"] == "APPROVED"
+        # Finding 1: IN_SCOPE finding(P0)이 있으면 승인 불가 — REJECTED로 강제.
+        assert result["verdict"] == "REJECTED"
         assert result.get("in_scope_count", 0) >= 1
-        assert result.get("reject_count_delta", 0) >= 0
+        assert result.get("in_scope_all_count", 0) >= 1
+        assert result.get("reject_count_delta", 0) == 1  # P0 → reject_count 증가
+        assert result.get("acceptance_eligible") is False
 
 
 class TestReject15PromptParserConsistency:
@@ -915,6 +919,108 @@ class TestReject15PromptParserConsistency:
         ]
         for field in required_fields:
             assert field in prompt, f"프롬프트에 '{field}' 필드 설명이 없음"
+
+
+class TestFinding5CriticalProtectionLists:
+    """Finding 5(MT-13): CODEX_CRITICAL_CONSTANTS/FUNCTIONS에 trust-chain 상수/함수 포함 검증.
+
+    trust-chain 상수(verdict source/스키마 버전/계약 struct)와 함수(계약 SHA 계산/epoch 판독)가
+    보호 목록에 없으면 단독 변경 시 CRITICAL 분류가 되지 않아 Codex Review를 우회할 수 있다.
+    """
+
+    def test_codex_review_trusted_verdict_sources_in_critical_constants(self) -> None:
+        from pipeline import CODEX_CRITICAL_CONSTANTS
+        assert "CODEX_REVIEW_TRUSTED_VERDICT_SOURCES" in CODEX_CRITICAL_CONSTANTS
+
+    def test_codex_review_result_schema_version_in_critical_constants(self) -> None:
+        from pipeline import CODEX_CRITICAL_CONSTANTS
+        assert "CODEX_REVIEW_RESULT_SCHEMA_VERSION" in CODEX_CRITICAL_CONSTANTS
+
+    def test_codex_review_contract_struct_in_critical_constants(self) -> None:
+        from pipeline import CODEX_CRITICAL_CONSTANTS
+        assert "CODEX_REVIEW_CONTRACT_STRUCT" in CODEX_CRITICAL_CONSTANTS
+
+    def test_compute_codex_contract_sha256_in_critical_functions(self) -> None:
+        from pipeline import CODEX_CRITICAL_FUNCTIONS
+        assert "_compute_codex_contract_sha256" in CODEX_CRITICAL_FUNCTIONS
+
+    def test_get_current_review_epoch_in_critical_functions(self) -> None:
+        from pipeline import CODEX_CRITICAL_FUNCTIONS
+        assert "_get_current_review_epoch_from_state" in CODEX_CRITICAL_FUNCTIONS
+
+    def test_changing_critical_constant_triggers_critical_risk(self) -> None:
+        """CODEX_CRITICAL_CONSTANTS 소속 상수 변경 → risk_level=CRITICAL."""
+        res = pipeline._classify_codex_review_risk(
+            ["pipeline.py"], [], ["CODEX_REVIEW_TRUSTED_VERDICT_SOURCES"]
+        )
+        assert res["risk_level"] == "CRITICAL", res
+        assert res["matched_rule"] == "critical_constant"
+
+    def test_changing_critical_function_triggers_critical_risk(self) -> None:
+        """CODEX_CRITICAL_FUNCTIONS 소속 함수 변경 → risk_level=CRITICAL."""
+        res = pipeline._classify_codex_review_risk(
+            ["pipeline.py"], ["_compute_codex_contract_sha256"], []
+        )
+        assert res["risk_level"] == "CRITICAL", res
+        assert res["matched_rule"] == "critical_function"
+
+    def test_get_current_review_epoch_change_triggers_critical_risk(self) -> None:
+        res = pipeline._classify_codex_review_risk(
+            ["pipeline.py"], ["_get_current_review_epoch_from_state"], []
+        )
+        assert res["risk_level"] == "CRITICAL", res
+
+
+class TestFinding3ContractShaFailClosed:
+    """Finding 3(MT-13): _compute_codex_contract_sha256는 빈 문자열을 반환하지 않는다."""
+
+    def test_returns_valid_64_hex(self) -> None:
+        sha = pipeline._compute_codex_contract_sha256()
+        assert isinstance(sha, str) and len(sha) == 64
+        assert all(c in "0123456789abcdef" for c in sha)
+
+    def test_raises_on_serialization_failure(self, monkeypatch) -> None:
+        """직렬화 실패 시 RuntimeError를 raise한다(빈 문자열 반환 금지)."""
+        def _boom(*_a, **_k):
+            raise ValueError("unserializable")
+        monkeypatch.setattr(pipeline.json, "dumps", _boom)
+        try:
+            pipeline._compute_codex_contract_sha256()
+            assert False, "직렬화 실패 시 RuntimeError가 발생해야 함"
+        except RuntimeError:
+            pass
+
+
+class TestFinding1InScopePreventsApproval:
+    """Finding 1(MT-13): IN_SCOPE finding(P2/P3 포함)이 있으면 APPROVE_TO_USER도 REJECTED로 강제."""
+
+    def _payload(self, severity: str) -> str:
+        return json.dumps({
+            "schema_version": 6,
+            "verdict": "APPROVE_TO_USER",
+            "findings": [{
+                "id": "F-1", "scope": "IN_SCOPE", "severity": severity,
+                "root_cause_category": "some_in_scope_bug", "evidence": "e",
+                "reproduction": "r", "required_fix": "f", "acceptance_criteria": ["a"],
+            }],
+        })
+
+    def test_p2_in_scope_finding_forces_rejected(self) -> None:
+        res = pipeline._parse_json_verdict(self._payload("P2"))
+        assert res is not None
+        assert res["verdict"] == "REJECTED", res
+        assert res.get("in_scope_all_count", 0) >= 1
+        assert res.get("acceptance_eligible") is False
+
+    def test_p3_in_scope_finding_forces_rejected(self) -> None:
+        res = pipeline._parse_json_verdict(self._payload("P3"))
+        assert res is not None
+        assert res["verdict"] == "REJECTED", res
+
+    def test_invalid_severity_is_parse_failure(self) -> None:
+        """severity가 P0/P1/P2/P3 외 값이면 parse_failure(None)."""
+        res = pipeline._parse_json_verdict(self._payload("P5"))
+        assert res is None, "잘못된 severity는 parse_failure여야 함"
 
 
 if __name__ == "__main__":

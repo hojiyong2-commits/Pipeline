@@ -53,7 +53,15 @@ def make_fake_codex(shim_dir: Path, verdict: str = "APPROVE_TO_USER",
         "    if a.startswith('model_reasoning_effort='): effort = a.split('=', 1)[1]\n"
         "sys.stdout.write(json.dumps({'type': 'model_info', 'model': model or 'unknown', 'reasoning_effort': effort or 'unknown'}) + '\\n')\n"
         "v = cfg['verdict']\n"
-        "txt = 'APPROVE_TO_USER' if v == 'APPROVE_TO_USER' else json.dumps({'verdict': 'REJECT', 'root_cause': 'test', 'reproduction': 'test', 'required_fix': 'test', 'acceptance_criteria': ['test']})\n"
+        # IMP-20260712-DAE1 MT-13 Finding 4: 구 4-필드 REJECT 포맷 제거 — pipeline.py
+        # _parse_json_verdict가 요구하는 7-필드 findings[] 스키마로 shim 출력을 교체한다.
+        "_rej = json.dumps({'schema_version': 6, 'verdict': 'REJECT',\n"
+        "    'findings': [{'id': 'F-1', 'scope': 'IN_SCOPE', 'severity': 'P0',\n"
+        "        'root_cause_category': 'test_reject', 'evidence': 'test', 'reproduction': 'test',\n"
+        "        'required_fix': 'test', 'acceptance_criteria': ['test']}],\n"
+        "    'pipeline_id': 'TEST-PIPELINE', 'reviewed_at': '2026-01-01T00:00:00Z',\n"
+        "    'model_used': 'gpt-5.6-sol', 'review_id': 'test-review-id'})\n"
+        "txt = 'APPROVE_TO_USER' if v == 'APPROVE_TO_USER' else _rej\n"
         "sys.stdout.write(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': txt}}) + '\\n')\n"
         "sys.exit(0)\n",
         encoding="utf-8",
