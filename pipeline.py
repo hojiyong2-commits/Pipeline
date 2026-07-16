@@ -10856,13 +10856,24 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
     _bt_in_list = "\n".join(f"  - {c}" for c in CODEX_BOUNDED_TRUST_IN_SCOPE)
     _bt_out_list = "\n".join(f"  - {c}" for c in CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC)
     _bt_env_list = "\n".join(f"  - {c}" for c in CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED)
+    # [P1 fix IMP-20260712-DAE1 REJECT#15 Option A]: findings[]를 REJECT 필수로 확정한다.
+    #   파서(_parse_json_verdict)는 REJECT/BLOCKED에 findings[] 필수 + 각 finding 7개 필드를
+    #   검증하므로, 프롬프트도 동일 스키마를 제시해야 Codex 출력이 parse_failure로 새지 않는다.
     lines += [
         "",
-        "## Bounded Trust Findings 스키마 (선택 포함)",
-        "findings[]는 선택 사항입니다. 실제 bounded trust 경계 취약점 발견 시에만 포함하세요.",
-        "포함할 경우 각 finding의 필수 필드:",
-        '  {"severity": "P0|P1|P2|P3", "root_cause_category": "<아래 허용 목록 중 하나>",',
-        '   "scope": "IN_SCOPE|OUT_OF_SCOPE_DIAGNOSTIC|ENVIRONMENT_UNTRUSTED", "summary": "한국어 요약"}',
+        "## Bounded Trust Findings 스키마",
+        "findings[]는 REJECT 시 필수이며, APPROVE_TO_USER에서는 선택 사항입니다.",
+        "APPROVE_TO_USER + findings[]는 진단용(acceptance_eligible에 영향 없음, out_of_scope_diagnostic만 허용).",
+        "각 finding의 필수 필드 7개 (모두 non-empty):",
+        '  {',
+        '    "scope": "IN_SCOPE|OUT_OF_SCOPE_DIAGNOSTIC|ENVIRONMENT_UNTRUSTED",',
+        '    "severity": "P0|P1|P2|P3",',
+        '    "root_cause_category": "<아래 허용 목록 중 하나>",',
+        '    "evidence": "<코드 내 증거 위치 및 내용>",',
+        '    "reproduction": "<재현 방법>",',
+        '    "required_fix": "<수정 방향>",',
+        '    "acceptance_criteria": ["<수락 기준 항목>"]',
+        '  }',
         "",
         "IN_SCOPE (실제 취약점 — 반드시 수정 필요, reject_count 증가):",
         _bt_in_list,
@@ -10880,12 +10891,11 @@ def _build_codex_prompt_for_review(bundle: Dict[str, Any], pipeline_id: str) -> 
         "- 마지막 출력은 아래 JSON 하나만 출력하세요 (다른 텍스트 없이).",
         '승인(findings 없음): {"verdict": "APPROVE_TO_USER"}',
         '승인(진단 findings 포함): {"verdict": "APPROVE_TO_USER", "findings": [...]}',
-        '거절: {"verdict": "REJECT", "root_cause": "...", "reproduction": "...", '
-        '"required_fix": "...", "acceptance_criteria": ["..."]}',
-        '거절(findings 포함): {"verdict": "REJECT", "root_cause": "...", "reproduction": "...", '
-        '"required_fix": "...", "acceptance_criteria": ["..."], "findings": [...]}',
-        "REJECT인데 root_cause/reproduction/required_fix/acceptance_criteria 중 하나라도 "
-        "누락되면 무효 처리됩니다.",
+        '거절(findings 필수): {"verdict": "REJECT", "findings": [{"scope": "IN_SCOPE", "severity": "P0|P1|P2|P3",',
+        '  "root_cause_category": "<허용목록>", "evidence": "...", "reproduction": "...",',
+        '  "required_fix": "...", "acceptance_criteria": ["..."]}]}',
+        "REJECT findings[]에서 7개 필드 중 하나라도 누락/빈값이면 무효 처리됩니다.",
+        "APPROVE_TO_USER findings[]는 7개 필드가 모두 있어야 파서가 인식합니다 (없으면 무시).",
     ]
     return "\n".join(lines)
 
@@ -12687,6 +12697,12 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     #   APPROVED, REJECT/BLOCKED면 REJECTED로 매핑하되, diagnostic_only/environment_untrusted 플래그로
     #   downstream(_cmd_gates_codex_review)이 reject_count 증가/즉시 BLOCKED를 결정한다.
     _findings = obj.get("findings")
+    # [P0 fix IMP-20260712-DAE1 REJECT#15]: findings 키가 존재하면 반드시 list 타입이어야 한다.
+    #   findings=dict/string/null/int → verdict와 무관하게 즉시 parse_failure(None 반환).
+    #   APPROVE_TO_USER + findings=dict를 APPROVED로 조용히 통과시키는 버그 수정(fail-closed).
+    #   findings 키 자체가 없는 APPROVE_TO_USER는 기존 동작 유지(승인 가능).
+    if "findings" in obj and not isinstance(_findings, list):
+        return None
     # 결함4(IMP-20260712-DAE1): REJECT/BLOCKED verdict는 findings 필드가 필수다.
     #   findings가 없음(None)/list 아님/빈 리스트([])이면 invalid_verdict_schema(parse_failure)로
     #   None을 반환한다(reject_count 미증가, fail-closed). legacy 4-필드 REJECT(findings 없이

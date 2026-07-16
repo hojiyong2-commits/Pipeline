@@ -797,5 +797,125 @@ def test_gate_and_operational_trust_verdict_source_agreement(
         assert _ot_verdict_source_block(vs) is not None, f"ot: {vs} untrusted여야 함"
 
 
+# ================================================================== #
+# REJECT#15 회귀 테스트: P0 findings 타입 검증 + P1 프롬프트/파서 일관성
+# ================================================================== #
+
+class TestReject15FindingsTypeValidation:
+    """[P0] APPROVE_TO_USER에서 findings가 list 아닌 경우 parse_failure."""
+
+    def test_approve_to_user_findings_dict_is_parse_failure(self) -> None:
+        """findings=dict → APPROVE_TO_USER라도 parse_failure(None)."""
+        payload = json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": {
+                "scope": "IN_SCOPE",
+                "severity": "P0",
+                "root_cause_category": "fake_codex_exec",
+            },
+        })
+        assert pipeline._parse_json_verdict(payload) is None
+
+    def test_approve_to_user_findings_string_is_parse_failure(self) -> None:
+        """findings=string → parse_failure(None)."""
+        payload = json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": "IN_SCOPE",
+        })
+        assert pipeline._parse_json_verdict(payload) is None
+
+    def test_approve_to_user_findings_null_is_parse_failure(self) -> None:
+        """findings=null → parse_failure(None)."""
+        payload = json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": None,
+        })
+        assert pipeline._parse_json_verdict(payload) is None
+
+    def test_approve_to_user_findings_int_is_parse_failure(self) -> None:
+        """findings=int → parse_failure(None)."""
+        payload = json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": 42,
+        })
+        assert pipeline._parse_json_verdict(payload) is None
+
+    def test_approve_to_user_no_findings_key_is_approved(self) -> None:
+        """findings 키 자체가 없는 APPROVE_TO_USER → 기존처럼 APPROVED."""
+        payload = json.dumps({"verdict": "APPROVE_TO_USER"})
+        result = pipeline._parse_json_verdict(payload)
+        assert result is not None
+        assert result["verdict"] == "APPROVED"
+
+    def test_approve_to_user_with_valid_in_scope_finding_returns_approved_with_count(self) -> None:
+        """유효한 IN_SCOPE finding 포함 APPROVE_TO_USER → APPROVED + in_scope_count/reject_count_delta 보존."""
+        finding = {
+            "scope": "IN_SCOPE",
+            "severity": "P0",
+            "root_cause_category": "error_misclassified_as_approved",
+            "evidence": "line 123",
+            "reproduction": "repro steps",
+            "required_fix": "fix here",
+            "acceptance_criteria": ["criterion 1"],
+        }
+        payload = json.dumps({"verdict": "APPROVE_TO_USER", "findings": [finding]})
+        result = pipeline._parse_json_verdict(payload)
+        assert result is not None
+        assert result["verdict"] == "APPROVED"
+        assert result.get("in_scope_count", 0) >= 1
+        assert result.get("reject_count_delta", 0) >= 0
+
+
+class TestReject15PromptParserConsistency:
+    """[P1] 프롬프트 REJECT 예시 → 파서가 REJECTED로 분류."""
+
+    def test_reject_with_findings_is_rejected_not_parse_failure(self) -> None:
+        """findings 포함 유효 REJECT → REJECTED (parse_failure 아님)."""
+        finding = {
+            "scope": "IN_SCOPE",
+            "severity": "P1",
+            "root_cause_category": "verdict_parse_failure",
+            "evidence": "evidence here",
+            "reproduction": "reproduction steps",
+            "required_fix": "fix direction",
+            "acceptance_criteria": ["criterion"],
+        }
+        payload = json.dumps({
+            "verdict": "REJECT",
+            "findings": [finding],
+        })
+        result = pipeline._parse_json_verdict(payload)
+        assert result is not None, "findings 포함 유효 REJECT가 parse_failure여서는 안 됨"
+        assert result["verdict"] == "REJECTED"
+
+    def test_reject_without_findings_is_parse_failure_option_a(self) -> None:
+        """Option A: findings 없는 REJECT → parse_failure(None) — 프롬프트와 파서가 일관."""
+        payload = json.dumps({
+            "verdict": "REJECT",
+            "root_cause": "x",
+            "reproduction": "y",
+            "required_fix": "z",
+            "acceptance_criteria": ["a"],
+        })
+        result = pipeline._parse_json_verdict(payload)
+        assert result is None, "Option A: findings 없는 REJECT는 parse_failure여야 함"
+
+    def test_prompt_schema_contains_all_7_required_fields(self) -> None:
+        """_build_codex_prompt_for_review의 finding 스키마에 7개 필수 필드 포함."""
+        bundle = {
+            "changed_files": ["pipeline.py"],
+            "changed_files_count": 1,
+            "evidence_complete": True,
+            "diff_hunks": [],
+        }
+        prompt = pipeline._build_codex_prompt_for_review(bundle, "IMP-20260712-DAE1")
+        required_fields = [
+            "scope", "severity", "root_cause_category", "evidence",
+            "reproduction", "required_fix", "acceptance_criteria",
+        ]
+        for field in required_fields:
+            assert field in prompt, f"프롬프트에 '{field}' 필드 설명이 없음"
+
+
 if __name__ == "__main__":
     sys.exit(subprocess.call([sys.executable, "-m", "pytest", __file__, "-v"]))
