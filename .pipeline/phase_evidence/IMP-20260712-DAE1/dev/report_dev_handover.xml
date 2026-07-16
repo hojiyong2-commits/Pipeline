@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <run_id>dev-0b82b0043e4e9e52</run_id>
+  <phase>dev (REJECT#LATEST rework — Codex Review gate 7개 결함 강화)</phase>
+
+  <summary>
+    IMP-20260712-DAE1 REJECT 재작업: gates accept 1차 게이트 _check_codex_review_gate와 --start-epoch
+    핸들러의 7개 결함을 fail-closed로 강화했습니다.
+    (1) acceptance_eligible을 'is True'로 필수화(None/False/"true" 문자열 차단),
+    (2) pr_body_sha256을 result/acceptance_request 양쪽 필수화(부재/불일치 별도 코드),
+    (3) schema_version/status/verdict/acceptance_eligible/verdict_source 5개 동시 요구(느슨한 별칭 제거,
+        untrusted source 차단),
+    (4) pipeline_id/review_epoch/contract_sha256/acceptance-status-PENDING 필수 불변식 추가,
+    (5) --start-epoch contract SHA를 _compute_codex_contract_sha256()으로 교체,
+    (6) CODEX_START_EPOCH_USER_CONFIRMED 주석에 operational ceremony(비암호학적) 명시,
+    (7) 미사용 stale 파일 .claude/codex_review_contract.md 삭제.
+    producer 정합: _cmd_gates_codex_review result dict top-level contract_sha256을 struct SHA로 기록하여
+    (4-3) 불변식이 정당 승인 flow에서 만족되도록 함(중첩 snapshot_identity는 불변, retry-snapshot drift 없음).
+    회귀 테스트 16개 추가.
+  </summary>
+
+  <scope_declaration>
+    <files_to_modify>pipeline.py, tests/e2e/test_codex_defects_dae1.py</files_to_modify>
+    <files_to_delete>.claude/codex_review_contract.md</files_to_delete>
+    <out_of_scope>_codex_snapshot_identity(중첩 contract_sha256 = task_contract SHA 유지 — 별도 함수, 미수정), CLAUDE.md, .claude/agents/*.md, .github/workflows/**</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-11</micro_task_id>
+    <target_function>_check_codex_review_gate, _cmd_gates_codex_review, _get_current_review_epoch_from_state (신규)</target_function>
+    <upstream_callers>
+      <caller>pipeline._cmd_gates_accept — gates accept ACCEPT 경로(반환 dict 구조 유지로 호환)</caller>
+      <caller>pipeline main argparse gates codex-review — --start-epoch 핸들러</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_compute_codex_contract_sha256, _get_current_review_epoch_from_state, _load_acceptance_request, _get_current_pr_head_sha, _codex_review_result_path</dep>
+    </downstream_dependencies>
+    <state_mutations>_check_codex_review_gate: none(순수 게이트). _cmd_gates_codex_review: 기존과 동일한 result 파일 기록 + top-level contract_sha256 값만 struct SHA로 변경. --start-epoch: migration.new_contract_sha256 = struct SHA.</state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 게이트는 fail-closed 방향으로만 강화. 정당 승인 flow(APPROVED/APPROVE_TO_USER/eligible True/codex_cli|verified_cache) 무손상</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — 16개</test_coverage>
+      <rollback_strategy>pipeline.py + test file git revert</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS — 모든 분기 fail-closed BLOCKED dict</error_handling>
+    <security>PASS — secret 미포함, dummy 없음</security>
+    <execution_check>PASS — py_compile(pipeline.py + test) OK; import OK; pytest test_codex_defects_dae1.py 26 passed; 사이드카 43 passed</execution_check>
+    <impact_analysis_check>PASS</impact_analysis_check>
+    <frozen_codebase_check>PASS — scope 외 파일 미수정; 무관 리팩토링 0건; _codex_snapshot_identity(중첩 SHA) 불변 유지로 side-effect 없음(_extract_snapshot_identity가 중첩 dict를 읽음을 Grep 확인)</frozen_codebase_check>
+  </self_check>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_defects_dae1.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_defects_dae1.py, tests/e2e/test_codex_model_router_dae1.py, tests/e2e/test_codex_model_router_e2e.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <test_status_honest>
+    <in_scope_tests>PASS — test_codex_defects_dae1.py 26 passed(신규 16 + 기존 10); test_codex_defect_fix_dae1 + test_codex_review_gate_3bb6 포함 43 passed</in_scope_tests>
+    <preexisting_failures>
+      test_codex_snapshot_sync_f52c / test_request_accept_snapshot_8c3b / test_request_accept_nonce_reuse_aef0 /
+      test_user_acceptance_nonce_bbdb / test_codex_control_flow_db54 의 39개 실패는 git stash로 본 변경 제거 후
+      baseline에서도 동일 재현됨(contract_not_frozen / technical_gate_not_pass / model_source=='version_check').
+      직전 REJECT#3 dev_handover의 test_status_honest에도 동일 suite가 사전 존재/설계 의도 실패로 기록되어 있음.
+      본 REJECT#LATEST 변경과 무관.
+    </preexisting_failures>
+  </test_status_honest>
+
+  <evidence>
+    <modified_files>pipeline.py, tests/e2e/test_codex_defects_dae1.py</modified_files>
+    <deleted_files>.claude/codex_review_contract.md</deleted_files>
+    <tests_added>16개 회귀 테스트 (test_codex_defects_dae1.py)</tests_added>
+    <defects_fixed>7개 (결함1~7) + producer 정합</defects_fixed>
+    <command>python -m py_compile pipeline.py → PASS</command>
+    <command>python -c "import pipeline" → PASS</command>
+    <command>python -m pytest tests/e2e/test_codex_defects_dae1.py -q → 26 passed</command>
+  </evidence>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <summary>REJECT#LATEST rework 완료 — Codex Review gate 7개 결함 fail-closed 강화 + 회귀 테스트 16개. py_compile/import/pytest(26 passed) PASS, scope lock PASS.</summary>
+  </handover>
+</dev_handover>
