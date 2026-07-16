@@ -1,0 +1,104 @@
+<qa_report>
+  <mt_id>MT-11</mt_id>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 카테고리 아님</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>N-A — codex_review_result.json/acceptance_request.json JSON 로드는 표준 파싱, FS 태그 없음</fs>
+    <pd>PASS — _check_codex_review_gate / _cmd_gates_codex_review / _get_current_review_epoch_from_state 함수 책임 분리 명확, dict(status/failure_code/message) 인터페이스 계약 일관</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — fail-closed 방어 로직 전면 적용: isinstance/TypeError 타입가드, None/False/빈문자열/문자열 "true" 전부 차단, `is not True` 정체성 비교, gh CLI 실패 fail-closed</al>
+    <build>N-A — pipeline 엔진 수정, EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+  <numeric_score>118</numeric_score>
+  <rubric>
+    <wa score="0" max="20">N/A — 네트워크 카테고리 아님</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 아님</ui>
+    <fs score="0" max="20">N/A — FS 카테고리 아님</fs>
+    <pd score="10" max="10">모듈분리 5/5(3개 함수 단일책임 분리)/인터페이스계약 5/5(dict 반환 계약 + type hint + docstring Raises 명시)</pd>
+    <al score="20" max="20">타입검증 5/5(isinstance/TypeError raise) + 범위/불변식 검증 5/5(5개 조건+4개 불변식) + 입력 타입 검증 5/5(is not True 정체성) + 빈데이터 처리 5/5(빈문자열/None fail-closed)</al>
+    <build score="0" max="10">N/A — 빌드 대상 아님</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="118" max="120"/>
+    <percentage>98.3</percentage>
+    <numeric_verdict>PASS(98.3%, 96/120 임계값 이상)</numeric_verdict>
+  </rubric>
+  <runtime_functional_check>
+    <execution_check_present>PASS — pytest 26개(신규) + 11개(기존 회귀) + 399개(관련 게이트) 실행 증거 존재</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _check_codex_review_gate는 gates accept 경로에서 실제 호출됨, --start-epoch guard는 CLI dispatch에서 실제 바인딩 확인</functional_binding_verified>
+  </runtime_functional_check>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <defect_verification>
+    <defect id="1" desc="acceptance_eligible is True 정체성 비교">PASS — pipeline.py:13486 `if result_data.get("acceptance_eligible") is not True:` None/False/"true" 모두 BLOCKED. 테스트 test_acceptance_eligible_missing/false/string_true PASS</defect>
+    <defect id="2" desc="pr_body_sha256 양쪽 필수화">PASS — pipeline.py:13617-13640 result+acceptance_request 양쪽 없음/불일치 시 pr_body_sha256_required_but_absent/mismatch BLOCKED. 테스트 test_body_sha_both_absent/mismatch PASS</defect>
+    <defect id="3" desc="5개 조건 동시 요구">PASS — schema_version(13452)/status=="APPROVED"(13464)/verdict=="APPROVE_TO_USER"(13475)/acceptance_eligible is True(13486)/verdict_source in TRUSTED(13498). 테스트 test_schema_version/status_approved/verdict/verdict_source PASS</defect>
+    <defect id="4" desc="4개 불변식">PASS — pipeline_id(13514)/review_epoch(13527)/contract_sha256(13540)/acceptance_request.status==PENDING(13579). 테스트 test_review_epoch/contract_sha_mismatch PASS</defect>
+    <defect id="5" desc="start-epoch에서 contract_sha 사용">PASS — pipeline.py:27510 `_compute_codex_contract_sha256()` 사용(_sha256_file(pipeline.py) 폐기). 테스트 test_start_epoch_uses_contract_sha / test_pipeline_py_change_no_contract_sha_change PASS</defect>
+    <defect id="6" desc="CODEX_START_EPOCH_USER_CONFIRMED 주석 갱신">PASS — pipeline.py:27486-27488 operational ceremony 명시, cryptographic provenance 아님을 정직하게 문서화</defect>
+    <defect id="7" desc="codex_review_contract.md 삭제">PASS — 파일 부재 확인, 활성 open/read/exists 참조 0건(폐기 주석만 존재)</defect>
+  </defect_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <verification_evidence>
+    - pytest tests/e2e/test_codex_defects_dae1.py -v → 26 passed (1.97s)
+    - pytest tests/e2e/test_codex_defect_fix_dae1.py -v → 11 passed (1.16s, 기존 회귀 없음)
+    - pytest test_codex_review_gate_3bb6.py + test_codex_model_router_dae1.py → 399 passed, 1 skipped (회귀 없음)
+    - python -m py_compile pipeline.py → PASS
+    - .claude/codex_review_contract.md → 파일 부재 확인, 활성 코드 참조 0건
+    - git diff HEAD~1 --name-only → pipeline.py, tests/e2e/test_codex_defects_dae1.py (선언 scope 정확 일치)
+    - 7개 결함 수정 코드 pipeline.py Read로 실제 라인 확인 완료
+  </verification_evidence>
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <micro_task_boundary>
+    <declared_target_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_defects_dae1.py</file>
+    </declared_target_files>
+    <actual_changed_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_defects_dae1.py</file>
+    </actual_changed_files>
+    <extra_files>없음</extra_files>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - CODEX_START_EPOCH_USER_CONFIRMED 환경변수는 동일 OS 사용자 권한 에이전트도 설정 가능하여 operational ceremony 수준의 방어임(주석에 정직하게 명시됨). 향후 외부 서명자/러너 기반 강화 여지 있음 — 이번 rework 범위에서는 정확히 문서화되어 결함 아님.
+  </improvement_suggestions>
+</qa_report>
