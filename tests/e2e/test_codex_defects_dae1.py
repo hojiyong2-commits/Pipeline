@@ -1023,5 +1023,100 @@ class TestFinding1InScopePreventsApproval:
         assert res is None, "잘못된 severity는 parse_failure여야 함"
 
 
+class TestMT14CodexInputTooLarge:
+    """MT-14: CODEX_CLI_INPUT_MAX_CHARS 상수 + _trim_codex_input으로 input_too_large 방지.
+
+    Codex CLI stdin 총 길이가 1,048,576자를 초과하면 CLI가 input_too_large로 실패하므로,
+    CLI 호출 전에 입력을 trim하고, trim 후에도 초과하면 fail-closed(ERROR)로 처리한다.
+    """
+
+    def test_constant_value_is_1mb(self) -> None:
+        """CODEX_CLI_INPUT_MAX_CHARS 상수가 1_048_576(1MB)이다."""
+        assert pipeline.CODEX_CLI_INPUT_MAX_CHARS == 1_048_576
+
+    def test_constant_registered_in_critical_constants(self) -> None:
+        """상수가 CODEX_CRITICAL_CONSTANTS 보호 목록에 등록되어 있다(변조 시 CRITICAL)."""
+        assert "CODEX_CLI_INPUT_MAX_CHARS" in pipeline.CODEX_CRITICAL_CONSTANTS
+
+    def test_trim_function_registered_in_critical_functions(self) -> None:
+        """_trim_codex_input이 CODEX_CRITICAL_FUNCTIONS 보호 목록에 등록되어 있다."""
+        assert "_trim_codex_input" in pipeline.CODEX_CRITICAL_FUNCTIONS
+
+    def test_trim_sets_evidence_incomplete_when_over_limit(self) -> None:
+        """입력이 max를 초과하면 trim이 발생하고 evidence_complete=False."""
+        _max = pipeline.CODEX_CLI_INPUT_MAX_CHARS
+        big = "a" * (_max + 500)  # ASCII → chars == bytes
+        trimmed, evidence_complete = pipeline._trim_codex_input(big, _max)
+        assert evidence_complete is False, "trim 발생 시 evidence_complete는 False여야 함"
+        assert len(trimmed) == _max, "trim 후 문자 길이는 정확히 max_chars여야 함"
+        assert len(trimmed.encode("utf-8")) <= _max, "ASCII trim 후 byte 길이가 한도 이내여야 함"
+
+    def test_trim_preserves_head_prefix(self) -> None:
+        """trim은 앞부분(acceptance/critical diff 우선)을 보존하고 뒤쪽을 제거한다."""
+        _max = pipeline.CODEX_CLI_INPUT_MAX_CHARS
+        head = "ACCEPTANCE_HEADER_PRESERVED"
+        big = head + ("x" * (_max + 100))
+        trimmed, _ = pipeline._trim_codex_input(big, _max)
+        assert trimmed.startswith(head), "trim은 앞쪽 acceptance/critical 영역을 보존해야 함"
+
+    def test_no_trim_when_within_limit(self) -> None:
+        """한도 이내 입력은 원본 그대로 반환하고 evidence_complete=True."""
+        _max = pipeline.CODEX_CLI_INPUT_MAX_CHARS
+        small = "hello world"
+        trimmed, evidence_complete = pipeline._trim_codex_input(small, _max)
+        assert trimmed == small, "한도 이내 입력은 변경 없이 반환해야 함"
+        assert evidence_complete is True, "trim 미발생 시 evidence_complete는 True여야 함"
+
+    def test_trim_multibyte_still_exceeds_bytes_triggers_blocked_path(self) -> None:
+        """multibyte 입력은 문자 절단 후에도 byte 길이가 한도를 초과할 수 있다.
+
+        이 경우 호출자는 byte 길이 재검사에서 초과를 감지하여 fail-closed(input_too_large)로
+        처리한다. 여기서는 _trim_codex_input 반환값의 byte 길이가 여전히 한도를 초과함을 검증한다.
+        """
+        _max = 10  # 작은 한도로 multibyte 초과 상황을 결정적으로 구성
+        # 한글 1자 = UTF-8 3바이트. 20자 → 20 chars, 60 bytes.
+        multibyte = "가" * 20
+        trimmed, evidence_complete = pipeline._trim_codex_input(multibyte, _max)
+        assert evidence_complete is False
+        assert len(trimmed) == _max, "문자 길이는 max_chars로 절단됨"
+        # 문자 절단만으로는 byte 길이가 한도 이내로 보장되지 않음 → 호출자 BLOCKED 경로 트리거.
+        assert len(trimmed.encode("utf-8")) > _max, (
+            "multibyte trim 후 byte 길이가 여전히 한도를 초과하여 fail-closed 경로가 필요함"
+        )
+
+    def test_trim_rejects_none_input(self) -> None:
+        """None 입력은 TypeError(fail-closed)."""
+        try:
+            pipeline._trim_codex_input(None, 100)  # type: ignore[arg-type]
+            assert False, "None 입력에 예외가 발생해야 함"
+        except TypeError:
+            pass
+
+    def test_trim_rejects_non_str_input(self) -> None:
+        """비str 입력은 TypeError."""
+        try:
+            pipeline._trim_codex_input(12345, 100)  # type: ignore[arg-type]
+            assert False, "비str 입력에 예외가 발생해야 함"
+        except TypeError:
+            pass
+
+    def test_trim_rejects_non_positive_max(self) -> None:
+        """max_chars가 0/음수면 ValueError."""
+        for bad in (0, -1, -1000):
+            try:
+                pipeline._trim_codex_input("x", bad)
+                assert False, f"max_chars={bad}에 ValueError가 발생해야 함"
+            except ValueError:
+                pass
+
+    def test_trim_rejects_bool_max(self) -> None:
+        """bool은 int subclass이지만 max_chars로 허용하지 않는다(TypeError)."""
+        try:
+            pipeline._trim_codex_input("x", True)  # type: ignore[arg-type]
+            assert False, "bool max_chars에 TypeError가 발생해야 함"
+        except TypeError:
+            pass
+
+
 if __name__ == "__main__":
     sys.exit(subprocess.call([sys.executable, "-m", "pytest", __file__, "-v"]))

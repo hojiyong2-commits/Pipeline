@@ -2463,6 +2463,9 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   - _get_current_review_epoch_from_state: 현재 epoch 판독 SSoT — 변조 시 stale epoch 검증 우회.
     "_compute_codex_contract_sha256",
     "_get_current_review_epoch_from_state",
+    # IMP-20260712-DAE1 MT-14: Codex CLI 입력 크기 trim helper 등록.
+    #   이 함수를 단독 변경하면 input_too_large 방지 trim/fail-closed 경계를 우회할 수 있으므로 CRITICAL.
+    "_trim_codex_input",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -2491,6 +2494,10 @@ CODEX_ALLOWED_MODELS: frozenset = frozenset({
     "gpt-5.6-terra",
     "gpt-5.6-sol",
 })
+
+# IMP-20260712-DAE1 MT-14: Codex CLI 하드 입력 한도.
+# stdin 총 길이가 이 값을 초과하면 CLI가 input_too_large로 실패한다.
+CODEX_CLI_INPUT_MAX_CHARS = 1_048_576
 
 # REJECT#32 Fix: trust-chain 모듈 상수 — 단독 변경도 CRITICAL로 분류한다.
 # 이 상수들이 변경되면 라우터 동작·모델 정책·신뢰 경계 자체가 바뀔 수 있으므로
@@ -2532,6 +2539,10 @@ CODEX_CRITICAL_CONSTANTS: List[str] = [
     "CODEX_REVIEW_TRUSTED_VERDICT_SOURCES",
     "CODEX_REVIEW_RESULT_SCHEMA_VERSION",
     "CODEX_REVIEW_CONTRACT_STRUCT",
+    # IMP-20260712-DAE1 MT-14: Codex CLI 입력 한도 상수. 이 값을 변조하면 input_too_large 방지
+    #   크기 검사가 우회되어 CLI가 대형 입력으로 실패하거나, 과도하게 낮춰 정상 리뷰 입력이
+    #   부당하게 trim/BLOCKED될 수 있으므로 CRITICAL 분류 필수이다.
+    "CODEX_CLI_INPUT_MAX_CHARS",
 ]
 
 
@@ -12800,6 +12811,50 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
 
     # 알 수 없는 verdict 값(또는 findings 없는 REJECT/BLOCKED) → 파싱 실패로 처리(임의 문자열 승격 방지).
     return None
+
+
+# [Purpose]: IMP-20260712-DAE1 MT-14 — Codex CLI stdin 입력이 CODEX_CLI_INPUT_MAX_CHARS를 초과할 때
+#            CLI가 input_too_large로 실패하는 것을 방지하기 위해 입력을 안전하게 trim한다.
+# [Assumptions]: review_input은 _build_codex_prompt_for_review가 만든 prompt 문자열이며, diff_hunks
+#            섹션이 뒤쪽에 위치해 마지막부터 잘라내면 acceptance 코드/critical function diff가 보존된다.
+# [Vulnerability & Risks]: 문자 단위 절단이므로 multibyte 입력에서는 절단 후 byte 길이가 여전히 한도를
+#            초과할 수 있다. 호출자는 trim 후 byte 길이를 재검사하여 초과 시 fail-closed(ERROR)로 처리한다.
+# [Improvement]: JSON 구조를 파싱해 diff_hunks 배열의 마지막 요소만 선택적으로 제거하면 evidence 손실을
+#            최소화할 수 있다(현재는 단순 문자 절단).
+def _trim_codex_input(review_input: str, max_chars: int) -> Tuple[str, bool]:
+    """Codex CLI 입력 크기가 max_chars를 초과할 때 입력을 trim한다.
+
+    acceptance 코드/nonce, critical function diff는 보존 우선으로 뒤쪽 diff hunk부터 제거한다.
+    현재 구현은 JSON 파싱 없이 전체 길이를 max_chars 문자로 절단한다(단순 구현).
+
+    Args:
+        review_input: Codex CLI stdin으로 전달할 리뷰 입력 문자열.
+        max_chars: 허용 최대 문자 수(양의 정수).
+    Returns:
+        (trimmed_input, evidence_complete) 튜플. trim이 발생하면 evidence_complete=False,
+        한도 이내여서 원본을 그대로 반환하면 True.
+    Raises:
+        TypeError: review_input이 None/비str이거나 max_chars가 None/비int인 경우.
+        ValueError: max_chars가 0 이하인 경우.
+    """
+    if review_input is None:
+        raise TypeError("review_input must not be None")
+    if not isinstance(review_input, str):
+        raise TypeError(f"review_input must be str, got {type(review_input).__name__}")
+    if max_chars is None:
+        raise TypeError("max_chars must not be None")
+    # bool은 int subclass이므로 명시적으로 배제한다(True/False를 크기로 오용 방지).
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int):
+        raise TypeError(f"max_chars must be int, got {type(max_chars).__name__}")
+    if max_chars <= 0:
+        # negative not allowed: 0/음수 한도는 의미 없는 절단(전체 삭제)이므로 불허한다.
+        raise ValueError(f"max_chars must be positive, got {max_chars}")
+    if len(review_input) <= max_chars:
+        # 이미 한도 이내 — 원본 그대로 반환, evidence 완전.
+        return review_input, True
+    trimmed = review_input[:max_chars]
+    evidence_complete = False
+    return trimmed, evidence_complete
 
 
 # [Purpose]: BUG-20260702-E69E MT-2 — Codex CLI 실행 결과 원시값(exit_code/stdout/stderr)을
@@ -28289,6 +28344,43 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     "  gates codex-review를 재실행하세요 (fail-closed)."
                 )
             _pre_cli_fn_shas = dict(_sem_for_prompt.get("function_before_after_shas", {}) or {})
+            # IMP-20260712-DAE1 MT-14: input_too_large 방지 — Codex CLI 호출 전 총 입력 크기 검사.
+            #   stdin 총 길이가 CODEX_CLI_INPUT_MAX_CHARS를 초과하면 CLI가 input_too_large로 실패하므로,
+            #   diff_hunks 섹션을 마지막부터 trim한다(acceptance 코드/critical function diff 보존 우선).
+            #   trim 후에도 초과하면 CLI를 호출하지 않고 ERROR(input_too_large)로 기록한다(fail-closed).
+            _codex_input_len = len(_prompt_text.encode("utf-8"))
+            _codex_evidence_complete = True
+            if _codex_input_len > CODEX_CLI_INPUT_MAX_CHARS:
+                _prompt_text, _codex_evidence_complete = _trim_codex_input(
+                    _prompt_text, CODEX_CLI_INPUT_MAX_CHARS
+                )
+                _codex_input_len = len(_prompt_text.encode("utf-8"))
+                _log_event(
+                    state,
+                    "codex_cli_input_trimmed: "
+                    f"trimmed_bytes={_codex_input_len} "
+                    f"max={CODEX_CLI_INPUT_MAX_CHARS} "
+                    f"evidence_complete={_codex_evidence_complete}",
+                )
+                if _codex_input_len > CODEX_CLI_INPUT_MAX_CHARS:
+                    # trim 후에도 초과 → CLI 호출 금지, ERROR(input_too_large)로 기록(재시도 불가).
+                    _finish_codex_review_error(
+                        state, pipeline_id,
+                        {
+                            "error_type": "input_too_large",
+                            "error_retryable": False,
+                            "codex_cli_exit_code": -1,
+                            "codex_cli_stdout_excerpt": "",
+                            "codex_cli_stderr_excerpt": (
+                                f"Input size {_codex_input_len} exceeds max "
+                                f"{CODEX_CLI_INPUT_MAX_CHARS}"
+                            ),
+                        },
+                        prev_reject_count, prev_cli_error_count,
+                        attempt_id=_generate_attempt_id(),
+                        review_bundle_sha256=_review_bundle_sha256,
+                    )
+                    return  # unreachable (_finish_codex_review_error가 sys.exit)
             # REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js를 exec 실행 파일로 고정한다.
             _auto_run = _invoke_codex_exec(
                 _selected_model_now,
