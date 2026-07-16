@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <agent_run_id>dev-6c8c3639e069f8e3</agent_run_id>
+  <mt_id>MT-14</mt_id>
+  <title>REJECT#3 rework: CODEX_CLI_INPUT_MAX_CHARS 상수 추가 및 input_too_large 처리</title>
+
+  <scope_declaration>
+    <files_to_create>없음</files_to_create>
+    <files_to_modify>pipeline.py, tests/e2e/test_codex_defects_dae1.py</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>Grep "CODEX_CLI_INPUT_MAX_CHARS"(0건), "_trim_codex_input"(0건), "_invoke_codex_exec"(subprocess 실제 호출 지점 28348), "_finish_codex_review_error"(ERROR 기록 헬퍼 29xxx)</searched>
+      <decision>NEW — 신규 상수/헬퍼가 없어 새로 작성. 기존 _finish_codex_review_error / _log_event / _generate_attempt_id 헬퍼는 REUSE.</decision>
+    </reuse_search>
+    <out_of_scope>_run_codex_cli_review verdict 파싱 로직(기존 legacy plain-text REJECT 실패 2건은 MT-14 범위 밖), diff_hunks JSON 구조 파싱 기반 정밀 trim(단순 문자 절단으로 구현)</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-14</micro_task_id>
+    <target_function>_trim_codex_input, CODEX_CLI_INPUT_MAX_CHARS (신규), _cmd_gates_codex_review 내 CLI 호출 직전 배선</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:28354">_cmd_gates_codex_review — _invoke_codex_exec 호출 직전에서 _trim_codex_input(_prompt_text, CODEX_CLI_INPUT_MAX_CHARS) 호출</caller>
+      <caller location="none">_trim_codex_input/상수는 신규이므로 기존 호출자 없음(배선 지점이 유일 호출자)</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>str.encode("utf-8") — byte 길이 측정</dep>
+      <dep>_finish_codex_review_error — trim 후에도 초과 시 ERROR 기록 + sys.exit</dep>
+      <dep>_log_event — trim 발생 감사 로그</dep>
+      <dep>_generate_attempt_id — ERROR attempt 식별자</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>_log_event(state, ...) — trim 발생 시 state 이벤트 로그 append(기존 헬퍼 위임)</mutation>
+      <mutation>_finish_codex_review_error 경로 — codex_review_result.json 기록(기존 헬퍼 위임, trim 후에도 초과 시에만)</mutation>
+      <mutation>_trim_codex_input 자체는 pure function — 상태 변경 없음</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 기존 함수 시그니처 무변경. _trim_codex_input은 신규 함수.</signature_change>
+      <breaking_change>NO — 한도 이내 입력은 원본 그대로 통과(evidence_complete=True). 기존 정상 흐름 무영향.</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TestMT14CodexInputTooLarge 11개 테스트 추가.</test_coverage>
+      <rollback_strategy>3개 Edit(상수 추가/등록/함수 정의/배선) 역적용. 신규 코드만 추가되어 제거 시 원상 복구.</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <pre_fix_snapshot>
+    <function name="_cmd_gates_codex_review(CLI 호출 직전 구간)" file="pipeline.py:28346-28348">
+      <current_signature>변경 없음 — 구간 내 지역 로직만 추가</current_signature>
+      <current_callers>N/A(명령 진입 함수)</current_callers>
+      <current_behavior>_prompt_text를 크기 검사 없이 _invoke_codex_exec에 stdin으로 전달 → 1,048,576자 초과 시 CLI가 input_too_large로 실패</current_behavior>
+    </function>
+  </pre_fix_snapshot>
+
+  <post_fix_diff>
+    <change>CODEX_CLI_INPUT_MAX_CHARS = 1_048_576 상수 신규 추가(pipeline.py:2500)</change>
+    <change>CODEX_CRITICAL_CONSTANTS에 "CODEX_CLI_INPUT_MAX_CHARS" 등록(2545)</change>
+    <change>CODEX_CRITICAL_FUNCTIONS에 "_trim_codex_input" 등록(2468)</change>
+    <change>_trim_codex_input(review_input, max_chars) -> Tuple[str, bool] 신규 함수 추가(12824), AL 4항목 방어 포함</change>
+    <change>_invoke_codex_exec 호출 직전 크기 검사 배선(28353-28382): 초과 시 trim, trim 후에도 초과 시 _finish_codex_review_error(input_too_large, error_retryable=False) fail-closed</change>
+    <signature_impact>기존 함수 시그니처 무변경 — Side-Effect Audit 결과 호출자 영향 없음</signature_impact>
+  </post_fix_diff>
+
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_defects_dae1.py</file>
+  </implemented_files>
+
+  <implemented_tasks>
+    <task mt_id="MT-14">
+      <implemented_ac>AC-1</implemented_ac>
+      <implementation_evidence>pipeline.py에 CODEX_CLI_INPUT_MAX_CHARS 상수 추가 및 _trim_codex_input 함수 구현, _cmd_gates_codex_review 내 CLI 호출 직전 크기 검사 배선, 회귀 테스트 11개 추가</implementation_evidence>
+    </task>
+  </implemented_tasks>
+
+  <modified_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_defects_dae1.py</file>
+  </modified_files>
+
+  <evidence>
+    <description>CODEX_CLI_INPUT_MAX_CHARS 상수 추가 및 input_too_large 처리 로직 + 회귀 테스트 11개</description>
+    <execution_check>
+      <py_compile>PASS — python -m py_compile pipeline.py</py_compile>
+      <import>PASS — python -c "import pipeline" (CONST=1048576, const_in_list=True, func_in_list=True)</import>
+      <pytest>PASS — TestMT14CodexInputTooLarge 11 passed. router critical/constant/classif 117 passed. 기존 legacy 실패 2건은 변경 전(git stash)에도 동일 실패 → MT-14 무관.</pytest>
+    </execution_check>
+    <report_file>module_handover_MT14_rework3.xml</report_file>
+  </evidence>
+
+  <self_check>
+    <python_version_syntax>PASS — typing.Tuple 사용(3.9 호환), 파일 기존 스타일 준수</python_version_syntax>
+    <type_hinting>PASS — _trim_codex_input(review_input: str, max_chars: int) -> Tuple[str, bool]</type_hinting>
+    <error_handling>PASS — None/비str/비int/0·음수 방어, trim 후 초과 시 fail-closed ERROR</error_handling>
+    <al_edge_cases>PASS — (1)None→TypeError (2)max_chars<=0→ValueError(+주석) (3)isinstance str/int 가드+bool 배제 (4)0/음수 불허 근거 주석</al_edge_cases>
+    <docstring>PASS — _trim_codex_input + 모듈 자기반성 헤더 4주석</docstring>
+    <execution_check>PASS — py_compile + import + pytest 실제 Bash 실행</execution_check>
+    <impact_analysis_check>PASS — impact_analysis 출력, state_mutations 명시, risk_assessment 4필드</impact_analysis_check>
+    <frozen_codebase_check>PASS — scope 외 파일 미수정, 무관 리팩토링 0건, OAR 0회, Pre/Post snapshot 출력, Side-Effect Audit(신규 함수라 호출자 없음)</frozen_codebase_check>
+    <loop_ceiling_check>N/A — while True 루프 미사용</loop_ceiling_check>
+    <fs_traversal_wiring>N/A — 파일 경로 파라미터 미수신(문자열 크기 처리만)</fs_traversal_wiring>
+  </self_check>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_defects_dae1.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_defects_dae1.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <dev_output>
+    <files>pipeline.py(상수+함수+배선), tests/e2e/test_codex_defects_dae1.py(TestMT14CodexInputTooLarge 11개 테스트)</files>
+    <reference_applied>N/A</reference_applied>
+    <dependencies>표준 라이브러리만(str.encode) — 신규 의존성 없음</dependencies>
+    <entry_point>python pipeline.py gates codex-review (내부 _cmd_gates_codex_review CLI 호출 직전 배선)</entry_point>
+    <env_vars>없음</env_vars>
+    <known_constraints>trim은 문자 단위 절단이므로 multibyte 입력은 절단 후 byte 길이가 한도를 초과할 수 있음 → 호출자 byte 재검사로 fail-closed 처리(설계 의도).</known_constraints>
+  </dev_output>
+
+  <handover>
+    <from>dev-agent</from>
+    <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+    <agent_run_id>dev-6c8c3639e069f8e3</agent_run_id>
+    <scope_declaration>
+      <files_to_create>없음</files_to_create>
+      <files_to_modify>pipeline.py, tests/e2e/test_codex_defects_dae1.py</files_to_modify>
+      <files_to_delete>없음</files_to_delete>
+    </scope_declaration>
+    <impact_analysis>
+      <micro_task_id>MT-14</micro_task_id>
+      <target_function>_trim_codex_input, CODEX_CLI_INPUT_MAX_CHARS, _cmd_gates_codex_review 내 CLI 호출 직전 배선</target_function>
+      <risk_assessment>
+        <breaking_change>NO — 한도 이내 입력은 원본 그대로 통과. 기존 정상 흐름 무영향.</breaking_change>
+        <test_coverage>NEW_TEST_ADDED — TestMT14CodexInputTooLarge 11개 테스트 추가</test_coverage>
+      </risk_assessment>
+    </impact_analysis>
+    <evidence>
+      <py_compile>PASS</py_compile>
+      <import_check>PASS — CONST=1048576, const_in_critical=True, func_in_critical=True</import_check>
+      <pytest>PASS — TestMT14CodexInputTooLarge 11 passed</pytest>
+    </evidence>
+  </handover>
+</module_handover>
