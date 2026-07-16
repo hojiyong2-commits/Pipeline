@@ -2600,15 +2600,15 @@ CODEX_CHATGPT_LOGIN_MARKER: str = "Logged in using ChatGPT"
 # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: v6 — findings[] scope 분류 스키마 추가.
 CODEX_REVIEW_RESULT_SCHEMA_VERSION: int = 6
 
-# IMP-20260712-DAE1 REJECT#LATEST rework 결함3: _check_codex_review_gate가 신뢰하는 verdict_source
-#   집합. 직접 Codex CLI 실행("codex_cli")과 검증된 캐시 결과("verified_cache")만 승인으로 인정한다.
-#   codex_cli_cached/cache_hit은 하위/상위 호환용 캐시 alias로 함께 허용한다. external/external_verdict/
-#   manual/agent_generated 등 신뢰 불가 출처는 이 집합에 없으므로 codex_review_untrusted_source로 BLOCKED된다.
+# IMP-20260712-DAE1 REJECT#LATEST rework 결함1: verdict_source 단일 SSoT.
+#   직접 Codex CLI 실행("codex_cli")과 검증된 캐시 결과("verified_cache") 2개만 허용한다.
+#   codex_cli_cached/cache_hit alias는 제거됨 — 해당 값은 legacy_untrusted_source로 BLOCKED된다.
+#   external/external_verdict/manual/agent_generated 등 신뢰 불가 출처도 동일하게 BLOCKED.
+#   두 소비자(_check_codex_review_gate와 _check_codex_review_operational_trust) 모두
+#   이 상수를 단일 SSoT로 사용한다 — 별도 tuple/frozenset 하드코딩 금지.
 CODEX_REVIEW_TRUSTED_VERDICT_SOURCES: "frozenset[str]" = frozenset({
-    "codex_cli",         # 이번 실행에서 직접 codex exec를 호출해 도출한 판정.
-    "verified_cache",    # critical-file SHA 검증을 통과한 캐시 재사용(실제 코드에서 기록되는 값).
-    "codex_cli_cached",  # 캐시 alias(계약 호환).
-    "cache_hit",         # 캐시 alias(계약 호환).
+    "codex_cli",       # 이번 실행에서 직접 codex exec를 호출해 도출한 판정.
+    "verified_cache",  # critical-file SHA 검증을 통과한 캐시 재사용(실제 코드에서 기록되는 값).
 })
 
 # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: bounded trust model v2.
@@ -13493,16 +13493,21 @@ def _check_codex_review_gate(
                 "이 결과는 acceptance 조건을 충족하지 않습니다."
             ),
         }
-    # (3-5) verdict_source는 신뢰 집합(직접 실행/검증된 캐시)만 허용.
+    # (3-5) verdict_source는 신뢰 SSoT 집합(CODEX_REVIEW_TRUSTED_VERDICT_SOURCES)만 허용.
     #   external/external_verdict/manual/agent_generated 등 신뢰 불가 출처는 BLOCKED.
-    if str(result_data.get("verdict_source", "") or "") not in CODEX_REVIEW_TRUSTED_VERDICT_SOURCES:
+    #   codex_cli_cached/cache_hit 같은 과거 alias도 legacy_untrusted_source로 BLOCKED.
+    _vs = str(result_data.get("verdict_source", "") or "")
+    if _vs not in CODEX_REVIEW_TRUSTED_VERDICT_SOURCES:
+        _legacy_aliases = {"codex_cli_cached", "cache_hit"}
+        _fc = "legacy_untrusted_source" if _vs in _legacy_aliases else "codex_review_untrusted_source"
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_untrusted_source",
+            "failure_code": _fc,
             "message": (
-                "codex_review_result.json의 verdict_source가 신뢰 집합에 없습니다"
+                "codex_review_result.json의 verdict_source가 신뢰 집합(CODEX_REVIEW_TRUSTED_VERDICT_SOURCES)에 없습니다"
                 f" (실제={result_data.get('verdict_source')!r}). "
-                "직접 Codex CLI 실행 또는 검증된 캐시 결과만 승인으로 인정됩니다."
+                "직접 Codex CLI 실행(codex_cli) 또는 검증된 캐시 결과(verified_cache)만 승인으로 인정됩니다."
+                + (" 이 값은 제거된 alias입니다." if _vs in _legacy_aliases else "")
             ),
         }
 
@@ -27480,12 +27485,12 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _start_epoch_reason = str(getattr(args, "start_epoch", None) or "").strip()
     if _start_epoch_reason:
         # 결함7(IMP-20260712-DAE1) rework: --start-epoch 자동 실행 금지 guard.
-        #   --start-epoch은 사용자가 직접 터미널에서 실행하는 유일한 운영 진입점이다. 에이전트/자동
-        #   흐름이 circuit breaker NON_CONVERGING을 우회하려 자동으로 새 epoch를 시작하는 것을 코드
-        #   레벨에서 차단한다. 환경변수 CODEX_START_EPOCH_USER_CONFIRMED=1 이 없으면 fail-closed BLOCKED.
-        #   이 환경변수는 사용자 직접 실행을 유도하는 operational ceremony이며 cryptographic provenance가
-        #   아니다. 동일 OS 사용자 권한의 에이전트도 설정 가능하다. 실제 auto-run 금지는 코드 레벨에서
-        #   별도로 강제되며, 환경변수 존재만으로 사용자 직접 실행을 보장할 수 없음을 인지하고 사용해야 한다.
+        #   --start-epoch은 사용자가 직접 터미널에서 실행하는 유일한 운영 진입점이다.
+        #   에이전트/자동 흐름의 --start-epoch 실행은 운영 정책으로 금지된다.
+        #   환경변수 CODEX_START_EPOCH_USER_CONFIRMED=1 이 없으면 fail-closed BLOCKED.
+        #   이 환경변수는 operational ceremony(운영 절차)이며 cryptographic provenance가 아니다.
+        #   동일 OS 사용자 권한에서는 에이전트도 설정 가능하다.
+        #   자동 실행 금지는 코드 constraint가 아닌 운영 정책이다.
         _user_confirmed_env = str(
             os.environ.get("CODEX_START_EPOCH_USER_CONFIRMED", "") or ""
         ).strip()
@@ -29988,12 +29993,17 @@ def _check_codex_review_operational_trust(result: Dict[str, Any]) -> Dict[str, A
         return {"status": "BLOCKED", "failure_code": code, "message": msg}
 
     verdict_source = str(result.get("verdict_source", "") or "")
-    # (1) verdict_source는 실제 codex 실행(codex_cli) 또는 검증된 cache만 신뢰한다.
-    if verdict_source not in ("codex_cli", "verified_cache"):
+    # (1) verdict_source는 CODEX_REVIEW_TRUSTED_VERDICT_SOURCES SSoT 집합만 신뢰한다.
+    #   _check_codex_review_gate와 동일 상수를 사용하여 두 소비자 간 split을 방지한다.
+    if verdict_source not in CODEX_REVIEW_TRUSTED_VERDICT_SOURCES:
+        _legacy_aliases = {"codex_cli_cached", "cache_hit"}
+        _fc = "legacy_untrusted_source" if verdict_source in _legacy_aliases else "codex_review_untrusted_verdict_source"
         return _blocked(
-            "codex_review_untrusted_verdict_source",
-            f"verdict_source={verdict_source or '(없음)'} — 실제 codex exec 또는 검증된 cache가 "
-            "아닙니다. 맨몸 --verdict/--codex-cli-* 주입은 운영 승인 자격이 없습니다 (fail-closed).",
+            _fc,
+            f"verdict_source={verdict_source or '(없음)'} — 실제 codex exec(codex_cli) 또는 "
+            "검증된 cache(verified_cache)가 아닙니다. "
+            + ("제거된 alias입니다. " if verdict_source in _legacy_aliases else "")
+            + "맨몸 --verdict/--codex-cli-* 주입은 운영 승인 자격이 없습니다 (fail-closed).",
         )
     # (2) 승인 자격 플래그가 반드시 true여야 한다.
     if not result.get("acceptance_eligible"):

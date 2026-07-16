@@ -647,5 +647,155 @@ def test_existing_packet_sha_check_maintained(tmp_path: Path, monkeypatch) -> No
     assert "packet_sha256" in str(res["message"]), res
 
 
+# ================================================================== #
+# IMP-20260712-DAE1 REJECT#14 rework: verdict_source 단일 SSoT 회귀 테스트 (8개)
+#   결함1: CODEX_REVIEW_TRUSTED_VERDICT_SOURCES를 2개(codex_cli/verified_cache)로 축소.
+#   결함2: _check_codex_review_gate alias → legacy_untrusted_source.
+#   결함3: _check_codex_review_operational_trust가 동일 SSoT 상수 사용 + alias 구분.
+#   결함4: --start-epoch guard 주석은 운영 정책 서술로 교정(코드 검증 대상 아님).
+#
+#   두 소비자(_check_codex_review_gate, _check_codex_review_operational_trust)가 동일한
+#   verdict_source 판정을 내리는지 직접 함수 호출로 검증한다. 실제 Codex CLI는 호출하지 않는다
+#   (순수 판정 함수 + 파일 IO 없는 operational_trust).
+# ================================================================== #
+
+# verdict_source 계층에서 반환되는 BLOCKED failure_code 집합.
+#   trusted 값이면 이 계층을 통과하여 이후 다른 검사에서 다른 failure_code로만 차단된다.
+_GATE_VS_FAILURE_CODES = {"codex_review_untrusted_source", "legacy_untrusted_source"}
+_OT_VS_FAILURE_CODES = {"codex_review_untrusted_verdict_source", "legacy_untrusted_source"}
+
+
+def _ot_verdict_source_block(verdict_source: str) -> Optional[str]:
+    """operational_trust에서 verdict_source 계층이 차단하는지 판정한다.
+
+    최소 result(verdict_source만 지정)로 호출한다. trusted 값이면 verdict_source 검사를
+    통과하고 그 다음 검사(acceptance_eligible)에서 다른 failure_code로 차단되므로,
+    verdict_source 계층 failure_code가 아니면 None(계층 통과)을 반환한다.
+
+    Returns:
+        verdict_source 계층에서 차단됐으면 그 failure_code, 아니면 None.
+    """
+    res = pipeline._check_codex_review_operational_trust({"verdict_source": verdict_source})
+    fc = str(res.get("failure_code", "") or "")
+    if res.get("status") == "BLOCKED" and fc in _OT_VS_FAILURE_CODES:
+        return fc
+    return None
+
+
+def test_verdict_source_ssot_constant_is_exactly_two() -> None:
+    """CODEX_REVIEW_TRUSTED_VERDICT_SOURCES는 정확히 2개(codex_cli/verified_cache)만 포함(결함1)."""
+    assert pipeline.CODEX_REVIEW_TRUSTED_VERDICT_SOURCES == frozenset(
+        {"codex_cli", "verified_cache"}
+    )
+    # 제거된 alias는 SSoT 집합에 없어야 한다.
+    assert "codex_cli_cached" not in pipeline.CODEX_REVIEW_TRUSTED_VERDICT_SOURCES
+    assert "cache_hit" not in pipeline.CODEX_REVIEW_TRUSTED_VERDICT_SOURCES
+
+
+def test_vs_codex_cli_passes_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='codex_cli' → gate 완전 PASS + operational_trust verdict_source 계층 통과."""
+    # gate: 모든 불변식 통과 + head SHA 일치 → PASS.
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(verdict_source="codex_cli"),
+        request=_valid_request(),
+        head_sha=_HEAD_SHA,
+    )
+    assert res["status"] == "PASS", res
+    # operational_trust: verdict_source 계층에서 차단되지 않음.
+    assert _ot_verdict_source_block("codex_cli") is None
+
+
+def test_vs_verified_cache_passes_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='verified_cache' → gate 완전 PASS + operational_trust verdict_source 계층 통과."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(verdict_source="verified_cache"),
+        request=_valid_request(),
+        head_sha=_HEAD_SHA,
+    )
+    assert res["status"] == "PASS", res
+    assert _ot_verdict_source_block("verified_cache") is None
+
+
+def test_vs_alias_codex_cli_cached_legacy_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='codex_cli_cached'(제거된 alias) → 양쪽 legacy_untrusted_source BLOCKED(결함2/3)."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="codex_cli_cached"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "legacy_untrusted_source", res
+    assert _ot_verdict_source_block("codex_cli_cached") == "legacy_untrusted_source"
+
+
+def test_vs_alias_cache_hit_legacy_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='cache_hit'(제거된 alias) → 양쪽 legacy_untrusted_source BLOCKED(결함2/3)."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="cache_hit"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "legacy_untrusted_source", res
+    assert _ot_verdict_source_block("cache_hit") == "legacy_untrusted_source"
+
+
+def test_vs_external_blocked_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='external' → gate=codex_review_untrusted_source, ot=codex_review_untrusted_verdict_source."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="external"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+    assert _ot_verdict_source_block("external") == "codex_review_untrusted_verdict_source"
+
+
+def test_vs_manual_blocked_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='manual' → 양쪽 verdict_source 계층에서 BLOCKED(비-alias failure_code)."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="manual"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+    assert _ot_verdict_source_block("manual") == "codex_review_untrusted_verdict_source"
+
+
+def test_vs_missing_blocked_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source 누락(빈 문자열) → 양쪽 verdict_source 계층에서 BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(drop=("verdict_source",)))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+    # operational_trust: 빈 문자열도 verdict_source 계층에서 차단.
+    assert _ot_verdict_source_block("") == "codex_review_untrusted_verdict_source"
+
+
+def test_gate_and_operational_trust_verdict_source_agreement(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """두 소비자가 동일 verdict_source 판정을 내린다: trusted 둘 다 허용, untrusted 둘 다 BLOCKED(통합).
+
+    - gate: _call_gate로 전체 fixture를 구성한다. trusted 값은 완전 PASS(request/head SHA 일치),
+      untrusted 값은 verdict_source 계층 failure_code로 BLOCKED된다(verdict_source 검사가
+      epoch/head 검사보다 먼저 실행되므로 fixture 미완성이어도 계층에서 차단됨).
+    - operational_trust: _ot_verdict_source_block으로 verdict_source 계층 판정을 격리한다.
+    두 함수 모두 CODEX_REVIEW_TRUSTED_VERDICT_SOURCES를 SSoT로 사용하므로 판정이 일치해야 한다.
+    """
+    trusted = ["codex_cli", "verified_cache"]
+    untrusted = ["codex_cli_cached", "cache_hit", "external", "manual", "agent_generated", ""]
+
+    for vs in trusted:
+        # trusted 값은 항상 non-empty이므로 verdict_source만 교체한 완전 fixture로 PASS를 검증한다.
+        gate_res = _call_gate(
+            tmp_path, monkeypatch,
+            _valid_result(verdict_source=vs),
+            request=_valid_request(),
+            head_sha=_HEAD_SHA,
+        )
+        assert gate_res["status"] == "PASS", f"gate: {vs} trusted → PASS 기대, got {gate_res}"
+        assert _ot_verdict_source_block(vs) is None, f"ot: {vs} trusted여야 함"
+
+    for vs in untrusted:
+        drop = ("verdict_source",) if vs == "" else ()
+        gate_res = _call_gate(
+            tmp_path, monkeypatch,
+            _valid_result(drop=drop) if vs == "" else _valid_result(verdict_source=vs),
+        )
+        assert gate_res["status"] == "BLOCKED", f"gate: {vs} untrusted → BLOCKED 기대"
+        assert gate_res["failure_code"] in _GATE_VS_FAILURE_CODES, (
+            f"gate: {vs} → verdict_source 계층 failure_code 기대, got {gate_res['failure_code']}"
+        )
+        assert _ot_verdict_source_block(vs) is not None, f"ot: {vs} untrusted여야 함"
+
+
 if __name__ == "__main__":
     sys.exit(subprocess.call([sys.executable, "-m", "pytest", __file__, "-v"]))
