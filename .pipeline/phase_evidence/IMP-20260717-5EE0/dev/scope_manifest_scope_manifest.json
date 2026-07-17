@@ -1,0 +1,325 @@
+{
+  "pipeline_id": "IMP-20260717-5EE0",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_build_codex_review_plan"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [
+            "AC-1",
+            "AC-5",
+            "AC-6",
+            "AC-14"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_build_codex_review_plan: git diff origin/main...HEAD 기반 changed_files 분류 + AST 증거 계획. .pipeline/codex_review_plan.json SSoT 기록."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_extract_evidence_ast",
+        "_extract_test_file_evidence",
+        "_extract_oracle_evidence",
+        "_extract_workflow_evidence",
+        "_extract_doc_evidence"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-8"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_extract_evidence_ast: ast.parse+walk로 FunctionDef/AsyncFunctionDef/ClassDef lineno~end_lineno 추출.",
+            "_extract_test_file_evidence: 테스트명/fixture SHA 요약, 원문 전체 미포함.",
+            "_extract_oracle_evidence/_extract_workflow_evidence/_extract_doc_evidence: SHA 요약만."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_calculate_shard_budget"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [
+            "AC-7",
+            "AC-15"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_calculate_shard_budget: SHARD_HARD_BUDGET=250000/TARGET=200000/CODE=120000/TEST=30000/ORACLE=15000/CONTRACT=20000 상수 기반 shard별 예산."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_build_shard_plan",
+        "_aggregate_shard_verdicts"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [
+            "AC-9",
+            "AC-10",
+            "AC-20"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_build_shard_plan: 의미 기반 bin-packing, 항목 분할 없음, 각 shard prompt_chars<=budget, verdict=PENDING 초기화.",
+            "_aggregate_shard_verdicts: 전원 APPROVE_TO_USER+동일 head_sha 시만 APPROVED."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_invalidate_codex_cache"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-11",
+            "AC-12",
+            "AC-13"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_invalidate_codex_cache: 5개 허용 reason만 codex_review_cache.json unlink, 그 외 보존."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_check_pr_size_budget"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": [
+            "AC-21",
+            "AC-22"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_check_pr_size_budget: PR 크기 한도 검사, pr_split_required 반환(_die 없음)."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_check_convergence_guard"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": [
+            "AC-16",
+            "AC-17"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_check_convergence_guard: 동일 epoch reject_count>=2면 convergence_ok=False."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        "tests/e2e/test_codex_bootstrap_5ee0.py",
+        "tests/oracles/IMP-20260717-5EE0/TC-3/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-3/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-4/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-4/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-7/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-7/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-8/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-8/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-10/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-10/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-11/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-11/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-12/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-12/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-13/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-13/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-14/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-14/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-15/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-15/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-16/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-16/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-17/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-17/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-18/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-18/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-19/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-19/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-20/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-20/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-1/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-2/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-5/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-6/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-9/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-21/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-22/input.json"
+      ],
+      "affected_functions": [
+        "test_* (22개 테스트 함수)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8",
+          "implemented_ac": [
+            "AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8",
+            "AC-9", "AC-10", "AC-11", "AC-12", "AC-13", "AC-14", "AC-15",
+            "AC-16", "AC-17", "AC-18", "AC-19", "AC-20", "AC-21", "AC-22"
+          ],
+          "changed_files": [
+            "tests/e2e/test_codex_bootstrap_5ee0.py"
+          ],
+          "implementation_evidence": [
+            "22개 E2E 테스트 TC-1~TC-22: PIPELINE_STATE_PATH 격리, oracle input/expected 대조. pytest 22 passed."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_bootstrap_rework_5ee0.py",
+        "core/acceptance/scorers.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_review",
+        "_run_codex_review_preflight",
+        "_call_codex_cli_for_shard",
+        "_build_command_check_env"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-9",
+          "implemented_ac": [
+            "AC-15",
+            "AC-18",
+            "AC-19"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_cmd_gates_codex_review: CODEX_REVIEW_SHARDING=1 env-gated 블록 추가. 기본 off로 기존 흐름 무손상."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-10",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_bootstrap_e2e_v2_5ee0.py"
+      ],
+      "affected_functions": [
+        "_get_changed_line_ranges",
+        "_map_lines_to_ast_nodes",
+        "_extract_changed_symbols_evidence",
+        "_build_coverage_manifest",
+        "_build_codex_review_plan",
+        "_check_pr_size_budget",
+        "_collect_pr_size_metrics",
+        "_build_shard_plan",
+        "_call_codex_cli_for_shard",
+        "_aggregate_shard_verdicts",
+        "_run_codex_review_preflight",
+        "_issue_codex_shard_review_permit",
+        "_check_and_consume_permit",
+        "_find_codex_bin",
+        "_serialize_shard_to_prompt",
+        "_parse_codex_cli_shard_output",
+        "_cmd_gates_codex_review",
+        "_shard_review_permit_path",
+        "build_parser"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-10",
+          "implemented_ac": [
+            "AC-15",
+            "AC-18",
+            "AC-19"
+          ],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_bootstrap_e2e_v2_5ee0.py"
+          ],
+          "implementation_evidence": [
+            "REJECT#2 rework: AST changed-symbol evidence 추출, 실제 Codex CLI subprocess 연결, permit gate, 6조건 verdict 집계, preflight fail-closed.",
+            "11개 E2E 테스트 TC-23~TC-31 모두 PASS."
+          ]
+        }
+      ]
+    }
+  ]
+}
