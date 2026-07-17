@@ -24597,18 +24597,15 @@ def _check_pr_size_budget(
     )
 
     reasons: List[str] = []
-    if changed_product_lines > PR_MAX_PRODUCT_LINES:
-        reasons.append("product_code_lines_exceeded")
-    if critical_symbol_count > PR_MAX_CRITICAL_SYMBOLS:
-        reasons.append("critical_symbol_count_exceeded")
-    if estimated_evidence_chars > PR_MAX_EVIDENCE_CHARS:
-        reasons.append("evidence_chars_exceeded")
-    if max_test_file_lines > PR_MAX_TEST_FILE_LINES:
-        reasons.append("test_file_lines_exceeded")
-    # IMP-20260717-5EE0 MT-10(REJECT#2 문제2): 개별 evidence 항목이 shard 상한을 단독 초과할
-    #   때만 분할을 요구한다. self_referential(리뷰 엔진 자기참조)만으로는 더 이상 자동 차단하지
-    #   않는다 — changed-symbol 추출로 자기참조 PR도 shard 단위로 검토 가능해졌기 때문이다.
-    if max_single_evidence_chars > SHARD_HARD_BUDGET:
+    # IMP-20260717-5EE0 MT-10(REJECT#2 요구사항2): AST 기반 changed-symbol evidence 도입으로
+    #   raw 라인 수 임계값(product_code_lines/critical_symbol_count/estimated_evidence_chars/
+    #   test_file_lines) 기반 분할 요구를 제거했다. shard 단위 AST 증거가 250K 상한을 개별 항목
+    #   수준에서 보장하므로 개별 항목 초과 기준만 유지한다.
+    # fail-closed: max_single_evidence_chars가 0이고 변경된 Python 파일이 있으면(계산 실패)
+    #   증거 크기를 알 수 없으므로 evidence_computation_failed로 차단한다(0 통과 금지).
+    if max_single_evidence_chars == 0 and changed_product_lines > 0:
+        reasons.append("evidence_computation_failed")
+    elif max_single_evidence_chars > SHARD_HARD_BUDGET:
         reasons.append("evidence_item_too_large")
 
     pr_split_required = len(reasons) > 0
