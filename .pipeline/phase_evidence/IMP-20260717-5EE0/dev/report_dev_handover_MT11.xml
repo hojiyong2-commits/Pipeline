@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260717-5EE0</pipeline_id>
+  <phase>dev</phase>
+  <agent_id>dev-agent</agent_id>
+  <run_id>dev-d61bcc8d846b0ba4</run_id>
+  <mt_id>MT-11</mt_id>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_bootstrap_e2e_v2_5ee0.py</file>
+    <file>tests/e2e/test_bootstrap_rework_5ee0.py</file>
+    <file>codex_verdict_schema.json</file>
+    <file>tests/e2e/fake_codex.py</file>
+  </evidence>
+
+  <changes_summary>
+    REJECT#3 P0-1~P0-5 수정 완료 + hotfix:
+    P0-1: _check_and_consume_permit에 review_plan_sha/contract_sha 검증 추가. _issue_codex_shard_review_permit에 contract_sha 파라미터 추가.
+    P0-2: _parse_codex_cli_shard_output 시그니처 stdout-&gt;result_file_path. --output-last-message/--ephemeral/--sandbox read-only. codex_verdict_schema.json 생성.
+    P0-3: CODEX_CLI_MOCK=1 승인 분기 완전 제거. fake_codex.py 생성. _cli_factory DI 유지.
+    P0-4: sys.platform 감지로 Windows PowerShell / Unix 분기 안내 메시지.
+    P0-5: _verify_working_tree_integrity() 신규 함수, permit 발급 전 호출.
+    hotfix(QA R1 FAIL PD:1198544d): _validate_codex_verdict_obj가 _codex_verdict_schema_path()를 호출하여 스키마를 로드하도록 수정 — dead code 제거 및 SSoT 일원화.
+    TC-32~TC-42 11개 추가. test_bootstrap_rework_5ee0.py TC-25 _cli_factory DI 마이그레이션.
+  </changes_summary>
+
+  <verification>
+    <py_compile>PASS</py_compile>
+    <import>PASS</import>
+    <pytest>26 passed (bootstrap e2e + rework). TC-32~TC-42 11개 전부 PASS.</pytest>
+    <module_qa>MT-11 PASS (112/120)</module_qa>
+    <module_integrate>PASS</module_integrate>
+  </verification>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_bootstrap_e2e_v2_5ee0.py</file>
+      <file>tests/e2e/test_bootstrap_rework_5ee0.py</file>
+      <file>codex_verdict_schema.json</file>
+      <file>tests/e2e/fake_codex.py</file>
+    </files_to_modify>
+    <functions_to_modify>
+      <function>_check_and_consume_permit</function>
+      <function>_issue_codex_shard_review_permit</function>
+      <function>_parse_codex_cli_shard_output</function>
+      <function>_call_codex_cli_for_shard</function>
+      <function>_verify_working_tree_integrity</function>
+    </functions_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>_check_and_consume_permit, _issue_codex_shard_review_permit, _parse_codex_cli_shard_output, _call_codex_cli_for_shard, _verify_working_tree_integrity</target_function>
+    <upstream_callers>
+      <caller>_cmd_gates_codex_review (authorize-run 경로)</caller>
+      <caller>_cmd_gates_codex_review (cache-miss 자동 경로)</caller>
+    </upstream_callers>
+    <state_mutations>
+      <mutation>permit 파일 생성/소비 상태 변경 (review_plan_sha, contract_sha 필드 추가)</mutation>
+      <mutation>shard_audit_log_*.jsonl 파일 생성 (stdout JSONL 보존)</mutation>
+      <mutation>--output-last-message 임시 파일 생성 후 정리 (tempfile.mkstemp)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <breaking_change>permit 시그니처 변경으로 기존 permit 파일과 하위 호환성 필요 — 기본값 빈 문자열로 레거시 permit 호환 처리됨</breaking_change>
+      <security_improvement>CODEX_CLI_MOCK 우회 제거, working_tree dirty 차단, permit stale 3중 검증 추가</security_improvement>
+      <scope_expansion>test_bootstrap_rework_5ee0.py TC-25 마이그레이션 — P0-3 필수 결과</scope_expansion>
+    </risk_assessment>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_bootstrap_e2e_v2_5ee0.py, tests/e2e/test_bootstrap_rework_5ee0.py, codex_verdict_schema.json, tests/e2e/fake_codex.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_bootstrap_e2e_v2_5ee0.py, tests/e2e/test_bootstrap_rework_5ee0.py, codex_verdict_schema.json, tests/e2e/fake_codex.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>

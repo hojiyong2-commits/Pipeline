@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+<pipeline_id>IMP-20260717-5EE0</pipeline_id>
+<from>dev-agent</from>
+<to>qa-agent</to>
+<rework_round>REJECT#2</rework_round>
+<status>DONE</status>
+<scope_declaration>
+  <files_to_modify>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_bootstrap_e2e_v2_5ee0.py</file>
+  </files_to_modify>
+</scope_declaration>
+<evidence>
+  <file>pipeline.py</file>
+  <file>tests/e2e/test_bootstrap_e2e_v2_5ee0.py</file>
+</evidence>
+</handover>
+<module_handover>
+  <pipeline_id>IMP-20260717-5EE0</pipeline_id>
+  <mt_id>MT-10</mt_id>
+  <agent_id>dev-agent</agent_id>
+  <status>DONE</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_bootstrap_e2e_v2_5ee0.py</file>
+    </files_to_modify>
+    <scope_amendment_reason>
+      PM scope_manifest 기본 affected_functions에 없던 _cmd_gates_codex_review(handler)와 build_parser(argparse),
+      _shard_review_permit_path(신규 경로 헬퍼)를 Side-Effect Audit 결과에 따라 추가함. 세 함수 모두 PM target
+      파일 pipeline.py 내부이며 Trust-Root(tests/**, workflows, agent MD)가 아님.
+      (1) 요구4/6이 _call_codex_cli_for_shard/_aggregate_shard_verdicts 시그니처를 변경 → 유일 caller
+          _cmd_gates_codex_review를 함께 갱신(필수 caller 동기화).
+      (2) 요구5 permit gate + 요구7 preflight fail-closed(exit 1)는 handler 분기에서만 구현 가능.
+      (3) 요구5 --authorize-run permit 발급 CLI는 build_parser 인자 추가 필요.
+    </scope_amendment_reason>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_build_codex_review_plan (evidence 구성을 changed_symbols_only로 전환)</target_function>
+    <new_functions>
+      _get_changed_line_ranges, _map_lines_to_ast_nodes, _extract_changed_symbols_evidence,
+      _build_coverage_manifest, _issue_codex_shard_review_permit, _check_and_consume_permit,
+      _find_codex_bin, _serialize_shard_to_prompt, _parse_codex_cli_shard_output,
+      _shard_review_permit_path
+    </new_functions>
+    <modified_functions>
+      _build_codex_review_plan, _check_pr_size_budget, _collect_pr_size_metrics, _build_shard_plan,
+      _call_codex_cli_for_shard, _aggregate_shard_verdicts, _cmd_gates_codex_review, build_parser
+    </modified_functions>
+  </impact_analysis>
+  <requirements_addressed>
+    <req n="1">changed-symbol evidence 추출: 실 git 경로에서 pipeline.py 전체(1.4M자)가 아닌 변경 함수/클래스만 evidence로 포함. inject 테스트 경로는 결정성 보존(기존 동작 유지).</req>
+    <req n="2">_check_pr_size_budget: self_referential 자동 차단 제거, 개별 evidence 항목 250k 초과 시에만 evidence_item_too_large 분할 요구. _collect_pr_size_metrics가 changed-symbol 기준 estimated_evidence_chars/max_single_evidence_chars 계산.</req>
+    <req n="3">_build_shard_plan에 evidence_sources(실 source) 필드 추가.</req>
+    <req n="4">_call_codex_cli_for_shard: 실제 codex exec subprocess 연결. mock/DI는 격리, timeout/network/auth/미설치/파싱실패는 REJECT 아닌 ERROR로 분류. input_too_large 사전 차단.</req>
+    <req n="5">permit gate: _issue_codex_shard_review_permit(CODEX_RUN_AUTHORIZED=1 필수) + _check_and_consume_permit(단일 사용, stale/만료/소비 차단). handler 자동 shard 경로가 permit 소비 후에만 CLI 호출. --authorize-run CLI 추가.</req>
+    <req n="6">_aggregate_shard_verdicts: 6개 조건(required shard/pr_head_sha/error/stale/REJECT/findings schema). PARTIAL_APPROVED → ERROR 차단, 빈 목록 → ERROR.</req>
+    <req n="7">preflight fail-closed: handler 분기가 blocked_reason 존재 시 exit 1(항상 exit 0 제거). _run_codex_review_preflight는 기존 직접호출 테스트 보존 위해 dict 반환 유지.</req>
+    <req n="8">신규 E2E/unit 테스트 tests/e2e/test_bootstrap_e2e_v2_5ee0.py (TC-23~TC-31, 11 케이스).</req>
+    <req n="9">deliverables: scope_manifest_MT-10.json, module_handover_MT-10.xml.</req>
+  </requirements_addressed>
+  <deviations_from_spec>
+    <deviation id="D1">
+      요구4 "permit is None → permit_required" 즉시 반환을 채택하지 않음. 대신 permit gate를 handler 레벨에
+      두고, _call_codex_cli_for_shard는 permit None 시 codex_cli_not_connected(하위 호환)를 반환. 사유:
+      기존 Trust-Root 테스트 test_bootstrap_rework_5ee0.py::test_tc25b가 permit 없는 직접 호출에서
+      error_reason=="codex_cli_not_connected"를 단언하며, 해당 테스트 파일은 내 target_files가 아니므로 수정 불가.
+      보안 목표(mock/미승인 상태에서 실제 승인 불가)는 handler permit gate + permit None 시 실 CLI 미호출로 동일 달성.
+    </deviation>
+    <deviation id="D2">
+      요구7 "_run_codex_review_preflight를 print+sys.exit로 재작성"을 함수 자체가 아닌 handler 분기에 구현.
+      사유: 기존 Trust-Root 테스트가 _run_codex_review_preflight를 직접 호출하여 dict 반환을 기대(SystemExit 시 실패).
+      "항상 exit 0" 문제(문제3)는 handler에서 blocked_reason→exit 1로 해소.
+    </deviation>
+    <deviation id="D3">
+      요구4 CODEX_CLI_MOCK=1을 "permit 체크 후" 격리하는 대신 함수 최상단 test DI로 유지(기존 test_tc25 보존).
+      handler permit gate가 production 오용을 차단하므로 mock은 순수 단위-테스트 seam으로만 기능(실 승인 생성 불가).
+    </deviation>
+  </deviations_from_spec>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_bootstrap_e2e_v2_5ee0.py (신규)</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_bootstrap_e2e_v2_5ee0.py</manifest_files>
+    <extra_files>없음 (setup.cfg는 CRLF↔LF EOL 정규화 phantom으로 내가 편집하지 않았으며 stage 대상 아님)</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <test_evidence>
+    <new_tests>tests/e2e/test_bootstrap_e2e_v2_5ee0.py — 11 passed</new_tests>
+    <existing_rework_tests>tests/e2e/test_bootstrap_rework_5ee0.py — 4 passed (no regression)</existing_rework_tests>
+    <existing_codex_tests>tests/e2e/test_codex_bootstrap_5ee0.py — 16 passed, 6 failed (PRE-EXISTING; baseline stash 확인 동일 6개, oracle input.json 키 누락 by prior commit a270e3f7 — 내 변경과 무관)</existing_codex_tests>
+    <lint>ruff: All checks passed. mypy: Success (no issues). bandit: no Medium/High.</lint>
+    <compile>python -m py_compile pipeline.py — OK. import — OK.</compile>
+  </test_evidence>
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_bootstrap_e2e_v2_5ee0.py</file>
+  </implemented_files>
+  <self_check>
+    <syntax_check>PASS — python -m py_compile pipeline.py OK</syntax_check>
+    <type_check>PASS — mypy: Success (no issues)</type_check>
+    <lint_check>PASS — ruff: All checks passed, bandit: no Medium/High</lint_check>
+    <test_run>PASS — 내 범위 26 passed (신규11 + rework4 + DB54 11)</test_run>
+    <scope_lock>PASS — 변경 파일: pipeline.py, tests/e2e/test_bootstrap_e2e_v2_5ee0.py (scope_manifest 일치)</scope_lock>
+    <trust_root_check>PASS — trust_root_violation=false</trust_root_check>
+  </self_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_bootstrap_e2e_v2_5ee0.py</file>
+  </evidence>
+  <followup_notes>
+    tests/e2e/test_codex_bootstrap_5ee0.py TC-1/TC-5/TC-6/TC-9/TC-21/TC-22 6건은 이전 커밋(a270e3f7)이 oracle
+    input.json에서 test 코드가 참조하는 키(changed_files, product_code_lines, changed_symbols 등)를 제거하여
+    발생한 사전 회귀임. 해당 파일들은 내 target_files(Trust-Root)가 아니므로 이 MT에서 수정 불가. 별도 조치 필요.
+  </followup_notes>
+</module_handover>
