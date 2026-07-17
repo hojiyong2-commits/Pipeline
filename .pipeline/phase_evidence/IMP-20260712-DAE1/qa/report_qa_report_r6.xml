@@ -1,0 +1,82 @@
+<qa_report>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>114</numeric_score>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 카테고리 아님</wa>
+    <ui>N-A — GUI 카테고리 아님</ui>
+    <fs>N-A — 파일시스템 제품 카테고리 아님 (permit 원자적 쓰기는 PD/AL로 평가)</fs>
+    <pd>PASS — permit 검증(순수)과 소비(I/O)를 _atomic_claim으로 원자적 분리, 명확한 Tuple 반환 계약</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — TypeError/RuntimeError fail-closed, bare except 없음, TOCTOU 경합 방어</al>
+    <build>N-A — meta/protocol 태스크 (pipeline.py)</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <pd score="10" max="10">모듈분리 5/5 (순수 검증 _check + I/O 소비 _consume + 원자 claim _atomic 계층 분리) / 인터페이스계약 5/5 (Tuple[bool,str,Optional[Dict]] 명시)</pd>
+    <al score="20" max="20">None/비dict TypeError 가드, 쓰기 실패 RuntimeError fail-closed, O_EXCL lock TOCTOU 방어, finally lock 정리</al>
+    <total score="114" max="120"/>
+    <percentage>95.0</percentage>
+    <numeric_verdict>PASS(114/120 >= 96)</numeric_verdict>
+  </numeric_score_detail>
+
+  <criteria_verification>
+    <criterion ac_id="MT-R6-1" status="PASS">_consume_codex_run_permit에서 `except OSError: pass` 완전 제거 확인(pipeline.py:8360-8370). OSError 발생 시 RuntimeError raise + 메시지에 codex_run_permit_consume_failed 포함. 쓰기 실패 시 CONSUMED dict 미반환(raise가 return 전 발생). permit이 None/비dict일 때 TypeError raise(8351-8354).</criterion>
+    <criterion ac_id="MT-R6-2" status="PASS">_atomic_claim_codex_run_permit(pipeline_id, review_epoch, pr_head_sha, review_bundle_sha256) 존재(8386-8391). os.O_CREAT | os.O_EXCL | os.O_WRONLY lock 사용(8426). 반환 타입 Tuple[bool, str, Optional[Dict]](8391). lock 획득 후 재로딩·재검증(TOCTOU)으로 두 번째 claim은 consumed 차단(8437-8446). _cmd_gates_codex_review에서 _check+_consume 순차 대신 _atomic_claim 사용(29124-29131).</criterion>
+    <criterion ac_id="MT-R6-3" status="PASS">_cmd_gates_codex_review 핸들러 초반(28084-28098)에 --start-epoch + --authorize-run 동시 사용 감지. codex_review_conflicting_flags failure_code 포함(28091). 3단계 순서 안내 출력(28093-28097).</criterion>
+    <criterion ac_id="MT-R6-4" status="PASS">argparse에 --preflight-only 등록(36780-36785). 8개 필수 필드 모두 출력: current_head_sha, review_epoch, review_bundle_sha256, final_prompt_chars, safe_limit_chars, evidence_complete, critical_hunk_count, post_build_preflight(28209-28219). sys.exit(0)로 CLI 경로 진입 전 종료 — Codex CLI 미호출. permit 발급/claim 미수행 — permit 미소비.</criterion>
+    <criterion ac_id="MT-R6-5" status="PASS">7개 회귀 테스트 모두 존재 및 PASS: test_r6_consume_write_fail_blocks_cli, test_r6_consume_write_fail_permit_not_consumed, test_r6_concurrent_claim_only_one_succeeds, test_r6_claimed_permit_not_reverted_on_cli_error, test_r6_conflicting_flags_start_epoch_and_authorize_run, test_r6_preflight_only_no_cli_call, test_r6_preflight_only_outputs_required_fields. 각 테스트 PIPELINE_STATE_PATH 격리 사용, fake codex marker 파일로 CLI 미호출 검증.</criterion>
+  </criteria_verification>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — pytest 79개 전체 PASS 실행 증거 확보</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — _atomic_claim이 실제 _cmd_gates_codex_review 호출 경로(29124)에 바인딩됨. --preflight-only 분기가 argparse에 등록되어 실행 경로에 연결됨.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <findings>
+    <finding id="1" severity="info">MT-R6-1~5 모든 항목 구현 및 검증 완료. `except OSError: pass` 삼킴 패턴이 fail-closed RuntimeError로 교체되어 permit 재사용 취약점 제거됨.</finding>
+    <finding id="2" severity="info">_atomic_claim의 finally 블록 lock 정리 시 `except OSError: pass`(8457)는 lock 파일 삭제 실패용으로 의도적이며 fail-closed 안전성에 영향 없음(소비는 이미 완료). 정상.</finding>
+    <finding id="3" severity="info">test_r6_concurrent_claim은 `success_count <= 1`로 검증 — 동시 스레드 경합에서 최대 1개 성공 보장을 정확히 표현. TOCTOU 방어 검증 적절.</finding>
+  </findings>
+
+  <test_results>
+    <total_passed>79</total_passed>
+    <total_failed>0</total_failed>
+    <r6_tests_passed>7</r6_tests_passed>
+  </test_results>
+
+  <micro_task_boundary>
+    <mt_id>MT-R6-1</mt_id>
+    <mt_id>MT-R6-2</mt_id>
+    <mt_id>MT-R6-3</mt_id>
+    <mt_id>MT-R6-4</mt_id>
+    <mt_id>MT-R6-5</mt_id>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <failure_signature>none</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <improvement_suggestions>없음 — 모든 REJECT#6 수정 사항이 요구 스펙대로 구현되고 회귀 테스트로 검증됨.</improvement_suggestions>
+</qa_report>
