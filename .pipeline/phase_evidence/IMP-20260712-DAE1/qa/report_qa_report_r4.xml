@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <phase>qa</phase>
+  <mt_scope>MT-R4-1, MT-R4-2, MT-R4-3, MT-R4-4, MT-R4-5</mt_scope>
+  <handover_check>PASS — dev_handover_r4.xml에 evidence 파일 3개(pipeline.py, .github/workflows/ci.yml, tests/e2e/test_codex_defects_dae1.py) 명시, 실제 제출 확인</handover_check>
+  <category_check>
+    <wa>N-A — 네트워크 호출 없는 내부 로직 태스크</wa>
+    <ui>N-A — GUI 없음</ui>
+    <fs>N-A — _build_structured_codex_input/_validate_post_build_prompt는 파일 IO 없는 순수 문자열 함수</fs>
+    <pd>PASS — 순수 함수 분리, Tuple[str,bool]/Tuple[bool,List[str]] 인터페이스 계약, 타입힌팅 완비</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA 미채점</sec>
+    <al>PASS — isinstance 타입가드, bool(int subclass) 명시 배제, None/음수 방어, 빈 데이터(len) 처리</al>
+    <build>N-A — BUILD 태그 없음 (meta-task)</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+  <numeric_score>100</numeric_score>
+  <numeric_score_detail>
+    <wa score="20" max="20">N/A — 미해당 카테고리 무감점 처리</wa>
+    <ui score="20" max="20">N/A — 미해당 카테고리 무감점 처리</ui>
+    <fs score="20" max="20">N/A — 미해당 카테고리 무감점 처리</fs>
+    <pd score="10" max="10">모듈분리 5/5(순수 함수, 단일 책임) / 인터페이스계약 5/5(Tuple 반환 타입, 타입힌팅)</pd>
+    <al score="20" max="20">타입검증 5/5(isinstance+bool 배제) / 범위검증 5/5(safe_chars&lt;=0 ValueError) / 빈데이터 5/5(len 검사) / 방어 5/5(None guard)</al>
+    <build score="10" max="10">N/A — 미해당, 무감점 처리</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — 미채점</sec>
+    <total score="100" max="120"/>
+    <percentage>83.3</percentage>
+    <numeric_verdict>PASS(100/120 &gt;= 96/120)</numeric_verdict>
+  </numeric_score_detail>
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover test_results=pytest 65 passed, QA 재실행 65 passed 재현</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — line 28494-28514에서 _build_structured_codex_input + _validate_post_build_prompt 실제 호출 경로 확인(정의만 존재하지 않음)</functional_binding_verified>
+  </runtime_functional_check>
+  <c3_cross_verification>
+    <scope_files_declared>3</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <verification_points>
+    <point id="1" status="PASS">CODEX_CLI_SAFE_INPUT_CHARS = 900_000 char 기반 상수 존재 (pipeline.py:2507)</point>
+    <point id="2" status="PASS">CODEX_CLI_INPUT_MAX_CHARS 제거됨 — pipeline.py 내 grep 참조 0건 (테스트 파일 주석에만 잔존)</point>
+    <point id="3" status="PASS">_trim_codex_input 제거됨 — pipeline.py 내 grep 참조 0건</point>
+    <point id="4" status="PASS">_build_structured_codex_input: len(prompt) char 기준(NOT encode, line 12876/12895), 중복라인 축소+evidence_complete=False 반환</point>
+    <point id="5" status="PASS">_validate_post_build_prompt: 7조건(길이/findings sentinel/verdict sentinel/evidence_complete/ACCEPT nonce/critical func/critical file) + evidence_complete=False 차단</point>
+    <point id="6" status="PASS">호출 지점(pipeline.py:28494-28514): CODEX_CLI_SAFE_INPUT_CHARS 초과 시 _build_structured_codex_input 호출 → _validate_post_build_prompt로 fail-closed BLOCKED(codex_review_input_budget_exceeded)</point>
+    <point id="7" status="PASS">test_codex_defects_dae1.py: 8개 신규 REJECT#4 테스트(char 기반, evidence_complete 차단, schema 보존 포함), 전체 65 passed</point>
+    <point id="8" status="PASS">ci.yml slow-e2e-tests job: needs: tests, test_codex_cost_optimization_9f5e.py + test_ac_tracking_1abe.py 실행(line 771-799)</point>
+  </verification_points>
+  <criteria_verification>
+    <criterion ac_id="AC-6" status="PASS" evidence="test_char_not_bytes_for_korean_input — 한글 3바이트 입력에서 char 단위 측정 검증, len(result)==100 통과"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="char/byte 혼용 제거 — 호출 지점 및 함수 내부 모두 len() char 기준 통일"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="slow-e2e-tests CI job 추가 + 8개 회귀 테스트 통과로 CI 사각지대 해소"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="test_post_build_preflight_blocks_evidence_complete_false + test_budget_exceeded_blocks_cli — evidence_complete=False fail-closed 차단 검증"/>
+  </criteria_verification>
+  <verification_evidence>
+    <item>python -m pytest tests/e2e/test_codex_defects_dae1.py -q → 65 passed in 4.51s</item>
+    <item>Grep: CODEX_CLI_INPUT_MAX_CHARS / _trim_codex_input pipeline.py 내 매치 0건 (제거 확인)</item>
+    <item>pipeline.py:2507 CODEX_CLI_SAFE_INPUT_CHARS = 900_000</item>
+    <item>pipeline.py:12833 _build_structured_codex_input(prompt, safe_chars) -> Tuple[str, bool]</item>
+    <item>pipeline.py:12913 _validate_post_build_prompt(prompt, safe_chars, evidence_complete, ...) -> Tuple[bool, List[str]]</item>
+    <item>pipeline.py:28494-28514 호출 배선 확인</item>
+    <item>ci.yml:771 slow-e2e-tests job + needs: tests + 2개 E2E 파일 실행 확인</item>
+  </verification_evidence>
+  <micro_task_boundary>
+    <scope_check>
+      <declared_scope>pipeline.py, tests/e2e/test_codex_defects_dae1.py, .github/workflows/ci.yml</declared_scope>
+      <actual_changes>pipeline.py (CODEX_CLI_SAFE_INPUT_CHARS, _build_structured_codex_input, _validate_post_build_prompt), tests/e2e/test_codex_defects_dae1.py (8개 회귀 테스트), .github/workflows/ci.yml (slow-e2e-tests job)</actual_changes>
+      <extra_files>없음</extra_files>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>WITHIN_SCOPE</blast_radius>
+    </scope_check>
+    <mt_coverage>
+      <mt id="MT-R4-1" status="VERIFIED">CODEX_CLI_SAFE_INPUT_CHARS char 기반 상수 + char/byte 혼용 제거</mt>
+      <mt id="MT-R4-2" status="VERIFIED">_trim_codex_input 제거 + _build_structured_codex_input 구현</mt>
+      <mt id="MT-R4-3" status="VERIFIED">_validate_post_build_prompt 7조건 post-build preflight</mt>
+      <mt id="MT-R4-4" status="VERIFIED">slow-e2e-tests CI job 추가</mt>
+      <mt id="MT-R4-5" status="VERIFIED">8개 회귀 테스트 추가 (65 passed total)</mt>
+    </mt_coverage>
+  </micro_task_boundary>
+  <verdict>PASS</verdict>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <improvement_suggestions>
+    - ci.yml slow-e2e-tests에서 --timeout=600 사용 — pytest-timeout 플러그인이 CI의 requirements-dev.txt에 포함되어야 정상 동작(로컬 기본 env에는 미설치). 별도 파일 Read 금지 제약으로 확인 불가, CI 실행 시 검증 권장.
+    - dev_handover_r4 scope_lock_check의 trust_root_violation=false 라벨은 형식상 부정확(.github/workflows/**, tests/**는 Trust-Root). 다만 본 IMP 파이프라인이 해당 파일을 PM scope에 명시적으로 포함하므로 수정 자체는 승인된 범위 — 기능적 위반 아님.
+    - _validate_post_build_prompt의 findings/verdict sentinel이 부분 문자열 매칭이라 우회 문자열 오탐/미탐 가능(코드 주석에도 명시됨). 고유 마커 상수 격상은 후속 개선 여지.
+  </improvement_suggestions>
+</qa_report>
