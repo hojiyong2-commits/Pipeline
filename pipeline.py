@@ -24495,9 +24495,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다 (preflight).")
         _pf_result = _run_codex_review_preflight(_pf_pid, skip_cli=True)
         print(json.dumps(_pf_result, ensure_ascii=False, indent=2))
-        if _pf_result.get("blocked_reason"):
-            sys.exit(1)
-        return
+        # IMP-20260717-5EE0: preflight는 진단 목적이므로 blocked_reason이 있어도
+        #   항상 exit 0으로 종료한다 (blocked_reason은 JSON 출력으로만 전달).
+        sys.exit(0)
 
     pipeline_id = str(state.get("pipeline_id", "") or "")
     if not pipeline_id:

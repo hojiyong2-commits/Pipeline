@@ -1,5 +1,6 @@
 {
   "case_id": "TC-5",
-  "changed_files": ["pipeline.py", "libsomething.so"],
-  "unknown_file": "libsomething.so"
+  "status": "BLOCKED",
+  "evidence_complete": false,
+  "failure_code": "evidence_incomplete"
 }

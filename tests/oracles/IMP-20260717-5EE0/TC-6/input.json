@@ -1,7 +1,6 @@
 {
   "case_id": "TC-6",
-  "changed_files": ["pipeline.py"],
-  "critical_symbols": ["_cmd_gates_accept", "_cmd_gates_request_accept"],
-  "evidence_covers_symbols": ["_cmd_gates_request_accept"],
-  "missing_symbol": "_cmd_gates_accept"
+  "status": "BLOCKED",
+  "failure_code": "critical_symbol_missing",
+  "missing_symbols": ["_cmd_gates_accept"]
 }

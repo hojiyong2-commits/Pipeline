@@ -1,7 +1,6 @@
 {
   "case_id": "TC-9",
-  "shards": [
-    {"shard_id": "s1", "verdict": "APPROVE_TO_USER"},
-    {"shard_id": "s2", "verdict": "REJECT"}
-  ]
+  "aggregate_verdict": "BLOCKED",
+  "aggregate_approved": false,
+  "reason": "not_all_shards_approved"
 }

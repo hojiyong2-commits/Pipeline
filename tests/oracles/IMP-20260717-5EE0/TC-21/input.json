@@ -1,6 +1,7 @@
 {
   "case_id": "TC-21",
-  "product_code_lines": 2000,
-  "test_file_lines": 3000,
-  "critical_symbols_count": 5
+  "status": "BLOCKED",
+  "failure_code": "pr_split_required",
+  "split_reasons": ["product_code_lines_exceeded", "test_file_lines_exceeded"],
+  "split_plan_present": true
 }
