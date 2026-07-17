@@ -1,9 +1,7 @@
 {
   "case_id": "TC-21",
-  "case_kind": "exception",
-  "description": "제품 코드 + 테스트 대량 추가 — PM 단계에서 pr_split_required 차단 검증",
-  "product_code_lines": 1600,
-  "test_file_lines": 2100,
-  "changed_files_count": 3,
-  "critical_symbols_count": 5
+  "status": "BLOCKED",
+  "failure_code": "pr_split_required",
+  "split_reasons": ["product_code_lines_exceeded", "test_file_lines_exceeded"],
+  "split_plan_present": true
 }
