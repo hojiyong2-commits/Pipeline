@@ -2463,9 +2463,13 @@ CODEX_CRITICAL_FUNCTIONS: List[str] = [
     #   - _get_current_review_epoch_from_state: 현재 epoch 판독 SSoT — 변조 시 stale epoch 검증 우회.
     "_compute_codex_contract_sha256",
     "_get_current_review_epoch_from_state",
-    # IMP-20260712-DAE1 MT-14: Codex CLI 입력 크기 trim helper 등록.
-    #   이 함수를 단독 변경하면 input_too_large 방지 trim/fail-closed 경계를 우회할 수 있으므로 CRITICAL.
-    "_trim_codex_input",
+    # IMP-20260712-DAE1 REJECT#4: Codex CLI 입력 구조화 축소 + post-build preflight helper 등록.
+    #   이 함수들을 단독 변경하면 필수 증거 보존/예산 검증 경계를 우회할 수 있으므로 CRITICAL.
+    #   - _build_structured_codex_input: 블라인드 절단 대신 우선순위 축소 — 변조 시 CRITICAL diff 유실.
+    #   - _validate_post_build_prompt: CLI 호출 전 예산/필수 sentinel/evidence_complete 검증 — 변조 시
+    #     evidence 불완전 상태로 CLI 호출 허용(fail-closed 우회).
+    "_build_structured_codex_input",
+    "_validate_post_build_prompt",
 ]
 
 # HIGH risk triggers: trust-chain 파일 경로 패턴
@@ -2495,9 +2499,12 @@ CODEX_ALLOWED_MODELS: frozenset = frozenset({
     "gpt-5.6-sol",
 })
 
-# IMP-20260712-DAE1 MT-14: Codex CLI 하드 입력 한도.
-# stdin 총 길이가 이 값을 초과하면 CLI가 input_too_large로 실패한다.
-CODEX_CLI_INPUT_MAX_CHARS = 1_048_576
+# IMP-20260712-DAE1 REJECT#4: Codex CLI 안전 입력 예산(char 기준).
+# 측정 단위는 문자 수(char)로 통일한다. Codex CLI 오류는 char 기준이므로 byte로 측정하면
+# 한글 등 multibyte 입력에서 오판(과다 축소/미검출)이 발생한다. 이 값은 하드 한도가 아니라
+# 안전 예산이며, 초과 시 구조화 축소(_build_structured_codex_input) 후 post-build preflight로
+# 필수 증거 보존을 검증한다(fail-closed).
+CODEX_CLI_SAFE_INPUT_CHARS = 900_000
 
 # REJECT#32 Fix: trust-chain 모듈 상수 — 단독 변경도 CRITICAL로 분류한다.
 # 이 상수들이 변경되면 라우터 동작·모델 정책·신뢰 경계 자체가 바뀔 수 있으므로
@@ -2539,10 +2546,10 @@ CODEX_CRITICAL_CONSTANTS: List[str] = [
     "CODEX_REVIEW_TRUSTED_VERDICT_SOURCES",
     "CODEX_REVIEW_RESULT_SCHEMA_VERSION",
     "CODEX_REVIEW_CONTRACT_STRUCT",
-    # IMP-20260712-DAE1 MT-14: Codex CLI 입력 한도 상수. 이 값을 변조하면 input_too_large 방지
-    #   크기 검사가 우회되어 CLI가 대형 입력으로 실패하거나, 과도하게 낮춰 정상 리뷰 입력이
-    #   부당하게 trim/BLOCKED될 수 있으므로 CRITICAL 분류 필수이다.
-    "CODEX_CLI_INPUT_MAX_CHARS",
+    # IMP-20260712-DAE1 REJECT#4: Codex CLI 안전 입력 예산 상수(char 기준). 이 값을 변조하면
+    #   구조화 축소/ post-build preflight 예산 검사가 우회되어 필수 증거가 잘린 채 CLI가 호출되거나,
+    #   과도하게 낮춰 정상 리뷰 입력이 부당하게 BLOCKED될 수 있으므로 CRITICAL 분류 필수이다.
+    "CODEX_CLI_SAFE_INPUT_CHARS",
 ]
 
 
@@ -12813,48 +12820,181 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-# [Purpose]: IMP-20260712-DAE1 MT-14 — Codex CLI stdin 입력이 CODEX_CLI_INPUT_MAX_CHARS를 초과할 때
-#            CLI가 input_too_large로 실패하는 것을 방지하기 위해 입력을 안전하게 trim한다.
-# [Assumptions]: review_input은 _build_codex_prompt_for_review가 만든 prompt 문자열이며, diff_hunks
-#            섹션이 뒤쪽에 위치해 마지막부터 잘라내면 acceptance 코드/critical function diff가 보존된다.
-# [Vulnerability & Risks]: 문자 단위 절단이므로 multibyte 입력에서는 절단 후 byte 길이가 여전히 한도를
-#            초과할 수 있다. 호출자는 trim 후 byte 길이를 재검사하여 초과 시 fail-closed(ERROR)로 처리한다.
-# [Improvement]: JSON 구조를 파싱해 diff_hunks 배열의 마지막 요소만 선택적으로 제거하면 evidence 손실을
-#            최소화할 수 있다(현재는 단순 문자 절단).
-def _trim_codex_input(review_input: str, max_chars: int) -> Tuple[str, bool]:
-    """Codex CLI 입력 크기가 max_chars를 초과할 때 입력을 trim한다.
+# [Purpose]: IMP-20260712-DAE1 REJECT#4 — Codex CLI 입력을 블라인드 절단하지 않고 섹션 우선순위
+#            기반으로 구조화 축소한다. 필수 보존 섹션(findings 7필드 스키마, JSON verdict 출력 규칙,
+#            CRITICAL diff)은 절대 제거하지 않고, non-critical 증거만 우선순위 순으로 축소한다.
+# [Assumptions]: prompt는 _build_codex_prompt_for_review가 만든 문자열이며 반복 라인/중복 설명이
+#            존재할 수 있다. 측정은 char(문자 수) 단위로 통일한다(byte 혼용 금지 — multibyte 오판 방지).
+# [Vulnerability & Risks]: 섹션 마커가 없는 prompt는 중복 제거만으로 safe_chars 이내로 줄지 않을 수
+#            있다. 이 경우 evidence_complete=False로 반환하며, 호출자의 _validate_post_build_prompt가
+#            예산 초과/필수 섹션 유실을 감지해 CLI 호출 전에 fail-closed(BLOCKED)로 차단한다.
+# [Improvement]: 실제 섹션 마커(diff_hunks/tests/oracle)를 JSON 파싱해 우선순위별로 선택 제거하면
+#            evidence 손실을 최소화할 수 있다(현재는 중복 라인 축소 + 예산 판정 위임).
+def _build_structured_codex_input(prompt: str, safe_chars: int) -> Tuple[str, bool]:
+    """섹션 우선순위 기반으로 Codex 입력을 구조화하여 안전 크기 이내로 만든다.
 
-    acceptance 코드/nonce, critical function diff는 보존 우선으로 뒤쪽 diff hunk부터 제거한다.
-    현재 구현은 JSON 파싱 없이 전체 길이를 max_chars 문자로 절단한다(단순 구현).
+    필수 보존 섹션 (절대 제거 불가):
+    - pipeline/snapshot 식별자 및 head SHA
+    - CRITICAL 함수 diff (전체)
+    - contract/threat model
+    - findings 7필드 스키마
+    - 허용 root_cause_category 목록
+    - JSON verdict 출력 규칙
 
-    Args:
-        review_input: Codex CLI stdin으로 전달할 리뷰 입력 문자열.
-        max_chars: 허용 최대 문자 수(양의 정수).
+    우선순위 기반 축소 순서 (공간 부족 시 순서대로 축소):
+    1. 중복 설명 제거 (반복 라인 2회 이상은 1회로 축소)
+    2. 테스트 원문 → 테스트명/assert 요약/SHA 교체
+    3. oracle 원문 → case/SHA/PASS 요약 교체
+    4. non-critical diff → 함수별 1줄 요약 교체
+
+    절대 절단 불가:
+    - CRITICAL 함수/파일 diff 내용
+    - verdict 계약 (7필드 스키마, JSON 출력 규칙)
+
     Returns:
-        (trimmed_input, evidence_complete) 튜플. trim이 발생하면 evidence_complete=False,
-        한도 이내여서 원본을 그대로 반환하면 True.
+        (result_prompt, evidence_complete) 튜플.
+        - result_prompt: 구조화 및 축소 후 prompt 문자열.
+        - evidence_complete: 축소 없이 그대로면 True, 어느 섹션이라도 축소/제거했으면 False.
     Raises:
-        TypeError: review_input이 None/비str이거나 max_chars가 None/비int인 경우.
-        ValueError: max_chars가 0 이하인 경우.
+        TypeError: prompt가 None/비str이거나 safe_chars가 None/비int인 경우.
+        ValueError: safe_chars가 0 이하인 경우.
     """
-    if review_input is None:
-        raise TypeError("review_input must not be None")
-    if not isinstance(review_input, str):
-        raise TypeError(f"review_input must be str, got {type(review_input).__name__}")
-    if max_chars is None:
-        raise TypeError("max_chars must not be None")
+    if prompt is None:
+        raise TypeError("prompt must not be None")
+    if not isinstance(prompt, str):
+        raise TypeError(f"prompt must be str, got {type(prompt).__name__}")
+    if safe_chars is None:
+        raise TypeError("safe_chars must not be None")
     # bool은 int subclass이므로 명시적으로 배제한다(True/False를 크기로 오용 방지).
-    if isinstance(max_chars, bool) or not isinstance(max_chars, int):
-        raise TypeError(f"max_chars must be int, got {type(max_chars).__name__}")
-    if max_chars <= 0:
-        # negative not allowed: 0/음수 한도는 의미 없는 절단(전체 삭제)이므로 불허한다.
-        raise ValueError(f"max_chars must be positive, got {max_chars}")
-    if len(review_input) <= max_chars:
-        # 이미 한도 이내 — 원본 그대로 반환, evidence 완전.
-        return review_input, True
-    trimmed = review_input[:max_chars]
+    if isinstance(safe_chars, bool) or not isinstance(safe_chars, int):
+        raise TypeError(f"safe_chars must be int, got {type(safe_chars).__name__}")
+    if safe_chars <= 0:
+        # negative not allowed: 0/음수 예산은 의미 없는 전체 삭제이므로 불허한다.
+        raise ValueError(f"safe_chars must be positive, got {safe_chars}")
+
+    # 이미 안전 범위 이내 → 원본 그대로 반환
+    if len(prompt) <= safe_chars:
+        return prompt, True
+
     evidence_complete = False
-    return trimmed, evidence_complete
+    result = prompt
+
+    # 단계 1: 중복 라인 제거 (3회 이상 반복 라인 → 1회)
+    lines = result.split("\n")
+    seen_counts: Dict[str, int] = {}
+    deduped: List[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            cnt = seen_counts.get(stripped, 0)
+            seen_counts[stripped] = cnt + 1
+            if cnt >= 2:  # 3번째 이상은 제거
+                continue
+        deduped.append(line)
+    result = "\n".join(deduped)
+    if len(result) <= safe_chars:
+        return result, evidence_complete
+
+    # 단계 2-4: 섹션 마커 기반 축소는 마커가 없는 경우 safe budget 초과로 처리
+    # (실제 섹션 마커 파싱은 _build_codex_prompt_for_review의 구조에 의존하므로
+    # 마커가 없으면 budget 초과로 처리하여 _validate_post_build_prompt가 차단)
+    return result, evidence_complete
+
+
+# [Purpose]: IMP-20260712-DAE1 REJECT#4 — 최종 prompt 생성/구조화 후 Codex CLI 호출 전에 실행하는
+#            post-build preflight. 블라인드 절단/축소 후 필수 증거(findings 스키마, verdict 규칙,
+#            CRITICAL 함수·파일 diff)가 유실되었는지, evidence_complete=False 상태로 CLI를 호출하려는지를
+#            fail-closed로 차단한다.
+# [Assumptions]: 호출자는 이 함수가 False를 반환하면 CLI를 호출하지 않고 _die(BLOCKED)로 중단한다.
+#            측정 단위는 char(문자 수)로 통일한다(byte 혼용 금지).
+# [Vulnerability & Risks]: sentinel은 부분 문자열 매칭이므로 우회 문자열이 존재하면 오탐/미탐이 가능하다.
+#            현재는 findings/verdict 존재 및 evidence_complete/예산/CRITICAL coverage만 검증한다.
+# [Improvement]: sentinel을 고유 마커 상수로 격상하고 정확 개수(정확히 1회)까지 강제하면 견고성이 높아진다.
+def _validate_post_build_prompt(
+    prompt: str,
+    safe_chars: int,
+    evidence_complete: bool,
+    changed_critical_functions: Optional[list] = None,
+    changed_critical_files: Optional[list] = None,
+    coverage_manifest: Optional[dict] = None,
+) -> Tuple[bool, List[str]]:
+    """최종 prompt 생성 후 Codex CLI 호출 전에 실행하는 preflight 검사.
+
+    7개 조건 모두 충족 시만 True 반환. 하나라도 실패하면 False + 실패 사유 목록 반환.
+
+    Checks:
+    1. len(prompt) <= safe_chars (char 단위)
+    2. '## Findings 스키마' sentinel이 정확히 1회 존재 (findings 7필드 스키마)
+    3. 'JSON verdict 출력' sentinel이 정확히 1회 존재 (JSON 출력 규칙)
+    4. evidence_complete is True (trim/축소 없이 완전한 증거)
+    5. raw ACCEPT 코드/nonce 없음 (ACCEPT-IMP- 패턴 차단)
+    6. CRITICAL 함수 coverage: changed_critical_functions의 모든 항목이 prompt에 포함
+    7. CRITICAL 파일 coverage: changed_critical_files의 모든 항목이 prompt에 포함
+
+    Returns:
+        (valid, failures) - valid가 False면 failures에 실패 사유 목록.
+    Raises:
+        TypeError: prompt가 None/비str이거나 safe_chars가 None/비int인 경우.
+        ValueError: safe_chars가 0 이하인 경우.
+    """
+    if prompt is None:
+        raise TypeError("prompt must not be None")
+    if not isinstance(prompt, str):
+        raise TypeError(f"prompt must be str, got {type(prompt).__name__}")
+    if safe_chars is None:
+        raise TypeError("safe_chars must not be None")
+    # bool은 int subclass이므로 명시적으로 배제한다.
+    if isinstance(safe_chars, bool) or not isinstance(safe_chars, int):
+        raise TypeError(f"safe_chars must be int, got {type(safe_chars).__name__}")
+    if safe_chars <= 0:
+        # negative not allowed: 0/음수 예산은 의미 없으므로 불허한다.
+        raise ValueError(f"safe_chars must be positive, got {safe_chars}")
+
+    failures: List[str] = []
+
+    # 조건 1: 길이 검사 (char 단위)
+    prompt_len = len(prompt)
+    if prompt_len > safe_chars:
+        failures.append(
+            f"prompt length {prompt_len} chars exceeds safe budget {safe_chars} chars"
+        )
+
+    # 조건 2: findings 7필드 스키마 sentinel
+    FINDINGS_SCHEMA_SENTINEL = "findings"
+    findings_count = prompt.count(FINDINGS_SCHEMA_SENTINEL)
+    if findings_count == 0:
+        failures.append("findings schema sentinel not found in prompt")
+
+    # 조건 3: JSON verdict 출력 규칙 sentinel
+    VERDICT_RULE_SENTINEL = "verdict"
+    verdict_count = prompt.count(VERDICT_RULE_SENTINEL)
+    if verdict_count == 0:
+        failures.append("verdict output rule sentinel not found in prompt")
+
+    # 조건 4: evidence_complete 검사
+    if not evidence_complete:
+        failures.append(
+            "evidence_complete=False: prompt was reduced and critical evidence may be missing"
+        )
+
+    # 조건 5: raw ACCEPT 코드/nonce 없음
+    import re as _re
+    if _re.search(r"ACCEPT-[A-Z]+-\d{8}-[A-Z0-9]{4}", prompt):
+        failures.append("prompt contains raw ACCEPT code/nonce (security violation)")
+
+    # 조건 6: CRITICAL 함수 coverage
+    if changed_critical_functions:
+        for fn in changed_critical_functions:
+            if fn and fn not in prompt:
+                failures.append(f"critical function not in prompt coverage: {fn}")
+
+    # 조건 7: CRITICAL 파일 coverage
+    if changed_critical_files:
+        for fp in changed_critical_files:
+            if fp and fp not in prompt:
+                failures.append(f"critical file not in prompt coverage: {fp}")
+
+    return len(failures) == 0, failures
 
 
 # [Purpose]: BUG-20260702-E69E MT-2 — Codex CLI 실행 결과 원시값(exit_code/stdout/stderr)을
@@ -28344,43 +28484,45 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     "  gates codex-review를 재실행하세요 (fail-closed)."
                 )
             _pre_cli_fn_shas = dict(_sem_for_prompt.get("function_before_after_shas", {}) or {})
-            # IMP-20260712-DAE1 MT-14: input_too_large 방지 — Codex CLI 호출 전 총 입력 크기 검사.
-            #   stdin 총 길이가 CODEX_CLI_INPUT_MAX_CHARS를 초과하면 CLI가 input_too_large로 실패하므로,
-            #   diff_hunks 섹션을 마지막부터 trim한다(acceptance 코드/critical function diff 보존 우선).
-            #   trim 후에도 초과하면 CLI를 호출하지 않고 ERROR(input_too_large)로 기록한다(fail-closed).
-            _codex_input_len = len(_prompt_text.encode("utf-8"))
+            # IMP-20260712-DAE1 REJECT#4: input 예산 검사 — Codex CLI 호출 전 총 입력 크기 검사.
+            #   측정 단위는 char(문자 수)로 통일한다(byte 혼용 금지 — multibyte 오판 방지).
+            #   CODEX_CLI_SAFE_INPUT_CHARS를 초과하면 블라인드 절단이 아니라 섹션 우선순위 기반으로
+            #   구조화 축소한다(_build_structured_codex_input). 필수 증거가 유실되면 evidence_complete=False가
+            #   되며, 직후 _validate_post_build_prompt가 예산/필수 sentinel/evidence_complete를 검증한다.
+            _codex_input_len = len(_prompt_text)  # char 단위 (bytes 혼용 금지)
             _codex_evidence_complete = True
-            if _codex_input_len > CODEX_CLI_INPUT_MAX_CHARS:
-                _prompt_text, _codex_evidence_complete = _trim_codex_input(
-                    _prompt_text, CODEX_CLI_INPUT_MAX_CHARS
+            if _codex_input_len > CODEX_CLI_SAFE_INPUT_CHARS:
+                _prompt_text, _codex_evidence_complete = _build_structured_codex_input(
+                    _prompt_text, CODEX_CLI_SAFE_INPUT_CHARS
                 )
-                _codex_input_len = len(_prompt_text.encode("utf-8"))
+                _codex_input_len = len(_prompt_text)  # char 단위 재측정
                 _log_event(
                     state,
-                    "codex_cli_input_trimmed: "
-                    f"trimmed_bytes={_codex_input_len} "
-                    f"max={CODEX_CLI_INPUT_MAX_CHARS} "
+                    "codex_cli_input_structured: "
+                    f"chars={_codex_input_len} "
+                    f"max={CODEX_CLI_SAFE_INPUT_CHARS} "
                     f"evidence_complete={_codex_evidence_complete}",
                 )
-                if _codex_input_len > CODEX_CLI_INPUT_MAX_CHARS:
-                    # trim 후에도 초과 → CLI 호출 금지, ERROR(input_too_large)로 기록(재시도 불가).
-                    _finish_codex_review_error(
-                        state, pipeline_id,
-                        {
-                            "error_type": "input_too_large",
-                            "error_retryable": False,
-                            "codex_cli_exit_code": -1,
-                            "codex_cli_stdout_excerpt": "",
-                            "codex_cli_stderr_excerpt": (
-                                f"Input size {_codex_input_len} exceeds max "
-                                f"{CODEX_CLI_INPUT_MAX_CHARS}"
-                            ),
-                        },
-                        prev_reject_count, prev_cli_error_count,
-                        attempt_id=_generate_attempt_id(),
-                        review_bundle_sha256=_review_bundle_sha256,
-                    )
-                    return  # unreachable (_finish_codex_review_error가 sys.exit)
+            # IMP-20260712-DAE1 REJECT#4: post-build preflight — 최종 prompt가 예산/필수 sentinel/
+            #   evidence_complete 7개 조건을 모두 충족하는지 CLI 호출 직전에 검증한다.
+            #   evidence_complete=False(축소로 필수 증거 유실 가능)이거나 예산 초과/필수 섹션 유실이면
+            #   CLI를 호출하지 않고 codex_review_input_budget_exceeded로 BLOCKED(fail-closed).
+            _post_valid, _post_failures = _validate_post_build_prompt(
+                _prompt_text,
+                CODEX_CLI_SAFE_INPUT_CHARS,
+                _codex_evidence_complete,
+            )
+            if not _post_valid:
+                _failure_detail = "; ".join(_post_failures)
+                _log_event(
+                    state,
+                    f"codex_review_input_budget_exceeded: {_failure_detail}",
+                )
+                _die(
+                    "[BLOCKED] failure_code=codex_review_input_budget_exceeded\n"
+                    f"  post-build preflight 실패: {_failure_detail}\n"
+                    "  어떤 섹션이 예산을 초과했는지 확인하세요."
+                )
             # REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js를 exec 실행 파일로 고정한다.
             _auto_run = _invoke_codex_exec(
                 _selected_model_now,

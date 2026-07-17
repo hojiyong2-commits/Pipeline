@@ -767,3 +767,33 @@ jobs:
           } else {
             Invoke-RestMethod -Method Post -Uri $commentsUri -Headers $headers -Body $payload -ContentType "application/json; charset=utf-8" | Out-Null
           }
+
+  slow-e2e-tests:
+    # IMP-20260712-DAE1 MT-R4-4: testpaths에서 제거된 E2E 파일 전용 CI job
+    # test_codex_cost_optimization_9f5e.py, test_ac_tracking_1abe.py 은 느린 E2E 테스트로
+    # 기본 testpaths에 포함되지 않지만 CI에서는 반드시 실행되어야 합니다.
+    runs-on: windows-latest
+    needs: tests
+    steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 파이썬 준비
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 필요한 도구 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: slow E2E 테스트 실행 (cost-optimization, ac-tracking)
+        env:
+          PIPELINE_NO_DASHBOARD: "1"
+        run: |
+          python -m pytest tests/e2e/test_codex_cost_optimization_9f5e.py tests/e2e/test_ac_tracking_1abe.py -v --timeout=600
+        timeout-minutes: 15

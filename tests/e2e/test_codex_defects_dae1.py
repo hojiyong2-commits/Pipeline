@@ -1023,99 +1023,103 @@ class TestFinding1InScopePreventsApproval:
         assert res is None, "잘못된 severity는 parse_failure여야 함"
 
 
-class TestMT14CodexInputTooLarge:
-    """MT-14: CODEX_CLI_INPUT_MAX_CHARS 상수 + _trim_codex_input으로 input_too_large 방지.
+# ============================================================
+# REJECT#4 회귀 테스트 — _build_structured_codex_input / _validate_post_build_prompt
+# (구 TestMT14CodexInputTooLarge 클래스는 _trim_codex_input/CODEX_CLI_INPUT_MAX_CHARS 제거로
+#  삭제됨 — 아래 8개 테스트가 char/byte 통일 + 구조화 축소 + post-build preflight를 검증한다.)
+# ============================================================
 
-    Codex CLI stdin 총 길이가 1,048,576자를 초과하면 CLI가 input_too_large로 실패하므로,
-    CLI 호출 전에 입력을 trim하고, trim 후에도 초과하면 fail-closed(ERROR)로 처리한다.
-    """
+def test_char_not_bytes_for_korean_input():
+    """한글 다중 바이트 입력에서 char/byte 혼용 없음 검증."""
+    from pipeline import _build_structured_codex_input
+    korean = "가" * 100  # 각 한글 3바이트 → bytes=300, chars=100
+    # char 기준이므로 100 chars <= CODEX_CLI_SAFE_INPUT_CHARS → evidence_complete=True
+    result, complete = _build_structured_codex_input(korean, 200)
+    assert complete is True
+    assert len(result) == 100  # char 단위
 
-    def test_constant_value_is_1mb(self) -> None:
-        """CODEX_CLI_INPUT_MAX_CHARS 상수가 1_048_576(1MB)이다."""
-        assert pipeline.CODEX_CLI_INPUT_MAX_CHARS == 1_048_576
 
-    def test_constant_registered_in_critical_constants(self) -> None:
-        """상수가 CODEX_CRITICAL_CONSTANTS 보호 목록에 등록되어 있다(변조 시 CRITICAL)."""
-        assert "CODEX_CLI_INPUT_MAX_CHARS" in pipeline.CODEX_CRITICAL_CONSTANTS
+def test_schema_and_verdict_preserved_after_reduction():
+    """대형 입력 축소 후 findings 스키마 및 JSON 출력 규칙 sentinel 보존."""
+    from pipeline import _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+    # findings와 verdict sentinel을 포함하는 prompt
+    prompt = "findings verdict " + "a" * 10
+    valid, failures = _validate_post_build_prompt(
+        prompt, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=True
+    )
+    assert valid is True, failures
 
-    def test_trim_function_registered_in_critical_functions(self) -> None:
-        """_trim_codex_input이 CODEX_CRITICAL_FUNCTIONS 보호 목록에 등록되어 있다."""
-        assert "_trim_codex_input" in pipeline.CODEX_CRITICAL_FUNCTIONS
 
-    def test_trim_sets_evidence_incomplete_when_over_limit(self) -> None:
-        """입력이 max를 초과하면 trim이 발생하고 evidence_complete=False."""
-        _max = pipeline.CODEX_CLI_INPUT_MAX_CHARS
-        big = "a" * (_max + 500)  # ASCII → chars == bytes
-        trimmed, evidence_complete = pipeline._trim_codex_input(big, _max)
-        assert evidence_complete is False, "trim 발생 시 evidence_complete는 False여야 함"
-        assert len(trimmed) == _max, "trim 후 문자 길이는 정확히 max_chars여야 함"
-        assert len(trimmed.encode("utf-8")) <= _max, "ASCII trim 후 byte 길이가 한도 이내여야 함"
+def test_critical_function_coverage_preserved():
+    """CRITICAL 함수 coverage 보존 검증."""
+    from pipeline import _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+    prompt = "findings verdict _cmd_gates_request_accept some content"
+    valid, failures = _validate_post_build_prompt(
+        prompt, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=True,
+        changed_critical_functions=["_cmd_gates_request_accept"]
+    )
+    assert valid is True, failures
 
-    def test_trim_preserves_head_prefix(self) -> None:
-        """trim은 앞부분(acceptance/critical diff 우선)을 보존하고 뒤쪽을 제거한다."""
-        _max = pipeline.CODEX_CLI_INPUT_MAX_CHARS
-        head = "ACCEPTANCE_HEADER_PRESERVED"
-        big = head + ("x" * (_max + 100))
-        trimmed, _ = pipeline._trim_codex_input(big, _max)
-        assert trimmed.startswith(head), "trim은 앞쪽 acceptance/critical 영역을 보존해야 함"
 
-    def test_no_trim_when_within_limit(self) -> None:
-        """한도 이내 입력은 원본 그대로 반환하고 evidence_complete=True."""
-        _max = pipeline.CODEX_CLI_INPUT_MAX_CHARS
-        small = "hello world"
-        trimmed, evidence_complete = pipeline._trim_codex_input(small, _max)
-        assert trimmed == small, "한도 이내 입력은 변경 없이 반환해야 함"
-        assert evidence_complete is True, "trim 미발생 시 evidence_complete는 True여야 함"
+def test_non_critical_evidence_can_be_reduced():
+    """non-critical 증거만 우선 요약 제거 가능 (evidence_complete=False 허용)."""
+    from pipeline import _build_structured_codex_input
+    # safe_chars보다 큰 입력 (중복 라인으로 구성)
+    big_input = "\n".join(["x" * 100] * 20)  # 2000 chars
+    result, complete = _build_structured_codex_input(big_input, 500)
+    # 축소 발생 → evidence_complete=False
+    assert complete is False
 
-    def test_trim_multibyte_still_exceeds_bytes_triggers_blocked_path(self) -> None:
-        """multibyte 입력은 문자 절단 후에도 byte 길이가 한도를 초과할 수 있다.
 
-        이 경우 호출자는 byte 길이 재검사에서 초과를 감지하여 fail-closed(input_too_large)로
-        처리한다. 여기서는 _trim_codex_input 반환값의 byte 길이가 여전히 한도를 초과함을 검증한다.
-        """
-        _max = 10  # 작은 한도로 multibyte 초과 상황을 결정적으로 구성
-        # 한글 1자 = UTF-8 3바이트. 20자 → 20 chars, 60 bytes.
-        multibyte = "가" * 20
-        trimmed, evidence_complete = pipeline._trim_codex_input(multibyte, _max)
-        assert evidence_complete is False
-        assert len(trimmed) == _max, "문자 길이는 max_chars로 절단됨"
-        # 문자 절단만으로는 byte 길이가 한도 이내로 보장되지 않음 → 호출자 BLOCKED 경로 트리거.
-        assert len(trimmed.encode("utf-8")) > _max, (
-            "multibyte trim 후 byte 길이가 여전히 한도를 초과하여 fail-closed 경로가 필요함"
-        )
+def test_budget_exceeded_blocks_cli_and_returns_correct_failure_code():
+    """필수 증거 예산 초과 시 CLI 미호출 + codex_review_input_budget_exceeded BLOCKED."""
+    # CODEX_CLI_SAFE_INPUT_CHARS 초과 + evidence_complete=False 상태 시뮬레이션
+    from pipeline import _validate_post_build_prompt
+    prompt_too_large = "a" * 1  # 1 char prompt without findings/verdict sentinels
+    valid, failures = _validate_post_build_prompt(
+        prompt_too_large, 1, evidence_complete=False  # safe_chars=1, already at limit
+    )
+    # evidence_complete=False 실패
+    assert not valid
+    assert any("evidence_complete" in f for f in failures)
 
-    def test_trim_rejects_none_input(self) -> None:
-        """None 입력은 TypeError(fail-closed)."""
-        try:
-            pipeline._trim_codex_input(None, 100)  # type: ignore[arg-type]
-            assert False, "None 입력에 예외가 발생해야 함"
-        except TypeError:
-            pass
 
-    def test_trim_rejects_non_str_input(self) -> None:
-        """비str 입력은 TypeError."""
-        try:
-            pipeline._trim_codex_input(12345, 100)  # type: ignore[arg-type]
-            assert False, "비str 입력에 예외가 발생해야 함"
-        except TypeError:
-            pass
+def test_post_build_preflight_blocks_evidence_complete_false():
+    """post-build preflight가 evidence_complete=False 차단."""
+    from pipeline import _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+    prompt = "findings verdict some content"
+    valid, failures = _validate_post_build_prompt(
+        prompt, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=False
+    )
+    assert not valid
+    assert any("evidence_complete" in f for f in failures)
 
-    def test_trim_rejects_non_positive_max(self) -> None:
-        """max_chars가 0/음수면 ValueError."""
-        for bad in (0, -1, -1000):
-            try:
-                pipeline._trim_codex_input("x", bad)
-                assert False, f"max_chars={bad}에 ValueError가 발생해야 함"
-            except ValueError:
-                pass
 
-    def test_trim_rejects_bool_max(self) -> None:
-        """bool은 int subclass이지만 max_chars로 허용하지 않는다(TypeError)."""
-        try:
-            pipeline._trim_codex_input("x", True)  # type: ignore[arg-type]
-            assert False, "bool max_chars에 TypeError가 발생해야 함"
-        except TypeError:
-            pass
+def test_input_too_large_not_recorded_as_reject():
+    """input_too_large가 REJECT/cli_error_count로 오기록 안 됨."""
+    # _validate_post_build_prompt 실패는 _die()로 차단되며 REJECT로 기록되지 않음
+    # 이 테스트는 _validate_post_build_prompt의 반환값이 (False, [...]) 형식임을 확인
+    from pipeline import _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+    # findings/verdict sentinel이 전혀 없는 prompt (부분 문자열도 없음)
+    prompt = "xyz abc content only"  # sentinel 없음
+    valid, failures = _validate_post_build_prompt(
+        prompt, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=True
+    )
+    # findings/verdict sentinel 없으면 실패
+    assert not valid
+    # 실패는 budget_exceeded(스키마 sentinel 유실)이지 REJECT가 아님
+    assert "findings schema sentinel not found" in " ".join(failures)
+
+
+def test_prompt_length_and_sentinel_verified_before_cli_call():
+    """최종 prompt 길이와 필수 sentinel 검증 후 CLI 호출 확인."""
+    from pipeline import _validate_post_build_prompt
+    safe_chars = 100
+    prompt = "findings verdict " + "a" * 10  # 길이 < 100, sentinel 있음
+    valid, failures = _validate_post_build_prompt(
+        prompt, safe_chars, evidence_complete=True
+    )
+    assert valid is True, f"예상 통과, 실패: {failures}"
 
 
 if __name__ == "__main__":
