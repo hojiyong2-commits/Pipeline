@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <rework_round>REJECT5</rework_round>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <failure_signature></failure_signature>
+
+  <scope_verification>
+    <files_declared>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_codex_defects_dae1.py</files_declared>
+    <files_changed>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_codex_defects_dae1.py</files_changed>
+    <scope_match>PASS</scope_match>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>IN_SCOPE</blast_radius>
+    <mt_checks>
+      <mt id="MT-R5-1" boundary="PASS">_build_structured_codex_input 수정만, 범위 초과 없음</mt>
+      <mt id="MT-R5-2" boundary="PASS">_parse_json_verdict 수정만, 범위 초과 없음</mt>
+      <mt id="MT-R5-3" boundary="PASS">_cmd_gates_codex_review + 헬퍼 6개 + agent MD 수정</mt>
+      <mt id="MT-R5-4" boundary="PASS">test_codex_defects_dae1.py 테스트만 수정</mt>
+    </mt_checks>
+  </micro_task_boundary>
+
+  <p0_fixes>
+    <fix id="P0-1">
+      <description>_build_structured_codex_input 전역 line dedup 제거</description>
+      <verification>CRITICAL HUNK 반복 라인 유지 확인. budget 초과 시 원본 반환 확인. test_r5_dedup_preserves_repeated_lines_in_critical_hunks PASSED.</verification>
+      <status>PASS</status>
+    </fix>
+    <fix id="P0-2">
+      <description>_parse_json_verdict NDJSON 라인별 파싱 교체</description>
+      <verification>JSON string 내 브레이스 오파싱 없음. JSONDecoder.raw_decode 사용 확인. test_r5_json_string_braces_parsed_correctly PASSED. test_r5_ambiguous_verdict_fail_closed PASSED.</verification>
+      <status>PASS</status>
+    </fix>
+    <fix id="P0-3">
+      <description>1회용 실행 허가 gate 추가 + agent MD 금지 명시</description>
+      <verification>미발급 시 BLOCKED. 스냅샷 불일치 시 BLOCKED. 소비 후 재사용 불가. test_r5_run_not_authorized_blocks_cli PASSED. test_r5_stale_snapshot_blocks_cli PASSED. test_r5_run_permit_single_use PASSED.</verification>
+      <status>PASS</status>
+    </fix>
+  </p0_fixes>
+
+  <regression_tests>
+    <total>72</total>
+    <new_r5>7</new_r5>
+    <result>72 passed in 2.80s</result>
+  </regression_tests>
+
+  <criteria_verification>
+    <ac_verification>
+      <criterion ac_id="AC-1">P0-1 dedup 제거 검증: test_r5_dedup_preserves_repeated_lines_in_critical_hunks PASS</criterion>
+      <criterion ac_id="AC-2">P0-2 NDJSON 파싱 검증: test_r5_json_string_braces_parsed_correctly PASS</criterion>
+      <criterion ac_id="AC-3">P0-3 run permit 검증: test_r5_run_not_authorized_blocks_cli PASS</criterion>
+      <criterion ac_id="AC-4">회귀 테스트 추가: 72 passed PASS</criterion>
+    </ac_verification>
+  </criteria_verification>
+</qa_report>
