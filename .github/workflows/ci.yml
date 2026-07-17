@@ -795,5 +795,5 @@ jobs:
         env:
           PIPELINE_NO_DASHBOARD: "1"
         run: |
-          python -m pytest tests/e2e/test_codex_cost_optimization_9f5e.py tests/e2e/test_ac_tracking_1abe.py -v --timeout=600
+          python -m pytest tests/e2e/test_codex_cost_optimization_9f5e.py tests/e2e/test_ac_tracking_1abe.py -v
         timeout-minutes: 15
