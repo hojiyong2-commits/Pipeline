@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260717-5EE0</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <status>PM_PLANNING_COMPLETE</status>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <confirmation_basis>오케스트레이터 프롬프트에서 구현 목표 7개와 각 함수명을 명시적으로 지정함. 사용자가 직접 설계 확정.</confirmation_basis>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+  </design_confirmation>
+
+  <phase_plan>
+    <next_phase>Phase 2 (Dev)</next_phase>
+    <dev_order>
+      <step>1. contract init + contract add-module/add-test/add-oracle</step>
+      <step>2. contract audit + contract ready + contract freeze</step>
+      <step>3. MT-1: _build_codex_review_plan 구현</step>
+      <step>4. MT-2: _extract_evidence_ast 외 4개 헬퍼 구현</step>
+      <step>5. MT-3: _calculate_shard_budget 구현</step>
+      <step>6. MT-4: _build_shard_plan + _aggregate_shard_verdicts 구현</step>
+      <step>7. MT-5: _invalidate_codex_cache 구현</step>
+      <step>8. MT-6: _check_pr_size_budget 구현</step>
+      <step>9. MT-7: _check_convergence_guard 구현</step>
+      <step>10. MT-8: E2E 테스트 + Oracle 파일 22개 작성</step>
+      <step>11. MT-9: _cmd_gates_codex_review 통합</step>
+      <step>12. module integrate + done --phase dev</step>
+    </dev_order>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_bootstrap_5ee0.py</file>
+      <oracle_dir>tests/oracles/IMP-20260717-5EE0/</oracle_dir>
+    </target_files>
+    <oracle_cases>22 (TC-1~TC-22: normal×7, edge×13, exception×2)</oracle_cases>
+  </phase_plan>
+
+  <acceptance_criteria_summary>
+    <total_ac>22</total_ac>
+    <user_visible>22</user_visible>
+    <source>user (오케스트레이터 프롬프트)</source>
+  </acceptance_criteria_summary>
+
+  <no_askuser>true</no_askuser>
+  <askuser_reason>사용자가 오케스트레이터 프롬프트에서 모든 구현 목표, oracle 케이스, 범위 제한을 명시적으로 제공했습니다. P0/P1 질문 0개.</askuser_reason>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+  <step_plan_sha256>6ee8bf9b71d7729449f0295e37a84f93fb64197ede2d5a948f2fde5cf329af99</step_plan_sha256>
+  <planner_run_id>pm_planner-8863dfb247d973a3</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+</manager_handoff>
