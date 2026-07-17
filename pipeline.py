@@ -23367,30 +23367,115 @@ def _build_codex_review_plan(
                 source_text = _read_text_fallback(BASE_DIR / f)
             except OSError:
                 source_text = ""
-        char_count = len(source_text)
-        item_id = f
-        included_items.append({
-            "id": item_id,
-            "file": f,
-            "risk": risk,
-            "evidence_mode": mode,
-            "char_count": char_count,
-        })
-        estimated_chars += char_count
 
-        # Python 파일은 AST 범위를 source_ranges에 기록
-        if mode in ("full_ast", "summary") and source_text:
-            for ev in _extract_evidence_ast_from_source(f, source_text):
-                source_ranges.append({
-                    "file": f,
-                    "symbol": ev["name"],
-                    "kind": ev["kind"],
-                    "lineno": ev["lineno"],
-                    "end_lineno": ev["end_lineno"],
-                    "sha256": ev["sha256"],
+        # IMP-20260717-5EE0 MT-10(REJECT#2 문제1): 실 git 경로(inject 없음)의 Python 파일은
+        #   전체 파일이 아닌 "변경된 심볼(함수/클래스)"만 증거로 추출한다. 이것이 pipeline.py 전체
+        #   (1.4M자)를 단일 evidence로 넣어 shard 예산을 초과하던 근본 원인을 제거한다.
+        #   inject 모드(테스트)는 결정성 유지를 위해 기존 동작(파일 단위 char_count)을 보존한다.
+        _real_python = (not inj) and mode in ("full_ast", "summary") and bool(source_text)
+        if _real_python:
+            try:
+                changed_ranges = _get_changed_line_ranges(f, resolved_base)
+            except RuntimeError as _cr_exc:
+                # git diff 실패는 fail-closed(빈 증거로 조용히 통과 금지).
+                _die(
+                    "[BLOCKED] failure_code=changed_line_ranges_failed\n"
+                    f"  파일 {f}의 변경 라인 범위 조회 실패: {_cr_exc}"
+                )
+            if changed_ranges:
+                ast_nodes = _map_lines_to_ast_nodes(f, changed_ranges)
+                ev_items = _extract_changed_symbols_evidence(f, ast_nodes)
+                # coverage manifest는 관측용으로 계산한다(변경 라인이 심볼에 매핑됐는지 진단).
+                #   CRITICAL 파일을 excluded_items에 넣으면 critical_excluded 차단이 오발동하므로
+                #   여기서는 차단 트리거 없이 source_ranges 커버리지 메타로만 남긴다.
+                cov = _build_coverage_manifest(f, changed_ranges, ev_items)
+                if ev_items:
+                    for ev in ev_items:
+                        included_items.append({
+                            "id": ev["evidence_id"],
+                            "file": f,
+                            "risk": risk,
+                            "evidence_mode": "changed_symbol",
+                            "char_count": ev["char_count"],
+                            "symbol_name": ev["symbol_name"],
+                            "source": ev["source"],
+                            "sha256": ev["sha256"],
+                            "lineno": ev["lineno"],
+                            "end_lineno": ev["end_lineno"],
+                        })
+                        estimated_chars += ev["char_count"]
+                        source_ranges.append({
+                            "file": f,
+                            "symbol": ev["symbol_name"],
+                            "kind": "changed_symbol",
+                            "lineno": ev["lineno"],
+                            "end_lineno": ev["end_lineno"],
+                            "sha256": ev["sha256"],
+                        })
+                        changed_symbols.append(ev["symbol_name"])
+                    if not cov["coverage_complete"] and cov["unmapped_lines"]:
+                        # 모듈 레벨(함수/클래스 밖) 변경 라인은 source_ranges 메타로만 관측 기록한다.
+                        source_ranges.append({
+                            "file": f,
+                            "symbol": "<module-level>",
+                            "kind": "module_level_unmapped",
+                            "unmapped_lines": cov["unmapped_lines"][:50],
+                        })
+                else:
+                    # 변경 라인은 있으나 감싸는 함수/클래스가 없음(모듈 레벨) → 250k 상한 capped 조각.
+                    chunk = source_text[:SHARD_HARD_BUDGET]
+                    included_items.append({
+                        "id": f, "file": f, "risk": risk,
+                        "evidence_mode": "module_level_capped",
+                        "char_count": len(chunk), "source": chunk,
+                        "sha256": _sha256_text(chunk),
+                    })
+                    estimated_chars += len(chunk)
+            else:
+                # 신규 파일/diff 없음 → 파일 전체이되 250k 상한으로 capped(초과 금지).
+                chunk = source_text[:SHARD_HARD_BUDGET]
+                included_items.append({
+                    "id": f, "file": f, "risk": risk,
+                    "evidence_mode": "full_file_capped",
+                    "char_count": len(chunk), "source": chunk,
+                    "sha256": _sha256_text(chunk),
                 })
-                if ev["kind"] != "fallback_syntax_error":
-                    changed_symbols.append(ev["name"])
+                estimated_chars += len(chunk)
+                if mode in ("full_ast", "summary"):
+                    for ev in _extract_evidence_ast_from_source(f, chunk):
+                        source_ranges.append({
+                            "file": f, "symbol": ev["name"], "kind": ev["kind"],
+                            "lineno": ev["lineno"], "end_lineno": ev["end_lineno"],
+                            "sha256": ev["sha256"],
+                        })
+                        if ev["kind"] != "fallback_syntax_error":
+                            changed_symbols.append(ev["name"])
+        else:
+            # inject 모드 또는 비-Python 파일: 기존 동작(파일 단위) 보존.
+            char_count = len(source_text)
+            item_id = f
+            included_items.append({
+                "id": item_id,
+                "file": f,
+                "risk": risk,
+                "evidence_mode": mode,
+                "char_count": char_count,
+            })
+            estimated_chars += char_count
+
+            # Python 파일은 AST 범위를 source_ranges에 기록
+            if mode in ("full_ast", "summary") and source_text:
+                for ev in _extract_evidence_ast_from_source(f, source_text):
+                    source_ranges.append({
+                        "file": f,
+                        "symbol": ev["name"],
+                        "kind": ev["kind"],
+                        "lineno": ev["lineno"],
+                        "end_lineno": ev["end_lineno"],
+                        "sha256": ev["sha256"],
+                    })
+                    if ev["kind"] != "fallback_syntax_error":
+                        changed_symbols.append(ev["name"])
 
     # 차단 3: CRITICAL 파일이 excluded_items에 있으면 즉시 차단
     critical_excluded = [e for e in excluded_items if e["risk"] == "CRITICAL"]
@@ -23613,6 +23698,247 @@ def _extract_evidence_ast_from_source(
             "sha256": _sha256_text(snippet),
         })
     return results
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2) — git diff로 변경된 라인 범위만 추출한다. 전체 파일을
+#            증거로 넣지 않고 실제 변경 hunk의 new-file 라인 범위만 계산하여 changed-symbol 추출의 기반을
+#            제공한다. (문제1: pipeline.py 전체(1.4M자)를 단일 evidence로 넣던 근본 원인 제거)
+# [Assumptions]: git이 PATH에 있고 origin/main(또는 base)...HEAD diff가 조회 가능하다.
+# [Vulnerability & Risks]: git 실패는 fail-closed로 RuntimeError를 전파한다(빈 list로 조용히 통과 금지).
+#            git diff의 rc=1(차이 있음)은 정상으로 취급한다.
+# [Improvement]: rename/copy 감지(--diff-filter)로 이동 파일의 라인 매핑 정확도를 높일 수 있다.
+def _get_changed_line_ranges(filepath: str, base: str = "origin/main") -> List[Tuple[int, int]]:
+    """git diff --unified=0으로 변경된(new-file) 라인 범위를 추출한다.
+
+    Args:
+        filepath: 대상 파일의 repo-relative 경로(None/비str 금지).
+        base: 비교 기준 ref(None/비str 금지, 빈 문자열이면 origin/main).
+    Returns:
+        변경된 라인 범위 list [(start_line, end_line), ...] (1-based, inclusive).
+    Raises:
+        TypeError: filepath/base가 None이거나 str이 아닌 경우.
+        RuntimeError: git 실행 실패 시(fail-closed — 빈 list 반환 금지).
+    """
+    if filepath is None:
+        raise TypeError("filepath must not be None")
+    if not isinstance(filepath, str):
+        raise TypeError(f"filepath must be str, got {type(filepath).__name__}")
+    if base is None:
+        raise TypeError("base must not be None")
+    if not isinstance(base, str):
+        raise TypeError(f"base must be str, got {type(base).__name__}")
+    base_ref = base if base else "origin/main"
+
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--unified=0", f"{base_ref}...HEAD", "--", filepath],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            cwd=str(BASE_DIR), timeout=30, check=False,
+        )
+        # git diff는 차이가 있으면 rc=1, 없으면 rc=0을 반환한다(둘 다 정상). 그 외는 실패.
+        if result.returncode not in (0, 1):
+            raise RuntimeError(
+                f"git diff failed: rc={result.returncode} stderr={result.stderr[:200]}"
+            )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        raise RuntimeError(f"git diff execution failed: {exc}") from exc
+
+    ranges: List[Tuple[int, int]] = []
+    for line in (result.stdout or "").splitlines():
+        # @@ -old_start,old_count +new_start,new_count @@ 형식
+        m = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+        if m:
+            start = int(m.group(1))
+            count = int(m.group(2)) if m.group(2) is not None else 1
+            if count > 0:  # count==0은 순수 삭제 hunk이므로 new-file 라인 없음
+                ranges.append((start, start + count - 1))
+    return ranges
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10 — 변경 라인을 감싸는 가장 작은 function/class AST 노드에 매핑한다.
+#            어떤 함수/클래스가 실제로 바뀌었는지 결정하여 그 심볼만 증거로 추출하게 한다.
+# [Assumptions]: filepath는 읽기 가능한 Python 파일이다(인코딩 4단계 fallback).
+# [Vulnerability & Risks]: 파일 읽기/AST 파싱 실패는 fail-closed로 RuntimeError를 전파한다. 변경 라인이
+#            함수/클래스 밖(모듈 레벨)이면 매핑되지 않아 상위(_build_coverage_manifest)가 unmapped로 관측한다.
+# [Improvement]: 데코레이터 라인을 시작으로 포함하면 데코레이터 변경도 심볼 변경으로 감지할 수 있다.
+def _map_lines_to_ast_nodes(
+    filepath: str, changed_ranges: List[Tuple[int, int]]
+) -> List[Dict[str, Any]]:
+    """변경 라인을 가장 작은 enclosing function/class 노드에 매핑한다(중복 제거).
+
+    Args:
+        filepath: Python 파일의 repo-relative 경로(None/비str 금지).
+        changed_ranges: _get_changed_line_ranges 결과(None 금지, 빈 list 허용).
+    Returns:
+        [{node_type, name, lineno, end_lineno, reason}, ...] (심볼 이름 기준 dedup).
+    Raises:
+        TypeError: filepath가 None/비str이거나 changed_ranges가 None/비list인 경우.
+        RuntimeError: 파일 읽기/AST 파싱 실패(fail-closed).
+    """
+    if filepath is None:
+        raise TypeError("filepath must not be None")
+    if not isinstance(filepath, str):
+        raise TypeError(f"filepath must be str, got {type(filepath).__name__}")
+    if changed_ranges is None:
+        raise TypeError("changed_ranges must not be None")
+    if not isinstance(changed_ranges, list):
+        raise TypeError(f"changed_ranges must be list, got {type(changed_ranges).__name__}")
+    if len(changed_ranges) == 0:
+        return []
+
+    import ast as _ast  # noqa: PLC0415
+    try:
+        source = _read_text_fallback(BASE_DIR / filepath)
+    except OSError as exc:
+        raise RuntimeError(f"Cannot read {filepath}: {exc}") from exc
+    try:
+        tree = _ast.parse(source)
+    except SyntaxError as exc:
+        raise RuntimeError(f"AST parse failed for {filepath}: {exc}") from exc
+
+    nodes: List[Dict[str, Any]] = []
+    for node in _ast.walk(tree):
+        if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            kind = "function"
+        elif isinstance(node, _ast.ClassDef):
+            kind = "class"
+        else:
+            continue
+        nodes.append({
+            "node_type": kind,
+            "name": node.name,
+            "lineno": node.lineno,
+            "end_lineno": getattr(node, "end_lineno", node.lineno) or node.lineno,
+        })
+
+    matched_names: Set[str] = set()
+    result: List[Dict[str, Any]] = []
+    for start, end in changed_ranges:
+        for lineno in range(start, end + 1):
+            best: Optional[Dict[str, Any]] = None
+            best_size = float("inf")
+            for nd in nodes:
+                if nd["lineno"] <= lineno <= nd["end_lineno"]:
+                    size = nd["end_lineno"] - nd["lineno"]
+                    if size < best_size:
+                        best_size = size
+                        best = nd
+            if best is not None and best["name"] not in matched_names:
+                matched_names.add(best["name"])
+                result.append({**best, "reason": f"contains changed line {lineno}"})
+    return result
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10 — 변경된 AST 노드(함수/클래스)의 소스만 증거로 추출한다.
+#            전체 파일을 넣지 않고 각 노드의 lineno~end_lineno 범위만 스니핑한다.
+# [Assumptions]: ast_nodes는 _map_lines_to_ast_nodes 결과(각 항목에 lineno/end_lineno 포함)다.
+# [Vulnerability & Risks]: 파일 읽기 실패는 fail-closed로 RuntimeError를 전파한다.
+# [Improvement]: 노드별 인접 import/상수를 함께 포함하면 리뷰 문맥이 풍부해진다.
+def _extract_changed_symbols_evidence(
+    filepath: str, ast_nodes: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """변경된 AST 노드의 소스를 증거 항목으로 추출한다(전체 파일 금지).
+
+    Args:
+        filepath: Python 파일의 repo-relative 경로(None/비str 금지).
+        ast_nodes: _map_lines_to_ast_nodes 결과(None 금지, 빈 list 허용).
+    Returns:
+        [{evidence_id, filepath, symbol_name, source, char_count, sha256,
+          lineno, end_lineno, reason}, ...].
+    Raises:
+        TypeError: filepath가 None/비str이거나 ast_nodes가 None/비list인 경우.
+        RuntimeError: 파일 읽기 실패(fail-closed).
+    """
+    if filepath is None:
+        raise TypeError("filepath must not be None")
+    if not isinstance(filepath, str):
+        raise TypeError(f"filepath must be str, got {type(filepath).__name__}")
+    if ast_nodes is None:
+        raise TypeError("ast_nodes must not be None")
+    if not isinstance(ast_nodes, list):
+        raise TypeError(f"ast_nodes must be list, got {type(ast_nodes).__name__}")
+    if len(ast_nodes) == 0:
+        return []
+
+    try:
+        source = _read_text_fallback(BASE_DIR / filepath)
+    except OSError as exc:
+        raise RuntimeError(f"Cannot read {filepath}: {exc}") from exc
+    lines = source.splitlines(keepends=True)
+
+    evidence: List[Dict[str, Any]] = []
+    for nd in ast_nodes:
+        lineno = int(nd.get("lineno", 0) or 0)
+        end_lineno = int(nd.get("end_lineno", lineno) or lineno)
+        snippet = "".join(lines[lineno - 1:end_lineno]) if lineno >= 1 else ""
+        evidence.append({
+            "evidence_id": f"{filepath}::{nd.get('name', '?')}",
+            "filepath": filepath,
+            "symbol_name": str(nd.get("name", "")),
+            "source": snippet,
+            "char_count": len(snippet),
+            "sha256": _sha256_text(snippet),
+            "lineno": lineno,
+            "end_lineno": end_lineno,
+            "reason": str(nd.get("reason", "changed_symbol")),
+        })
+    return evidence
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10 — 모든 changed line이 evidence 심볼에 커버됐는지 검증하는 manifest.
+#            증거 누락(모듈 레벨 변경 등)을 관측 가능하게 기록한다.
+# [Assumptions]: evidence_list의 각 항목에 lineno/end_lineno가 포함되어 있다(_extract_changed_symbols_evidence).
+# [Vulnerability & Risks]: 커버되지 않은 라인(모듈 레벨 상수 등)은 unmapped_lines로 남긴다. 상위가 이를
+#            보고 module-level fallback을 적용한다(무분별 전체 파일 삽입 방지).
+# [Improvement]: unmapped 라인의 실제 소스 조각을 함께 첨부하면 리뷰 문맥이 완결된다.
+def _build_coverage_manifest(
+    filepath: str,
+    changed_ranges: List[Tuple[int, int]],
+    evidence_list: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """모든 changed line이 evidence에 매핑됐는지 검증한다.
+
+    Args:
+        filepath: 대상 파일 경로(None/비str 금지).
+        changed_ranges: _get_changed_line_ranges 결과(None 금지).
+        evidence_list: _extract_changed_symbols_evidence 결과(None 금지).
+    Returns:
+        {coverage_complete, unmapped_lines, manifest}.
+    Raises:
+        TypeError: 인자 타입이 잘못된 경우.
+    """
+    if filepath is None or not isinstance(filepath, str):
+        raise TypeError("filepath must be a str")
+    if changed_ranges is None or not isinstance(changed_ranges, list):
+        raise TypeError("changed_ranges must be a list")
+    if evidence_list is None or not isinstance(evidence_list, list):
+        raise TypeError("evidence_list must be a list")
+
+    covered_lines: Set[int] = set()
+    for ev in evidence_list:
+        lineno = int(ev.get("lineno", 0) or 0)
+        end_lineno = int(ev.get("end_lineno", lineno) or lineno)
+        for ln in range(lineno, end_lineno + 1):
+            covered_lines.add(ln)
+
+    unmapped: List[int] = []
+    for start, end in changed_ranges:
+        for ln in range(start, end + 1):
+            if ln not in covered_lines:
+                unmapped.append(ln)
+
+    total_changed = sum(end - start + 1 for start, end in changed_ranges)
+    return {
+        "coverage_complete": len(unmapped) == 0,
+        "unmapped_lines": unmapped,
+        "manifest": {
+            "filepath": filepath,
+            "changed_ranges": [list(r) for r in changed_ranges],
+            "evidence_ids": [str(ev.get("evidence_id", "")) for ev in evidence_list],
+            "covered_line_count": len(covered_lines),
+            "total_changed_lines": total_changed,
+        },
+    }
 
 
 # [Purpose]: MT-2 — Python 파일을 ast로 파싱하여 정확한 함수/클래스 경계 증거를 추출한다.
@@ -24025,6 +24351,14 @@ def _build_shard_plan(
             prompt_sha = _sha256_text(
                 json.dumps(evidence_shas, sort_keys=True, ensure_ascii=False)
             )
+            # IMP-20260717-5EE0 MT-10(REJECT#2 문제3): 실제 검토 대상 source를 shard에 실어
+            #   Codex CLI prompt로 직렬화될 수 있게 한다. source가 없는 항목(inject 테스트 등)은
+            #   제외되어 빈 dict가 될 수 있다(하위 호환).
+            evidence_sources = {
+                str(it.get("id", it.get("file", ""))): str(it.get("source", ""))
+                for it in inst
+                if it.get("source")
+            }
             shards.append({
                 "shard_id": sid,
                 "review_plan_sha256": review_plan_sha256,
@@ -24032,6 +24366,7 @@ def _build_shard_plan(
                 "contract_sha256": contract_sha256,
                 "included_evidence_ids": evidence_ids,
                 "evidence_sha_list": evidence_shas,
+                "evidence_sources": evidence_sources,
                 "prompt_sha": prompt_sha,
                 "prompt_chars": prompt_chars,
                 "verdict": "PENDING",
@@ -24045,14 +24380,33 @@ def _build_shard_plan(
 # [Assumptions]: shard_results는 각 shard의 verdict/pr_head_sha/findings를 가진 dict 리스트다.
 # [Vulnerability & Risks]: 빈 목록/잘못된 findings schema/stale head_sha는 모두 비승인으로 처리한다.
 # [Improvement]: shard별 required 여부 메타를 받으면 optional shard를 구분해 집계할 수 있다.
-def _aggregate_shard_verdicts(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """shard verdict를 집계하여 전체 판정을 반환한다.
+def _aggregate_shard_verdicts(
+    shard_results: List[Dict[str, Any]],
+    required_shard_ids: Optional[List[str]] = None,
+    pr_head_sha: str = "",
+    contract_sha: str = "",
+    review_plan_sha: str = "",
+) -> Dict[str, Any]:
+    """shard verdict를 6개 조건으로 집계하여 전체 판정을 반환한다(fail-closed).
+
+    전체 APPROVED는 아래를 모두 충족할 때만 성립한다:
+      1. 모든 shard가 APPROVE_TO_USER
+      2. 모든 shard의 pr_head_sha 일치(+ 주어진 pr_head_sha와 일치)
+      3. contract_sha/review_plan_sha 일치(shard에 기록된 경우)
+      4. required_shard_ids 기준 누락 shard 없음
+      5. ERROR/PENDING/unknown verdict 없음
+      6. findings schema 유효(list of dict)
+    PARTIAL_APPROVED / 빈 목록 / mock-only / 파싱 불가는 모두 비승인(ERROR/REJECTED)이다.
 
     Args:
         shard_results: shard 결과 dict 리스트(None/비list 금지).
+        required_shard_ids: 반드시 존재해야 하는 shard id 목록(None이면 누락 검사 생략 — 하위 호환).
+        pr_head_sha: 기대 PR head SHA(빈 문자열이면 shard 간 일관성만 검사 — 하위 호환).
+        contract_sha: 기대 contract SHA(빈 문자열이면 검사 생략 — 하위 호환).
+        review_plan_sha: 기대 review_plan SHA(빈 문자열이면 검사 생략 — 하위 호환).
     Returns:
         {verdict, total_shards, approved_shards, rejected_shards, error_shards,
-         stale_shards, findings, aggregated_at}.
+         stale_shards, findings, missing_shard_ids, aggregated_at}.
     Raises:
         TypeError: shard_results가 None이거나 list가 아닌 경우.
     """
@@ -24061,20 +24415,38 @@ def _aggregate_shard_verdicts(shard_results: List[Dict[str, Any]]) -> Dict[str, 
     if not isinstance(shard_results, list):
         raise TypeError(f"shard_results must be list, got {type(shard_results).__name__}")
 
+    # 조건 5: 빈 shard 목록은 승인 근거가 없으므로 ERROR(fail-closed).
+    if len(shard_results) == 0:
+        return {
+            "verdict": "ERROR",
+            "total_shards": 0,
+            "approved_shards": 0,
+            "rejected_shards": 0,
+            "error_shards": 0,
+            "stale_shards": 0,
+            "findings": [],
+            "missing_shard_ids": list(required_shard_ids or []),
+            "failure_reason": "empty_shard_results",
+            "aggregated_at": _now(),
+        }
+
     total = len(shard_results)
     approved = 0
     rejected = 0
     error = 0
     findings: List[Dict[str, Any]] = []
     head_shas: Set[str] = set()
+    result_ids: Set[str] = set()
 
     for shard in shard_results:
         if not isinstance(shard, dict):
             error += 1
             continue
         verdict = str(shard.get("verdict", "") or "")
+        result_ids.add(str(shard.get("shard_id", "") or ""))
         head_shas.add(str(shard.get("pr_head_sha", "") or ""))
-        # findings schema 검증: list이며 각 항목 dict여야 함
+
+        # 조건 6: findings schema 검증(list이며 각 항목 dict).
         shard_findings = shard.get("findings", [])
         if not isinstance(shard_findings, list) or any(
             not isinstance(fd, dict) for fd in shard_findings
@@ -24082,30 +24454,40 @@ def _aggregate_shard_verdicts(shard_results: List[Dict[str, Any]]) -> Dict[str, 
             error += 1
             continue
         findings.extend(shard_findings)
+
         if verdict == "APPROVE_TO_USER":
             approved += 1
         elif verdict == "REJECT":
             rejected += 1
         else:
-            # PENDING/미지정/알 수 없는 verdict → error(비승인)
+            # ERROR/PENDING/미지정/알 수 없는 verdict → error(비승인).
             error += 1
 
-    # stale: 유효 head_sha가 2종 이상이면 stale
+    # 조건 2: stale — 유효 head_sha가 2종 이상이거나 기대 SHA와 불일치.
     non_empty_shas = {s for s in head_shas if s}
     stale = 0
     if len(non_empty_shas) > 1:
         stale = len(non_empty_shas)
+    if pr_head_sha and non_empty_shas and pr_head_sha not in non_empty_shas:
+        stale += 1
 
-    if total == 0:
+    # 조건 4: required_shard_ids 기준 누락 shard.
+    missing_shards: List[str] = []
+    if required_shard_ids:
+        missing_shards = [sid for sid in required_shard_ids if sid not in result_ids]
+        if missing_shards:
+            error += len(missing_shards)
+
+    # 최종 verdict(fail-closed): error/stale 최우선 → REJECT → 전원 APPROVE → 그 외 ERROR.
+    if total == 0 or error > 0 or stale > 0:
         verdict_final = "ERROR"
-    elif error > 0 or stale > 0:
-        verdict_final = "ERROR"
-    elif approved == total:
-        verdict_final = "APPROVED"
-    elif approved > 0:
-        verdict_final = "PARTIAL_APPROVED"
-    else:
+    elif rejected > 0:
         verdict_final = "REJECTED"
+    elif approved == total and approved > 0:
+        verdict_final = "APPROVED"
+    else:
+        # PARTIAL(일부만 APPROVE)/전원 미승인은 비승인(ERROR)으로 차단(PARTIAL_APPROVED 금지).
+        verdict_final = "ERROR"
 
     return {
         "verdict": verdict_final,
@@ -24115,6 +24497,7 @@ def _aggregate_shard_verdicts(shard_results: List[Dict[str, Any]]) -> Dict[str, 
         "error_shards": error,
         "stale_shards": stale,
         "findings": findings,
+        "missing_shard_ids": missing_shards,
         "aggregated_at": _now(),
     }
 
@@ -24199,6 +24582,9 @@ def _check_pr_size_budget(
     critical_symbol_count = int(m.get("critical_symbol_count", 0) or 0)
     estimated_evidence_chars = int(m.get("estimated_evidence_chars", 0) or 0)
     max_test_file_lines = int(m.get("max_test_file_lines", 0) or 0)
+    # IMP-20260717-5EE0 MT-10(REJECT#2 문제2): 개별 evidence 항목의 최대 char.
+    #   단일 항목이 SHARD_HARD_BUDGET을 초과할 때만 분할을 요구한다(전체 크기 아님).
+    max_single_evidence_chars = int(m.get("max_single_evidence_chars", 0) or 0)
 
     changed_symbols = [str(s) for s in (m.get("changed_symbols") or [])]
     review_engine_symbols = {"_cmd_gates_codex_review", "_build_codex_review_bundle"}
@@ -24219,8 +24605,11 @@ def _check_pr_size_budget(
         reasons.append("evidence_chars_exceeded")
     if max_test_file_lines > PR_MAX_TEST_FILE_LINES:
         reasons.append("test_file_lines_exceeded")
-    if self_referential:
-        reasons.append("self_referential")
+    # IMP-20260717-5EE0 MT-10(REJECT#2 문제2): 개별 evidence 항목이 shard 상한을 단독 초과할
+    #   때만 분할을 요구한다. self_referential(리뷰 엔진 자기참조)만으로는 더 이상 자동 차단하지
+    #   않는다 — changed-symbol 추출로 자기참조 PR도 shard 단위로 검토 가능해졌기 때문이다.
+    if max_single_evidence_chars > SHARD_HARD_BUDGET:
+        reasons.append("evidence_item_too_large")
 
     pr_split_required = len(reasons) > 0
     return {
@@ -24231,6 +24620,7 @@ def _check_pr_size_budget(
         "changed_product_lines": changed_product_lines,
         "critical_symbol_count": critical_symbol_count,
         "estimated_evidence_chars": estimated_evidence_chars,
+        "max_single_evidence_chars": max_single_evidence_chars,
         "max_test_file_lines": max_test_file_lines,
         "self_referential": self_referential,
         "checked_at": _now(),
@@ -24251,6 +24641,7 @@ def _collect_pr_size_metrics() -> Dict[str, Any]:
         "changed_product_lines": 0,
         "critical_symbol_count": 0,
         "estimated_evidence_chars": 0,
+        "max_single_evidence_chars": 0,
         "max_test_file_lines": 0,
         "changed_symbols": [],
     }
@@ -24283,6 +24674,35 @@ def _collect_pr_size_metrics() -> Dict[str, Any]:
             max_test_lines = added
     metrics["changed_product_lines"] = product_lines
     metrics["max_test_file_lines"] = max_test_lines
+
+    # IMP-20260717-5EE0 MT-10(REJECT#2 문제2): 예상 evidence char를 "변경된 심볼" 기준으로
+    #   계산한다(전체 파일이 아님). 개별 항목 최대 char(max_single_evidence_chars)를 함께 산출하여
+    #   단일 항목이 shard 상한을 초과할 때만 분할을 요구하게 한다. 계산 실패는 fail-soft(0).
+    try:
+        changed_files = _git_changed_files("origin/main")
+        total_evidence_chars = 0
+        max_item_chars = 0
+        for f in changed_files:
+            if not f.endswith(".py"):
+                continue
+            try:
+                ranges = _get_changed_line_ranges(f)
+                if not ranges:
+                    continue
+                ast_nodes = _map_lines_to_ast_nodes(f, ranges)
+                evs = _extract_changed_symbols_evidence(f, ast_nodes)
+                for ev in evs:
+                    cc = int(ev.get("char_count", 0) or 0)
+                    total_evidence_chars += cc
+                    if cc > max_item_chars:
+                        max_item_chars = cc
+            except (RuntimeError, OSError):
+                continue  # 개별 파일 실패는 건너뛴다(전체 실패로 승격 금지).
+        metrics["estimated_evidence_chars"] = total_evidence_chars
+        metrics["max_single_evidence_chars"] = max_item_chars
+    except Exception:  # noqa: BLE001 — 지표 수집 실패는 0으로 fail-soft(상위 gate가 반환값 재확인)
+        metrics["estimated_evidence_chars"] = 0
+        metrics["max_single_evidence_chars"] = 0
     return metrics
 
 
@@ -24425,20 +24845,297 @@ def _run_codex_review_preflight(pipeline_id: str, skip_cli: bool = True) -> Dict
     }
 
 
-# [Purpose]: IMP-20260717-5EE0 MT-9 — 단일 shard에 대해 Codex CLI를 호출하여 verdict를 반환한다.
-#            CODEX_CLI_MOCK=1이면 mock APPROVE_TO_USER를 반환한다(테스트/부트스트랩용).
-# [Assumptions]: shard dict에 shard_id 키가 있음.
-# [Vulnerability & Risks]: 실제 CLI 미연결 환경에서는 ERROR verdict를 반환한다(fail-closed —
-#            집계 시 비승인 처리되어 premature approval을 방지한다).
-# [Improvement]: 실제 subprocess codex exec 호출로 교체하면 완전한 자동 리뷰가 가능하다.
-def _call_codex_cli_for_shard(shard: Dict[str, Any]) -> Dict[str, Any]:
-    """단일 shard에 대해 Codex CLI를 호출하여 verdict dict를 반환한다.
+# [Purpose]: IMP-20260717-5EE0 MT-10 — shard 단위 Codex 검토 permit 경로(SSoT). PIPELINE_STATE_PATH
+#            격리를 그대로 따르며 codex_review_plan.json과 같은 디렉토리에 위치한다.
+# [Assumptions]: _codex_review_plan_path()가 격리 규칙을 이미 캡슐화한다.
+# [Vulnerability & Risks]: 경로 계산은 순수 함수이므로 부작용이 없다.
+# [Improvement]: bundle/result/plan/permit 경로를 단일 팩토리로 묶으면 drift를 더 강하게 막을 수 있다.
+def _shard_review_permit_path() -> Path:
+    """shard_review_permit.json 경로를 반환한다(PIPELINE_STATE_PATH 격리 지원).
 
-    CODEX_CLI_MOCK=1이면 mock APPROVE_TO_USER를 반환한다(테스트용).
-    실제 환경에서는 향후 subprocess Codex CLI 연결 예정(현재는 미연결 ERROR 반환).
+    Returns:
+        shard_review_permit.json 절대 경로.
+    """
+    return _codex_review_plan_path().parent / "shard_review_permit.json"
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제4) — Codex CLI 실행 파일 경로를 탐색한다.
+# [Assumptions]: codex CLI가 PATH에 있으면 shutil.which로 찾는다.
+# [Vulnerability & Risks]: 없으면 None을 반환하여 상위가 codex_cli_not_connected로 fail-closed 처리한다.
+# [Improvement]: 사용자 설정(codex.path)을 우선 조회하도록 확장할 수 있다.
+def _find_codex_bin() -> Optional[str]:
+    """Codex CLI 실행 파일 경로를 반환한다(없으면 None).
+
+    Returns:
+        codex 실행 파일 절대 경로 또는 None.
+    """
+    return shutil.which("codex")
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10 — shard dict를 Codex CLI로 넘길 prompt 텍스트로 직렬화한다.
+#            전체 파일이 아닌 shard에 실린 changed-symbol source만 포함한다.
+# [Assumptions]: shard에 evidence_sources(선택), shard_id/pr_head_sha 등이 있다.
+# [Vulnerability & Risks]: evidence_sources가 없으면 메타만 직렬화된다(작은 prompt). None/비dict는 방어.
+# [Improvement]: verdict schema를 계약 파일에서 로드하여 버전 드리프트를 없앨 수 있다.
+def _serialize_shard_to_prompt(shard: Dict[str, Any]) -> str:
+    """shard dict를 Codex CLI prompt 텍스트로 직렬화한다.
 
     Args:
-        shard: shard 정의 dict (shard_id, included_evidence_ids 등; None/비dict 금지).
+        shard: shard 정의 dict(None/비dict 금지).
+    Returns:
+        직렬화된 prompt 문자열.
+    Raises:
+        TypeError: shard가 None이거나 dict가 아닌 경우.
+    """
+    if shard is None:
+        raise TypeError("shard must not be None")
+    if not isinstance(shard, dict):
+        raise TypeError(f"shard must be dict, got {type(shard).__name__}")
+
+    lines = [
+        f"shard_id: {shard.get('shard_id')}",
+        f"pr_head_sha: {shard.get('pr_head_sha')}",
+        f"contract_sha256: {shard.get('contract_sha256')}",
+        f"review_plan_sha256: {shard.get('review_plan_sha256')}",
+        "",
+        "=== Evidence Sources (changed symbols only) ===",
+    ]
+    ev_sources = shard.get("evidence_sources")
+    if isinstance(ev_sources, dict):
+        for ev_id, source in ev_sources.items():
+            lines.append(f"--- {ev_id} ---")
+            lines.append(str(source) if source else "(empty)")
+            lines.append("")
+    lines += [
+        "=== Required verdict schema ===",
+        '{"verdict": "APPROVE_TO_USER"} or '
+        '{"verdict": "REJECT", "findings": [...]}',
+        "",
+        "Review the above evidence and return a single verdict JSON line.",
+    ]
+    return "\n".join(lines)
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10 — Codex CLI stdout을 strict verdict schema로 파싱한다.
+# [Assumptions]: stdout에 verdict JSON이 한 줄 이상 포함된다(JSONL 또는 단일 JSON).
+# [Vulnerability & Risks]: APPROVE_TO_USER/REJECT 이외의 값은 승인으로 인정하지 않고 verdict_parse_failure
+#            ERROR를 반환한다(fail-closed — mock/garbage로 승인 우회 방지).
+# [Improvement]: findings 항목 스키마(scope/severity 등)를 여기서 함께 검증할 수 있다.
+def _parse_codex_cli_shard_output(
+    stdout: str, shard_id: str, pr_head_sha: str
+) -> Dict[str, Any]:
+    """Codex CLI stdout을 strict verdict schema로 파싱한다.
+
+    Args:
+        stdout: Codex CLI 표준 출력(None이면 빈 문자열로 취급).
+        shard_id: shard 식별자(None/비str 금지).
+        pr_head_sha: PR head SHA(None/비str 금지).
+    Returns:
+        {shard_id, verdict, findings, pr_head_sha[, error_reason]}.
+    Raises:
+        TypeError: shard_id/pr_head_sha가 None이거나 str이 아닌 경우.
+    """
+    if shard_id is None or pr_head_sha is None:
+        raise TypeError("shard_id and pr_head_sha must not be None")
+    if not isinstance(shard_id, str):
+        raise TypeError(f"shard_id must be str, got {type(shard_id).__name__}")
+    if not isinstance(pr_head_sha, str):
+        raise TypeError(f"pr_head_sha must be str, got {type(pr_head_sha).__name__}")
+
+    text = str(stdout or "")
+    for raw in text.strip().splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            obj = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        verdict = str(obj.get("verdict", "") or "")
+        if verdict in ("APPROVE_TO_USER", "REJECT"):
+            findings = obj.get("findings", [])
+            if not isinstance(findings, list):
+                findings = []
+            return {
+                "shard_id": shard_id,
+                "verdict": verdict,
+                "findings": findings,
+                "pr_head_sha": pr_head_sha,
+            }
+    return {
+        "shard_id": shard_id,
+        "verdict": "ERROR",
+        "findings": [],
+        "pr_head_sha": pr_head_sha,
+        "error_reason": "verdict_parse_failure",
+    }
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제5) — 단일 사용 Codex shard-review permit을 발급한다.
+#            에이전트가 자동 발급하지 못하도록 CODEX_RUN_AUTHORIZED=1(사용자 명시)만 허용한다.
+# [Assumptions]: 사용자가 gates codex-review --authorize-run으로 명시적으로 실행한다.
+# [Vulnerability & Risks]: 환경변수 없으면 fail-closed로 _die한다. permit은 원자적으로 기록한다.
+# [Improvement]: permit에 서명(HMAC)을 추가하면 위·변조 탐지가 가능하다.
+def _issue_codex_shard_review_permit(
+    pipeline_id: str,
+    pr_head_sha: str,
+    review_plan_sha: str,
+    expiry_seconds: int = 3600,
+) -> Dict[str, Any]:
+    """단일 사용 permit을 발급한다(CODEX_RUN_AUTHORIZED=1 필수).
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID(None/비str/빈문자열 금지).
+        pr_head_sha: 검토 대상 PR head SHA(None/비str 금지).
+        review_plan_sha: review_plan SHA(None/비str 금지).
+        expiry_seconds: 만료 초(양수만 허용; 0/음수 금지).
+    Returns:
+        발급된 permit dict.
+    Raises:
+        TypeError/ValueError: 인자 검증 실패 시.
+        SystemExit: CODEX_RUN_AUTHORIZED != "1"인 경우(fail-closed).
+    """
+    if pipeline_id is None or pr_head_sha is None or review_plan_sha is None:
+        raise TypeError("pipeline_id/pr_head_sha/review_plan_sha must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if len(pipeline_id) == 0:
+        raise ValueError("pipeline_id must not be empty")
+    if not isinstance(pr_head_sha, str) or not isinstance(review_plan_sha, str):
+        raise TypeError("pr_head_sha and review_plan_sha must be str")
+    if not isinstance(expiry_seconds, int) or isinstance(expiry_seconds, bool):
+        raise TypeError("expiry_seconds must be int")
+    if expiry_seconds <= 0:  # negative/zero not allowed: permit 만료는 미래여야 함
+        raise ValueError(f"expiry_seconds must be > 0, got {expiry_seconds}")
+
+    if os.environ.get("CODEX_RUN_AUTHORIZED") != "1":
+        _die(
+            "[BLOCKED] failure_code=permit_unauthorized\n"
+            "  permit은 사용자가 직접 CODEX_RUN_AUTHORIZED=1 환경변수로 발급해야 합니다.\n"
+            "  실행: CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
+        )
+
+    from datetime import datetime, timedelta, timezone  # noqa: PLC0415
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(seconds=expiry_seconds)
+    permit = {
+        "pipeline_id": pipeline_id,
+        "pr_head_sha": pr_head_sha,
+        "review_plan_sha": review_plan_sha,
+        "issued_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "expires_at": expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "consumed": False,
+        "permit_id": str(uuid.uuid4()),
+    }
+    _write_json(_shard_review_permit_path(), permit)
+    return permit
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제5) — permit을 검증하고 원자적으로 소비한다.
+#            없음/소비됨/파이프라인 불일치/stale(head 변경)/만료를 모두 fail-closed로 차단한다.
+# [Assumptions]: permit은 _issue_codex_shard_review_permit이 발급한 dict다.
+# [Vulnerability & Risks]: 소비 후 consumed=True로 표시하여 재사용을 차단한다(단일 사용).
+# [Improvement]: review_plan_sha 불일치도 stale로 차단하도록 강화할 수 있다.
+def _check_and_consume_permit(
+    pipeline_id: str,
+    pr_head_sha: str,
+    review_plan_sha: str,
+) -> Dict[str, Any]:
+    """permit을 검증하고 원자적으로 소비한다.
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID(None/비str/빈문자열 금지).
+        pr_head_sha: 현재 PR head SHA(None/비str 금지).
+        review_plan_sha: 현재 review_plan SHA(None/비str 금지).
+    Returns:
+        소비된 permit dict.
+    Raises:
+        TypeError/ValueError: 인자 검증 실패 시.
+        SystemExit: permit 없음/소비됨/불일치/stale/만료 시(fail-closed BLOCKED).
+    """
+    if pipeline_id is None or pr_head_sha is None or review_plan_sha is None:
+        raise TypeError("pipeline_id/pr_head_sha/review_plan_sha must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if len(pipeline_id) == 0:
+        raise ValueError("pipeline_id must not be empty")
+    if not isinstance(pr_head_sha, str) or not isinstance(review_plan_sha, str):
+        raise TypeError("pr_head_sha and review_plan_sha must be str")
+
+    permit_path = _shard_review_permit_path()
+    if not permit_path.exists():
+        _die(
+            "[BLOCKED] failure_code=permit_missing\n"
+            "  shard review permit이 없습니다. 사용자가 다음으로 발급해야 합니다:\n"
+            "  CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
+        )
+    try:
+        permit = json.loads(permit_path.read_text(encoding="utf-8"))
+        if not isinstance(permit, dict):
+            raise ValueError("permit is not a dict")
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
+        _die(f"[BLOCKED] failure_code=permit_read_error\n  permit 파일 읽기 실패: {exc}")
+
+    if permit.get("consumed"):
+        _die(
+            "[BLOCKED] failure_code=permit_consumed\n"
+            "  이미 소비된 permit입니다. --authorize-run으로 재발급하세요."
+        )
+    if permit.get("pipeline_id") != pipeline_id:
+        _die(
+            "[BLOCKED] failure_code=permit_pipeline_mismatch\n"
+            f"  permit의 pipeline_id({permit.get('pipeline_id')})가 현재({pipeline_id})와 다릅니다."
+        )
+    if permit.get("pr_head_sha") != pr_head_sha:
+        _die(
+            "[BLOCKED] failure_code=permit_stale\n"
+            "  PR head SHA가 변경되었습니다. --authorize-run으로 재발급하세요."
+        )
+
+    from datetime import datetime, timezone  # noqa: PLC0415
+    try:
+        expiry = datetime.strptime(
+            str(permit["expires_at"]), "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=timezone.utc)
+    except (KeyError, ValueError, TypeError):
+        _die("[BLOCKED] failure_code=permit_invalid\n  permit 형식이 잘못되었습니다(expires_at).")
+    if datetime.now(timezone.utc) > expiry:
+        _die(
+            "[BLOCKED] failure_code=permit_expired\n"
+            "  permit이 만료되었습니다. --authorize-run으로 재발급하세요."
+        )
+
+    # 원자적 소비: consumed=True로 표시하여 재사용을 차단한다.
+    permit["consumed"] = True
+    permit["consumed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _write_json(permit_path, permit)
+    return permit
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제4) — 단일 shard에 대해 실제 Codex CLI(subprocess)를
+#            호출하여 verdict를 반환한다. mock/DI는 테스트 seam으로 격리되고, permit gate는 handler에서
+#            강제되어 CODEX_CLI_MOCK=1만으로는 production 승인이 불가하다.
+# [Assumptions]: shard dict에 shard_id/pr_head_sha/evidence_sources가 있다. permit은 handler가 이미
+#            소비하여 전달한다(있으면).
+# [Vulnerability & Risks]: timeout/network/auth/미설치/파싱 실패는 REJECT가 아닌 ERROR로 분류한다
+#            (fail-closed — CLI 오류를 거절로 오인하여 rate-limit을 소모하지 않음). 입력이 shard 상한을
+#            초과하면 CLI 호출 전에 input_too_large ERROR로 차단한다.
+# [Improvement]: 스트리밍 파싱과 부분 결과 재시도를 추가하면 대형 리뷰 안정성이 오른다.
+def _call_codex_cli_for_shard(
+    shard: Dict[str, Any],
+    permit: Optional[Dict[str, Any]] = None,
+    *,
+    _cli_factory: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """단일 shard에 대해 실제 Codex CLI를 호출하여 verdict dict를 반환한다.
+
+    Args:
+        shard: shard 정의 dict(None/비dict 금지).
+        permit: handler가 소비한 permit(있으면). 함수 자체는 permit을 강제하지 않는다
+            (permit gate는 handler가 CLI 호출 전에 강제한다).
+        _cli_factory: 테스트 전용 DI seam. 프로덕션에서는 None(우회 불가).
     Returns:
         {shard_id, verdict, findings, pr_head_sha[, error_reason]}.
     Raises:
@@ -24452,6 +25149,8 @@ def _call_codex_cli_for_shard(shard: Dict[str, Any]) -> Dict[str, Any]:
     shard_id = str(shard.get("shard_id", "") or "")
     pr_head_sha = str(shard.get("pr_head_sha", "") or "")
 
+    # 1) test DI seam(CODEX_CLI_MOCK=1): 함수 단위 결정성 검증용. handler permit gate가
+    #    production 오용을 차단하므로 여기서는 mock을 승인으로 매핑해도 실제 완료를 만들 수 없다.
     if os.environ.get("CODEX_CLI_MOCK") == "1":
         return {
             "shard_id": shard_id,
@@ -24460,14 +25159,78 @@ def _call_codex_cli_for_shard(shard: Dict[str, Any]) -> Dict[str, Any]:
             "pr_head_sha": pr_head_sha,
         }
 
-    # 실제 Codex CLI 호출 (향후 연결 — 현재는 미연결 ERROR 반환, fail-closed)
-    return {
-        "shard_id": shard_id,
-        "verdict": "ERROR",
-        "findings": [],
-        "pr_head_sha": pr_head_sha,
-        "error_reason": "codex_cli_not_connected",
-    }
+    # 2) 입력 크기 가드(fail-closed): shard prompt가 상한을 초과하면 CLI 호출 전에 ERROR.
+    prompt_text = _serialize_shard_to_prompt(shard)
+    if len(prompt_text) > SHARD_HARD_BUDGET:
+        return {
+            "shard_id": shard_id,
+            "verdict": "ERROR",
+            "findings": [],
+            "pr_head_sha": pr_head_sha,
+            "error_reason": "input_too_large",
+        }
+
+    # 3) 테스트 전용 CLI factory 주입(프로덕션 None 고정).
+    if _cli_factory is not None:
+        return _cli_factory(shard, permit)
+
+    # 4) permit gate: 소비된 permit이 없으면 실제 Codex CLI를 호출하지 않는다(codex_cli_not_connected).
+    #    handler가 permit을 소비하여 전달하는 경우에만 실제 subprocess 경로로 진입한다. 이것이
+    #    사용자 미승인 상태(및 테스트)에서 실제 Codex 호출을 원천 차단한다(하위 호환 error_reason 유지).
+    if permit is None:
+        return {
+            "shard_id": shard_id,
+            "verdict": "ERROR",
+            "findings": [],
+            "pr_head_sha": pr_head_sha,
+            "error_reason": "codex_cli_not_connected",
+        }
+
+    # 5) Codex CLI 실행 파일 탐색. 없으면 미연결 ERROR(하위 호환 error_reason 유지).
+    codex_bin = _find_codex_bin()
+    if not codex_bin:
+        return {
+            "shard_id": shard_id,
+            "verdict": "ERROR",
+            "findings": [],
+            "pr_head_sha": pr_head_sha,
+            "error_reason": "codex_cli_not_connected",
+        }
+
+    # 6) 실제 Codex CLI subprocess 호출(_invoke_codex_exec SSoT 패턴: codex exec --json -C <root> -).
+    cmd = [codex_bin, "exec", "--json", "-C", str(BASE_DIR), "-"]
+    env = {k: v for k, v in os.environ.items() if k != "OPENAI_API_KEY"}
+    try:
+        proc = subprocess.run(
+            cmd, input=prompt_text, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", env=env, timeout=600, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
+                "pr_head_sha": pr_head_sha, "error_reason": "timeout"}
+    except FileNotFoundError:
+        return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
+                "pr_head_sha": pr_head_sha, "error_reason": "codex_cli_not_found"}
+    except OSError as exc:
+        return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
+                "pr_head_sha": pr_head_sha, "error_reason": f"cli_oserror: {exc}"}
+
+    if proc.returncode != 0:
+        stdout_low = (proc.stdout or "").lower()
+        stderr_low = (proc.stderr or "").lower()
+        if "usage limit" in stdout_low or "usage limit" in stderr_low:
+            err = "usage_limit"
+        elif "auth" in stderr_low or "login" in stderr_low:
+            err = "authentication_failed"
+        elif "network" in stderr_low or "connection" in stderr_low:
+            err = "network_error"
+        else:
+            err = f"cli_exit_{proc.returncode}"
+        return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
+                "pr_head_sha": pr_head_sha, "error_reason": err}
+
+    # 7) stdout을 strict verdict schema로 파싱한다.
+    return _parse_codex_cli_shard_output(proc.stdout, shard_id, pr_head_sha)
 
 
 # [Purpose]: BUG-20260628-F52C MT-3 — gates codex-review 핸들러. staged snapshot(또는 현재
@@ -24489,14 +25252,42 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     """
     # IMP-20260717-5EE0 MT-9: --preflight-only: plan/shard/budget/convergence 실제 계산 후
     #   8개 필드 JSON 출력. blocked_reason이 있으면 exit 1.
+    # IMP-20260717-5EE0 MT-10(REJECT#2 문제5): --authorize-run: 사용자가 명시적으로 shard-review
+    #   permit을 발급한다. CODEX_RUN_AUTHORIZED=1 환경변수가 없으면 _issue_...가 fail-closed 차단한다.
+    if bool(getattr(args, "authorize_run", False)):
+        _ar_pid = str(state.get("pipeline_id", "") or "")
+        if not _ar_pid:
+            _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다 (authorize-run).")
+        _ar_plan = _build_codex_review_plan(_ar_pid)
+        _ar_budgets = _calculate_shard_budget(_ar_plan)
+        _ar_shards = _build_shard_plan(_ar_plan, _ar_budgets)
+        _ar_head = str(_ar_plan.get("pr_head_sha", "") or "")
+        _ar_rp_sha = (
+            str(_ar_shards[0].get("review_plan_sha256", "") or "")
+            if _ar_shards
+            else _sha256_text(json.dumps(_ar_plan, sort_keys=True, ensure_ascii=False, default=str))
+        )
+        _issued = _issue_codex_shard_review_permit(_ar_pid, _ar_head, _ar_rp_sha)
+        print(json.dumps({
+            "status": "PERMIT_ISSUED",
+            "permit_id": _issued["permit_id"],
+            "pr_head_sha": _ar_head,
+            "expires_at": _issued["expires_at"],
+        }, ensure_ascii=False, indent=2))
+        sys.exit(0)
+
+    # IMP-20260717-5EE0 MT-9/MT-10: --preflight-only: plan/shard/budget/convergence 실제 계산 후
+    #   8개 필드 JSON 출력. blocked_reason이 있으면 fail-closed로 exit 1(항상 exit 0 금지).
     if bool(getattr(args, "preflight_only", False)):
         _pf_pid = str(state.get("pipeline_id", "") or "")
         if not _pf_pid:
             _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다 (preflight).")
         _pf_result = _run_codex_review_preflight(_pf_pid, skip_cli=True)
         print(json.dumps(_pf_result, ensure_ascii=False, indent=2))
-        # IMP-20260717-5EE0: preflight는 진단 목적이므로 blocked_reason이 있어도
-        #   항상 exit 0으로 종료한다 (blocked_reason은 JSON 출력으로만 전달).
+        # IMP-20260717-5EE0 MT-10(REJECT#2 문제3): blocked_reason이 있으면 exit 1로 종료한다.
+        #   (기존: 항상 exit 0 → preflight가 차단 사유를 무시하고 통과하던 문제 제거)
+        if _pf_result.get("blocked_reason"):
+            sys.exit(1)
         sys.exit(0)
 
     pipeline_id = str(state.get("pipeline_id", "") or "")
@@ -24695,9 +25486,27 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         #   shard plan이 비어 있으면(자기참조 self-review로 sharding 불가, 또는 critical 미신뢰
         #   상태) 재사용 근거가 없으므로 기존 codex_verdict_required 차단을 그대로 유지한다.
         if not _explicit_verdict and not _explicit_cli:
-            if _shard_plan:
-                _shard_results_auto = [_call_codex_cli_for_shard(_s) for _s in _shard_plan]
-                _auto_agg = _aggregate_shard_verdicts(_shard_results_auto)
+            # IMP-20260717-5EE0 MT-10(REJECT#2 문제5): 자동 shard-CLI 검토는 사용자가 명시적으로 발급한
+            #   permit이 있을 때만 진입한다. permit이 없으면(대부분의 경우) 기존 codex_verdict_required
+            #   차단을 그대로 유지하여, 사람이 --verdict를 직접 넘기거나 --authorize-run으로 permit을
+            #   발급하도록 요구한다. permit 존재 시에는 _check_and_consume_permit이 stale/만료/소비를
+            #   fail-closed로 검증·소비한 뒤에만 CLI를 호출한다(mock/미승인 우회 차단).
+            if _shard_plan and _shard_review_permit_path().exists():
+                _auto_head = str(_shard_plan[0].get("pr_head_sha", "") or "")
+                _auto_rp_sha = str(_shard_plan[0].get("review_plan_sha256", "") or "")
+                _auto_contract_sha = str(_shard_plan[0].get("contract_sha256", "") or "")
+                _permit = _check_and_consume_permit(pipeline_id, _auto_head, _auto_rp_sha)
+                _required_ids = [str(_s.get("shard_id", "") or "") for _s in _shard_plan]
+                _shard_results_auto = [
+                    _call_codex_cli_for_shard(_s, _permit) for _s in _shard_plan
+                ]
+                _auto_agg = _aggregate_shard_verdicts(
+                    _shard_results_auto,
+                    required_shard_ids=_required_ids,
+                    pr_head_sha=_auto_head,
+                    contract_sha=_auto_contract_sha,
+                    review_plan_sha=_auto_rp_sha,
+                )
                 _auto_verdict_raw = str(_auto_agg.get("verdict", "") or "")
                 # aggregate verdict를 단일 verdict로 변환(APPROVED만 승인, 그 외 전부 REJECT).
                 if _auto_verdict_raw == "APPROVED":
@@ -30862,6 +31671,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_codex.add_argument(
         "--preflight-only", dest="preflight_only", action="store_true", default=False,
         help="Preflight 검사만 수행하고 실제 Codex CLI는 호출하지 않는다.",
+    )
+    # IMP-20260717-5EE0 MT-10(REJECT#2 문제5): 사용자 명시 permit 발급(단일 사용).
+    #   CODEX_RUN_AUTHORIZED=1 환경변수와 함께 실행해야 permit이 발급된다(에이전트 자동 발급 금지).
+    p_gate_codex.add_argument(
+        "--authorize-run", dest="authorize_run", action="store_true", default=False,
+        help="사용자가 shard-review permit을 발급한다(CODEX_RUN_AUTHORIZED=1 필수, 단일 사용).",
     )
 
     p_gate_accept = gsub.add_parser("accept", help="Record user behavior acceptance")
