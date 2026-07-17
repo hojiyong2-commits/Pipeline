@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-17T03:22:25Z",
+  "pipeline_id": "IMP-20260712-DAE1",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "e6d1c22e793c2615fc813c11708be08609ecd9e6",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-07-17T03:22:11Z",
+    "report_file": "dev_handover_r4.xml",
+    "evidence": "pipeline.py,.github/workflows/ci.yml,.claude/agents/pipeline-manager-agent.md,codex_model_router_report.md,tests/e2e/test_codex_model_router_dae1.py,tests/e2e/test_codex_model_router_e2e.py,tests/e2e/test_codex_review_gate_3bb6.py,tests/e2e/test_codex_cost_optimization_9f5e.py,tests/e2e/test_codex_defects_dae1.py,tests/e2e/test_codex_defect_fix_dae1.py,tests/e2e/test_ac_tracking_1abe.py,pyproject.toml"
+  },
+  "agent_run": {
+    "run_id": "dev-a2f8d93348bd32ad",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_r4.xml",
+    "output_sha256": "ff4cff2444d3b2218dff6946f8d5b9de7fb40360f0174265ff8462df326184fb",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/agent_receipt_dev-a2f8d93348bd32ad.json",
+    "receipt_sha256": "b31ac362d14615f452dbbf4b03e52a6da9e823332d72fedfef8624c4775c16cd",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260712-DAE1\\dev\\dev-a2f8d93348bd32ad.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260712-DAE1\\dev\\dev-a2f8d93348bd32ad.json",
+      "path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/agent_receipt_dev-a2f8d93348bd32ad.json",
+      "sha256": "b31ac362d14615f452dbbf4b03e52a6da9e823332d72fedfef8624c4775c16cd",
+      "size_bytes": 505,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_r4.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/report_dev_handover_r4.xml",
+      "sha256": "ff4cff2444d3b2218dff6946f8d5b9de7fb40360f0174265ff8462df326184fb",
+      "size_bytes": 2047,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_r4.json",
+      "path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/scope_manifest_scope_manifest_r4.json",
+      "sha256": "8dee33389e6a673c55666ded76e7fdb6b0c63d10ade2c4d2fdb2875d2e56aa2a",
+      "size_bytes": 45949,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "177bd2e2ab32534d48953bb3ba8368b3f55cd8c4a7ca43ad1cba59384adeedf4",
+      "size_bytes": 2000753
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "26d6e7b450891d5ebfd25a15fe31d39694ca8bbac13a04a879cb454496b9066f",
+      "size_bytes": 39230
+    },
+    {
+      "path": ".claude/agents/pipeline-manager-agent.md",
+      "sha256": "9755bef36a6ee708acc6f5ccc2bbe06473cb4618255ae845b424071744b8a34e",
+      "size_bytes": 23126
+    },
+    {
+      "path": "codex_model_router_report.md",
+      "sha256": "e6c14732ec4ea774009b2210158b8d837ccac00731ae235b836e7823610d3167",
+      "size_bytes": 14767
+    },
+    {
+      "path": "tests/e2e/test_codex_model_router_dae1.py",
+      "sha256": "2426a0d070fc67ee68f1f4df7a347a0f91ab2dc5ba7ac1aa3e453b55c3c1a4b9",
+      "size_bytes": 418791
+    },
+    {
+      "path": "tests/e2e/test_codex_model_router_e2e.py",
+      "sha256": "fe295b48146fe2f472d4a924559dfac5d1718626207fe9b0e13798782aea31a0",
+      "size_bytes": 38139
+    },
+    {
+      "path": "tests/e2e/test_codex_review_gate_3bb6.py",
+      "sha256": "cbea961285e848b6ed859e039ff974a12632e93d3caab4d13014da19305b5fa4",
+      "size_bytes": 8815
+    },
+    {
+      "path": "tests/e2e/test_codex_cost_optimization_9f5e.py",
+      "sha256": "8cc5091b771709686fec67af1f8ba74bbc1cc780ba31d3cb687d3694b1e84a62",
+      "size_bytes": 46991
+    },
+    {
+      "path": "tests/e2e/test_codex_defects_dae1.py",
+      "sha256": "4a05336693df16cd9988b68223fade6fa59ea0e90c3cbc33dd84a49943d6520c",
+      "size_bytes": 53137
+    },
+    {
+      "path": "tests/e2e/test_codex_defect_fix_dae1.py",
+      "sha256": "e499870c1b1e24bd29770cbf70775efeab68bcaa496c6f5fea76b16ce46153c9",
+      "size_bytes": 13739
+    },
+    {
+      "path": "tests/e2e/test_ac_tracking_1abe.py",
+      "sha256": "e71bf6055151f090dca7ff13904d5179d671b281c9e83614708e2ce76b527cec",
+      "size_bytes": 106166
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "cf07548df0b71fe9a3df1c293bcb135e1674911c802548aca55b3605fc125e8d",
+      "size_bytes": 937
+    }
+  ],
+  "local_only_files": []
+}

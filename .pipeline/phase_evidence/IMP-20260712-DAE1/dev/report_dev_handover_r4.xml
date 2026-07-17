@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <phase>dev</phase>
+  <rework_round>REJECT4</rework_round>
+  <completed_at>2026-07-17T03:17:00Z</completed_at>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>tests/e2e/test_codex_defects_dae1.py</file>
+  </evidence>
+  <changes_summary>
+    <change mt="MT-R4-1">CODEX_CLI_SAFE_INPUT_CHARS=900_000 char 기반 상수 추가. _trim_codex_input 제거. _build_structured_codex_input 구현. _validate_post_build_prompt 구현. _cmd_gates_codex_review 호출부 업데이트.</change>
+    <change mt="MT-R4-4">ci.yml에 slow-e2e-tests job 추가</change>
+  </changes_summary>
+  <scope_declaration>
+    <files_to_modify>pipeline.py,.github/workflows/ci.yml,tests/e2e/test_codex_defects_dae1.py</files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_build_structured_codex_input, _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS, slow-e2e-tests job, 8개 회귀 테스트</target_function>
+    <removed_function>_trim_codex_input, CODEX_CLI_INPUT_MAX_CHARS</removed_function>
+    <state_mutations>pipeline.py 상수/함수 변경. ci.yml job 추가. 8개 테스트 추가.</state_mutations>
+    <call_sites_updated>_cmd_gates_codex_review 내 caller 1곳</call_sites_updated>
+    <risk_assessment>
+      <boundary_violation>false</boundary_violation>
+      <side_effects>none</side_effects>
+      <regression_risk>low</regression_risk>
+      <rollback_plan>git revert</rollback_plan>
+    </risk_assessment>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py,.github/workflows/ci.yml,tests/e2e/test_codex_defects_dae1.py</git_diff_files>
+    <manifest_files>pipeline.py,.github/workflows/ci.yml,tests/e2e/test_codex_defects_dae1.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <test_results>pytest 65 passed</test_results>
+</handover>
