@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-22",
+  "case_kind": "exception",
+  "description": "review engine 변경 + 대형 model router 변경 같은 PR — 자기참조 순환 감지 → 분할 요구 검증",
+  "changed_symbols": ["_cmd_gates_codex_review", "_build_codex_review_bundle", "_build_model_router"],
+  "review_engine_changed": true,
+  "model_router_lines_changed": 800,
+  "self_referential": true
+}

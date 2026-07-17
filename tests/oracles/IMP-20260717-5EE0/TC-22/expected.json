@@ -1,0 +1,7 @@
+{
+  "case_id": "TC-22",
+  "status": "BLOCKED",
+  "failure_code": "pr_split_required",
+  "reason": "self_referential",
+  "split_plan_present": true
+}

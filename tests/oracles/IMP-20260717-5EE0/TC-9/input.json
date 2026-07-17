@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-9",
+  "case_kind": "edge",
+  "description": "일부 shard만 APPROVE_TO_USER — aggregate APPROVED 금지 검증",
+  "shards": [
+    {"shard_id": "shard-core-review-engine", "verdict": "APPROVE_TO_USER"},
+    {"shard_id": "shard-verdict-parser-and-trust", "verdict": "REJECT"}
+  ]
+}

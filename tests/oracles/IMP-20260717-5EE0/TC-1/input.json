@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-1",
+  "case_kind": "normal",
+  "description": "20,000줄 synthetic PR — 전체 diff를 prompt에 넣지 않는지 검증",
+  "pr_diff_lines": 20000,
+  "changed_files": ["pipeline.py"],
+  "changed_symbols": ["_cmd_gates_codex_review"],
+  "simulate_large_pr": true
+}

@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-1",
+  "full_diff_in_prompt": false,
+  "shard_count_min": 1,
+  "all_shards_under_target_budget": true,
+  "coverage_status": "COMPLETE",
+  "evidence_mode": "ast_extract"
+}
