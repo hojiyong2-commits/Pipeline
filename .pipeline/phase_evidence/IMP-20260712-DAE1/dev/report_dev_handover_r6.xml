@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <rework_round>REJECT#6</rework_round>
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_defects_dae1.py</file>
+  </implemented_files>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_defects_dae1.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_consume_codex_run_permit</target_function>
+    <target_function>_atomic_claim_codex_run_permit</target_function>
+    <target_function>_cmd_gates_codex_review</target_function>
+    <target_function>test_r6_*</target_function>
+  </impact_analysis>
+  <module_gates>
+    <module id="MT-R6-1" status="PASS"/>
+    <module id="MT-R6-2" status="PASS"/>
+    <module id="MT-R6-3" status="PASS"/>
+    <module id="MT-R6-4" status="PASS"/>
+    <module id="MT-R6-5" status="PASS"/>
+    <integration status="PASS"/>
+  </module_gates>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_defects_dae1.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_defects_dae1.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <qa_handover>
+    <evidence>pipeline.py, tests/e2e/test_codex_defects_dae1.py</evidence>
+    <test_count>79 passed</test_count>
+  </qa_handover>
+  <handover>
+    <to>QA Agent</to>
+    <evidence>pipeline.py, tests/e2e/test_codex_defects_dae1.py</evidence>
+    <summary>REJECT#6 4개 수정 완료: P0-1(_consume_codex_run_permit OSError→RuntimeError), P0-2(_atomic_claim O_EXCL), P1-1(충돌 플래그 차단), P1-2(--preflight-only). 회귀 테스트 7개 추가. 전체 79 passed.</summary>
+  </handover>
+</dev_handover>

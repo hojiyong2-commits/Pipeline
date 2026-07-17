@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <pipeline_id>IMP-20260712-DAE1</pipeline_id>
+  <phase>dev</phase>
+  <agent_id>dev-agent</agent_id>
+  <rework_round>REJECT5</rework_round>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>tests/e2e/test_codex_defects_dae1.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_id>MT-R5-1</mt_id>
+    <target_function>_build_structured_codex_input</target_function>
+    <change>전역 line dedup 제거: CRITICAL HUNK 반복 라인도 유지, budget 초과 시 원본 반환</change>
+    <mt_id>MT-R5-2</mt_id>
+    <target_function>_parse_json_verdict</target_function>
+    <change>brace depth scanner 제거, NDJSON 라인별 파싱 + JSONDecoder.raw_decode 사용</change>
+    <mt_id>MT-R5-3</mt_id>
+    <target_function>_cmd_gates_codex_review</target_function>
+    <change>1회용 run permit gate 추가: pipeline_id+epoch+pr_head_sha+bundle_sha256 스냅샷</change>
+    <mt_id>MT-R5-4</mt_id>
+    <target_function>tests/e2e/test_codex_defects_dae1.py</target_function>
+    <change>회귀 테스트 7개 추가 (test_r5_* prefix). 총 72 passed.</change>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_codex_defects_dae1.py</git_diff_files>
+    <manifest_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_codex_defects_dae1.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <self_check>
+    <item>P0-1 전역 dedup 제거: PASS</item>
+    <item>P0-2 NDJSON 파싱: PASS</item>
+    <item>P0-3 run permit gate: PASS</item>
+    <item>회귀 테스트 72 passed: PASS</item>
+    <item>scope_lock 초과 파일: 없음</item>
+  </self_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <file>tests/e2e/test_codex_defects_dae1.py</file>
+  </evidence>
+</handover>
