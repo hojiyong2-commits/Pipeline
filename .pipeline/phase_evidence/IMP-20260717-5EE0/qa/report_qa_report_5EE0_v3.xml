@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260717-5EE0</pipeline_id>
+  <task>REJECT#2 rework (MT-10) 검증 — pipeline.py 9개 요구사항 + 신규 E2E 11개</task>
+  <verdict>PASS</verdict>
+
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py (수정), tests/e2e/test_bootstrap_e2e_v2_5ee0.py (신규)</evidence>
+  </handover>
+
+  <qa_verdict>
+    <result>PASS</result>
+    <reason>9개 필수 함수 전부 존재, 절대 금지 조건 2건 모두 위반 없음, 신규 E2E 11개 전부 PASS, 기존 회귀 4개 전부 PASS.</reason>
+  </qa_verdict>
+
+  <verification_evidence>
+    <required_functions_check>
+      <status>PASS — 9/9 존재</status>
+      <function name="_get_changed_line_ranges" line="23710" present="true"/>
+      <function name="_map_lines_to_ast_nodes" line="23764" present="true"/>
+      <function name="_extract_changed_symbols_evidence" line="23837" present="true"/>
+      <function name="_build_coverage_manifest" line="23894" present="true"/>
+      <function name="_issue_codex_shard_review_permit" line="24981" present="true"/>
+      <function name="_check_and_consume_permit" line="25041" present="true"/>
+      <function name="_find_codex_bin" line="24866" present="true"/>
+      <function name="_serialize_shard_to_prompt" line="24880" present="true"/>
+      <function name="_parse_codex_cli_shard_output" line="24924" present="true"/>
+    </required_functions_check>
+
+    <prohibited_conditions_check>
+      <condition id="1" name="full_ast로 pipeline.py 전체 포함 금지">
+        <verdict>PASS — 위반 없음</verdict>
+        <detail>변경 라인이 있는 경우(_real_python 경로, line 23385~) _extract_changed_symbols_evidence로 변경된 AST 심볼만 evidence로 추출한다. 전체 파일 포함은 신규파일/무-diff(full_file_capped) 또는 모듈레벨(module_level_capped)에서만 발생하며 모두 SHARD_HARD_BUDGET(250,000자)로 capped된다. pipeline.py는 CRITICAL 위험도로 분류되어(line 23245) 전체 파일이 단일 evidence로 삽입되지 않는다. TC-23이 모든 shard의 prompt_chars &lt;= 250,000을 assert하며 PASS.</detail>
+      </condition>
+      <condition id="2" name="CODEX_CLI_MOCK=1만으로 production APPROVE 금지 (permit 검증 없이)">
+        <verdict>PASS — 위반 없음</verdict>
+        <detail>_call_codex_cli_for_shard의 CODEX_CLI_MOCK=1 분기(line 25154)는 함수 단위 DI seam일 뿐이다. handler(line 25488~)는 permit이 존재할 때만(_shard_review_permit_path().exists()) 자동 shard-CLI 경로에 진입하고, _check_and_consume_permit(line 25498)이 stale/만료/소비/불일치를 fail-closed로 검증·소비한 뒤에만 _call_codex_cli_for_shard를 호출한다. permit 없으면 기존 codex_verdict_required 차단 유지. permit 발급은 CODEX_RUN_AUTHORIZED=1(사용자 명시)만 허용(line 25013). TC-25(mock+permit없음 → returncode!=0), TC-28(permit없음 → BLOCKED) 모두 PASS.</detail>
+      </condition>
+    </prohibited_conditions_check>
+
+    <new_e2e_tests file="tests/e2e/test_bootstrap_e2e_v2_5ee0.py">
+      <result>11 passed in 34.03s</result>
+      <test name="test_tc23_preflight_excludes_full_pipeline_py" status="PASSED"/>
+      <test name="test_tc24_coverage_manifest_present" status="PASSED"/>
+      <test name="test_tc25_no_mock_approval_in_production" status="PASSED"/>
+      <test name="test_tc26_shard_reject_propagates" status="PASSED"/>
+      <test name="test_tc27_shard_error_propagates" status="PASSED"/>
+      <test name="test_tc28_permit_required_before_cli" status="PASSED"/>
+      <test name="test_tc29_permit_stale_blocks" status="PASSED"/>
+      <test name="test_tc29b_permit_consumed_single_use" status="PASSED"/>
+      <test name="test_tc30_input_too_large_is_error" status="PASSED"/>
+      <test name="test_tc31_all_shards_approve" status="PASSED"/>
+      <test name="test_tc31b_missing_required_shard_errors" status="PASSED"/>
+    </new_e2e_tests>
+
+    <regression_tests file="tests/e2e/test_bootstrap_rework_5ee0.py">
+      <result>4 passed in 14.16s</result>
+      <test name="test_tc23_preflight_runs_full_pipeline" status="PASSED"/>
+      <test name="test_tc24_sharding_on_by_default" status="PASSED"/>
+      <test name="test_tc25_aggregate_called_via_mock" status="PASSED"/>
+      <test name="test_tc25b_no_mock_returns_error" status="PASSED"/>
+    </regression_tests>
+
+    <functional_binding_verified>
+      PASS — permit 발급/소비 함수가 handler(line 25270 발급, 25498 소비)에 실제 연결되어 있고,
+      _call_codex_cli_for_shard(line 25501)이 소비된 permit을 인자로 받아 호출된다. 함수 정의만 존재하는
+      dead code가 아님.
+    </functional_binding_verified>
+  </verification_evidence>
+
+  <category_check>
+    <wa>N-A — 변경 코드에 HTTP 네트워크 호출 없음(codex는 subprocess). WA 미해당.</wa>
+    <ui>N-A — UI 위젯 없음.</ui>
+    <fs>N-A — meta-task(pipeline.py). 파일 I/O는 기존 _read_text_fallback/_write_json 헬퍼 사용.</fs>
+    <pd>PASS — 함수 단위 책임 분리 양호. 반환 계약이 docstring에 명시됨.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — isinstance/None 타입가드, TypeError/ValueError 명시, lineno 범위 검증, 빈 데이터(len==0 return []) 처리, fail-closed 예외 분기 완비.</al>
+    <build>N-A — meta-task, EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+
+  <numeric_score>116</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="0">N/A — 네트워크 호출 없음</wa>
+    <ui score="0" max="0">N/A — UI 없음</ui>
+    <fs score="0" max="0">N/A — meta-task</fs>
+    <pd score="9" max="10">모듈분리 5/5 (함수 단일책임 명확) / 인터페이스계약 4/5 (반환 dict가 docstring으로 계약 명시되나 TypedDict/dataclass 대신 Dict[str,Any] 사용 — -1)</pd>
+    <al score="20" max="20">0나눗셈 위험 없음 5/5 / 범위검증(lineno&gt;=1, 슬라이스 경계) 5/5 / 타입검증(isinstance+TypeError) 5/5 / 빈데이터(len==0 return []) 5/5</al>
+    <build score="0" max="0">N/A</build>
+    <sec score="0" max="0">Phase 5 전담 — 미채점</sec>
+    <applicable_total score="29" max="30"/>
+    <total score="116" max="120"/>
+    <percentage>96.7</percentage>
+    <numeric_verdict>PASS (적용 카테고리 29/30 = 96.7%, 120 정규화 116 ≥ 96 임계값 상회)</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 신규 함수 전부 타입 힌팅 완비</type_hinting_all>
+      <widget_naming>N-A — UI 위젯 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 기존 _write_json 헬퍼 사용</atomic_write>
+      <encoding_fallback>PASS — _read_text_fallback 사용(다중 인코딩)</encoding_fallback>
+      <traversal_wired>N-A — 사용자 경로 입력 없음</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — E2E 11개 + 회귀 4개 실제 실행 증거 존재</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — permit 함수가 handler에 실제 호출 연결됨(dead code 아님)</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>2 (pipeline.py, tests/e2e/test_bootstrap_e2e_v2_5ee0.py)</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <mt_id>MT-10</mt_id>
+    <scope_declared_files>pipeline.py, tests/e2e/test_bootstrap_e2e_v2_5ee0.py</scope_declared_files>
+    <actual_changed_files>pipeline.py, tests/e2e/test_bootstrap_e2e_v2_5ee0.py</actual_changed_files>
+    <scope_exceeded>false</scope_exceeded>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <verdict>PASS</verdict>
+  </micro_task_boundary>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - PD 인터페이스 계약: 반환 dict를 TypedDict로 정의하면 정적 타입 검사기가 shard verdict 스키마(shard_id/verdict/findings/pr_head_sha/error_reason)를 강제할 수 있어 리팩터링 안전성이 향상됨(현재는 docstring 계약 + Dict[str,Any]).
+    - _issue_codex_shard_review_permit의 [Improvement] 주석대로 permit에 HMAC 서명을 추가하면 로컬 변조 탐지가 가능(현재는 fail-closed 소비만).
+  </improvement_suggestions>
+</qa_report>
