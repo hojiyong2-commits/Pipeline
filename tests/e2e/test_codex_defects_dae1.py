@@ -1541,6 +1541,7 @@ def test_r6_claimed_permit_not_reverted_on_cli_error(tmp_path: Path, monkeypatch
 # 테스트 R6-5: --start-epoch + --authorize-run 동시 플래그 → codex_review_conflicting_flags BLOCKED
 def test_r6_conflicting_flags_start_epoch_and_authorize_run(tmp_path: Path) -> None:
     """--start-epoch와 --authorize-run 동시 지정 → codex_review_conflicting_flags BLOCKED."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via return code + failure output.
     state_path, _ = _setup_state(
         tmp_path,
         {
@@ -1565,6 +1566,7 @@ def test_r6_conflicting_flags_start_epoch_and_authorize_run(tmp_path: Path) -> N
 # 테스트 R6-6: --preflight-only 실행 후 CLI 미호출 확인
 def test_r6_preflight_only_no_cli_call(tmp_path: Path) -> None:
     """--preflight-only: Codex CLI fake marker 미생성(CLI 미호출 확인)."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via marker file absence.
     state_path, _ = _setup_state(
         tmp_path,
         {
@@ -1591,6 +1593,7 @@ def test_r6_preflight_only_no_cli_call(tmp_path: Path) -> None:
 # 테스트 R6-7: --preflight-only 출력에 8개 필수 필드 포함 확인
 def test_r6_preflight_only_outputs_required_fields(tmp_path: Path) -> None:
     """--preflight-only 출력에 8개 필수 필드가 모두 포함되는지 확인."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via output fields.
     state_path, _ = _setup_state(
         tmp_path,
         {
