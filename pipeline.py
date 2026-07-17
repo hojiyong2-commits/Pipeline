@@ -24346,6 +24346,130 @@ def _check_convergence_guard(
     }
 
 
+# [Purpose]: IMP-20260717-5EE0 MT-9 — gates codex-review --preflight-only 전용 헬퍼.
+#            plan/shard/budget/convergence를 실제 계산하여 8개 필드 dict를 반환한다.
+# [Assumptions]: pipeline_id는 유효한 문자열. skip_cli=True이면 Codex CLI를 호출하지 않음.
+# [Vulnerability & Risks]: _build_codex_review_plan / _calculate_shard_budget / _build_shard_plan이
+#            단일 항목 초과(self-review) 등으로 SystemExit하면 blocked_reason에 사유를 담아 fail-soft로
+#            반환한다(preflight는 진단 목적이므로 여기서 프로세스를 죽이지 않는다).
+# [Improvement]: skip_cli=False 경로에서 실제 shard-by-shard CLI 호출을 추가할 수 있다.
+def _run_codex_review_preflight(pipeline_id: str, skip_cli: bool = True) -> Dict[str, Any]:
+    """gates codex-review --preflight-only 실행: plan/shard/budget/convergence 계산 후 8개 필드 반환.
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID(None/비str/빈문자열 금지).
+        skip_cli: True이면 Codex CLI 호출 없음 (preflight-only 모드).
+    Returns:
+        {review_plan, shard_plan, total_estimated_chars, per_shard_chars,
+         budget_ok, coverage_ok, convergence_ok, blocked_reason}.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if len(pipeline_id) == 0:
+        raise ValueError("pipeline_id must not be empty")
+
+    size_check = _check_pr_size_budget(pipeline_id)
+    blocked_reason: Optional[str] = None
+    if size_check.get("pr_split_required"):
+        reasons = size_check.get("reasons", [])
+        blocked_reason = f"pr_split_required: {', '.join(reasons)}"
+
+    review_plan: Dict[str, Any] = {}
+    shard_plan: List[Dict[str, Any]] = []
+    per_shard_chars: Dict[str, int] = {}
+    total_estimated_chars = 0
+    budget_ok = False
+    coverage_ok = False
+    convergence_ok = False
+
+    try:
+        review_plan = _build_codex_review_plan(pipeline_id)
+        shard_budgets = _calculate_shard_budget(review_plan)
+        shard_plan = _build_shard_plan(review_plan, shard_budgets)
+        per_shard_chars = {s["shard_id"]: int(s.get("prompt_chars", 0) or 0) for s in shard_plan}
+        total_estimated_chars = sum(per_shard_chars.values())
+        budget_ok = all(
+            int(s.get("prompt_chars", 0) or 0) <= SHARD_TARGET_BUDGET for s in shard_plan
+        )
+        coverage_ok = str(review_plan.get("coverage_status", "") or "") in ("FULL", "COMPLETE")
+    except SystemExit:
+        if not blocked_reason:
+            blocked_reason = "preflight_plan_blocked"
+    except Exception as exc:  # noqa: BLE001 — preflight 진단 실패는 fail-soft로 사유만 기록
+        if not blocked_reason:
+            blocked_reason = f"preflight_plan_error: {exc}"
+
+    try:
+        conv_check = _check_convergence_guard(pipeline_id)
+        convergence_ok = bool(conv_check.get("convergence_ok"))
+        if not convergence_ok and not blocked_reason:
+            blocked_reason = f"convergence_limit_reached: {conv_check.get('reject_count_in_epoch')} rejects"
+    except Exception as exc:  # noqa: BLE001 — convergence 조회 실패도 fail-soft
+        if not blocked_reason:
+            blocked_reason = f"convergence_check_error: {exc}"
+
+    return {
+        "review_plan": review_plan,
+        "shard_plan": shard_plan,
+        "total_estimated_chars": total_estimated_chars,
+        "per_shard_chars": per_shard_chars,
+        "budget_ok": budget_ok,
+        "coverage_ok": coverage_ok,
+        "convergence_ok": convergence_ok,
+        "blocked_reason": blocked_reason,
+    }
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-9 — 단일 shard에 대해 Codex CLI를 호출하여 verdict를 반환한다.
+#            CODEX_CLI_MOCK=1이면 mock APPROVE_TO_USER를 반환한다(테스트/부트스트랩용).
+# [Assumptions]: shard dict에 shard_id 키가 있음.
+# [Vulnerability & Risks]: 실제 CLI 미연결 환경에서는 ERROR verdict를 반환한다(fail-closed —
+#            집계 시 비승인 처리되어 premature approval을 방지한다).
+# [Improvement]: 실제 subprocess codex exec 호출로 교체하면 완전한 자동 리뷰가 가능하다.
+def _call_codex_cli_for_shard(shard: Dict[str, Any]) -> Dict[str, Any]:
+    """단일 shard에 대해 Codex CLI를 호출하여 verdict dict를 반환한다.
+
+    CODEX_CLI_MOCK=1이면 mock APPROVE_TO_USER를 반환한다(테스트용).
+    실제 환경에서는 향후 subprocess Codex CLI 연결 예정(현재는 미연결 ERROR 반환).
+
+    Args:
+        shard: shard 정의 dict (shard_id, included_evidence_ids 등; None/비dict 금지).
+    Returns:
+        {shard_id, verdict, findings, pr_head_sha[, error_reason]}.
+    Raises:
+        TypeError: shard가 None이거나 dict가 아닌 경우.
+    """
+    if shard is None:
+        raise TypeError("shard must not be None")
+    if not isinstance(shard, dict):
+        raise TypeError(f"shard must be dict, got {type(shard).__name__}")
+
+    shard_id = str(shard.get("shard_id", "") or "")
+    pr_head_sha = str(shard.get("pr_head_sha", "") or "")
+
+    if os.environ.get("CODEX_CLI_MOCK") == "1":
+        return {
+            "shard_id": shard_id,
+            "verdict": "APPROVE_TO_USER",
+            "findings": [],
+            "pr_head_sha": pr_head_sha,
+        }
+
+    # 실제 Codex CLI 호출 (향후 연결 — 현재는 미연결 ERROR 반환, fail-closed)
+    return {
+        "shard_id": shard_id,
+        "verdict": "ERROR",
+        "findings": [],
+        "pr_head_sha": pr_head_sha,
+        "error_reason": "codex_cli_not_connected",
+    }
+
+
 # [Purpose]: BUG-20260628-F52C MT-3 — gates codex-review 핸들러. staged snapshot(또는 현재
 #            디스크 packet)을 검토 대상으로 삼아 Codex verdict를 codex_review_result.json SSoT에
 #            기록한다. 이 함수가 codex_review_result.json을 생성하는 유일한 진입점이다.
@@ -24363,9 +24487,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     Raises:
         SystemExit: verdict 형식 오류 또는 packet SHA 계산 실패 시 BLOCKED.
     """
-    # --preflight-only: preflight 검사만 수행, Codex CLI 호출 없음
+    # IMP-20260717-5EE0 MT-9: --preflight-only: plan/shard/budget/convergence 실제 계산 후
+    #   8개 필드 JSON 출력. blocked_reason이 있으면 exit 1.
     if bool(getattr(args, "preflight_only", False)):
-        print("[preflight] gates codex-review --preflight-only: preflight check 완료, CLI 호출 없음")
+        _pf_pid = str(state.get("pipeline_id", "") or "")
+        if not _pf_pid:
+            _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다 (preflight).")
+        _pf_result = _run_codex_review_preflight(_pf_pid, skip_cli=True)
+        print(json.dumps(_pf_result, ensure_ascii=False, indent=2))
+        if _pf_result.get("blocked_reason"):
+            sys.exit(1)
         return
 
     pipeline_id = str(state.get("pipeline_id", "") or "")
@@ -24396,37 +24527,44 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             prev_cli_error_count = 0
             prev_status = ""
 
-    # MT-9: IMP-20260717-5EE0 — AST 기반 sharding 사전 검사(PR 크기/review plan/shard/수렴 가드).
-    #   구조만 구현되었으므로 기본은 off다. CODEX_REVIEW_SHARDING=1일 때만 활성화하여 기존
-    #   gates codex-review 흐름을 무손상으로 보존한다(bootstrap self-review chicken-and-egg 회피).
-    if os.environ.get("CODEX_REVIEW_SHARDING") == "1":
-        # PR 크기 사전 검사 (codex-review 진입 전)
-        _size_check = _check_pr_size_budget(pipeline_id)
-        if _size_check.get("pr_split_required"):
-            reasons = _size_check.get("reasons", [])
-            _die(
-                "[BLOCKED] failure_code=pr_split_required\n"
-                "  PR 크기가 Codex Review 한도를 초과합니다:\n"
-                + "\n".join(f"  - {r}" for r in reasons)
-                + "\n  PR을 분할하여 각각 별도로 Codex Review를 진행하세요."
-            )
+    # IMP-20260717-5EE0 MT-9: AST 기반 sharding 항상 활성화(CODEX_REVIEW_SHARDING guard 제거).
+    #   shard loop가 참조할 수 있도록 결과 변수를 먼저 초기화한다.
+    _shard_plan: List[Dict[str, Any]] = []
+    _shard_results_auto: List[Dict[str, Any]] = []
+    _auto_agg: Dict[str, Any] = {}
 
-        # review plan 생성 (AST 증거 추출 준비)
+    # PR 크기 사전 검사 (codex-review 진입 전) — 초과 시 hard 차단.
+    _size_check = _check_pr_size_budget(pipeline_id)
+    if _size_check.get("pr_split_required"):
+        reasons = _size_check.get("reasons", [])
+        _die(
+            "[BLOCKED] failure_code=pr_split_required\n"
+            "  PR 크기가 Codex Review 한도를 초과합니다:\n"
+            + "\n".join(f"  - {r}" for r in reasons)
+            + "\n  PR을 분할하여 각각 별도로 Codex Review를 진행하세요."
+        )
+
+    # review plan / shard plan 생성. 단일 항목이 shard 상한을 초과하는 자기참조(self-review)
+    #   케이스(pipeline.py 자체 리뷰)에서는 sharding이 불가하므로 fail-soft로 로깅 후 진행한다
+    #   (bootstrap chicken-and-egg 회피). _shard_plan은 비어 있고, 아래 cache-miss 경로가
+    #   기존 codex_verdict_required 차단을 그대로 유지한다.
+    try:
         _review_plan = _build_codex_review_plan(pipeline_id)
-        # shard budget 계산
         _shard_budgets = _calculate_shard_budget(_review_plan)
-        # shard plan 생성
         _shard_plan = _build_shard_plan(_review_plan, _shard_budgets)
         _log_event(state, f"codex sharding plan: {len(_shard_plan)} shards")
+    except SystemExit:
+        _shard_plan = []
+        _log_event(state, "codex sharding skipped: review item exceeds shard budget (self-review)")
 
-        # convergence guard 확인
-        _conv_check = _check_convergence_guard(pipeline_id)
-        if not _conv_check.get("convergence_ok"):
-            _die(
-                "[BLOCKED] failure_code=convergence_limit_reached\n"
-                f"  동일 epoch에서 REJECT {_conv_check.get('reject_count_in_epoch')}회 — 자동 재호출 금지.\n"
-                "  사용자 명시적 실행(--force-review 또는 새 epoch)이 필요합니다."
-            )
+    # convergence guard 확인 — 초과 시 hard 차단.
+    _conv_check = _check_convergence_guard(pipeline_id)
+    if not _conv_check.get("convergence_ok"):
+        _die(
+            "[BLOCKED] failure_code=convergence_limit_reached\n"
+            f"  동일 epoch에서 REJECT {_conv_check.get('reject_count_in_epoch')}회 — 자동 재호출 금지.\n"
+            "  사용자 명시적 실행(--force-review 또는 새 epoch)이 필요합니다."
+        )
 
     # BUG-20260702-E69E: Codex Review 입력 bundle을 SSoT artifact로 먼저 materialize한다(fail-closed).
     #   이 write가 review_bundle_sha256을 non-empty로 만들어, 이후 _codex_snapshot_identity가
@@ -24552,13 +24690,31 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             print("  [CACHE REUSE] Codex CLI 호출 없이 캐시된 APPROVE verdict를 재사용합니다.")
     else:
         print(f"  [CACHE MISS] {_cache_probe.get('reason')}")
-        # 명시적 verdict/CLI 결과가 없고 cache도 miss면 재사용 근거가 없으므로 BLOCKED.
+        # IMP-20260717-5EE0 MT-9: cache miss + explicit verdict/CLI 없음.
+        #   shard plan이 존재하면 shard loop로 각 shard를 자동 검토하고 집계 verdict를 산출한다.
+        #   shard plan이 비어 있으면(자기참조 self-review로 sharding 불가, 또는 critical 미신뢰
+        #   상태) 재사용 근거가 없으므로 기존 codex_verdict_required 차단을 그대로 유지한다.
         if not _explicit_verdict and not _explicit_cli:
-            _die(
-                "[BLOCKED] failure_code=codex_verdict_required\n"
-                f"  cache miss({_cache_probe.get('reason')})이고 --verdict/--codex-cli-exit-code도 없습니다.\n"
-                "  --verdict APPROVE_TO_USER|REJECT 또는 --codex-cli-exit-code로 CLI 결과를 넘기세요."
-            )
+            if _shard_plan:
+                _shard_results_auto = [_call_codex_cli_for_shard(_s) for _s in _shard_plan]
+                _auto_agg = _aggregate_shard_verdicts(_shard_results_auto)
+                _auto_verdict_raw = str(_auto_agg.get("verdict", "") or "")
+                # aggregate verdict를 단일 verdict로 변환(APPROVED만 승인, 그 외 전부 REJECT).
+                if _auto_verdict_raw == "APPROVED":
+                    args.verdict = "APPROVE_TO_USER"
+                else:
+                    args.verdict = "REJECT"
+                _explicit_verdict = True
+                print(
+                    f"  [SHARD REVIEW] {len(_shard_results_auto)} shards → "
+                    f"aggregate={_auto_verdict_raw} → verdict={args.verdict}"
+                )
+            else:
+                _die(
+                    "[BLOCKED] failure_code=codex_verdict_required\n"
+                    f"  cache miss({_cache_probe.get('reason')})이고 --verdict/--codex-cli-exit-code도 없습니다.\n"
+                    "  --verdict APPROVE_TO_USER|REJECT 또는 --codex-cli-exit-code로 CLI 결과를 넘기세요."
+                )
 
     # BUG-20260702-E69E REJECT-1: attempt 단위 상태 모델 — 이번 시도의 고유 식별자를 발급한다.
     attempt_id = _generate_attempt_id()
