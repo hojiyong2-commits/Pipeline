@@ -1,0 +1,7 @@
+{
+  "case_id": "TC-20",
+  "case_kind": "normal",
+  "description": "PR891 scale large fixture — 여러 bounded shard 생성",
+  "item_count": 40,
+  "per_item_chars": 180000
+}

@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-20",
+  "multiple_shards": true,
+  "all_shards_under_target": true,
+  "target_budget": 200000
+}

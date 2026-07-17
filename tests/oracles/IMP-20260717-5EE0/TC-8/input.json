@@ -1,0 +1,5 @@
+{
+  "case_id": "TC-8",
+  "case_kind": "normal",
+  "description": "no arbitrary truncation — AST 노드 단위 포함, 항목 분할 없음"
+}

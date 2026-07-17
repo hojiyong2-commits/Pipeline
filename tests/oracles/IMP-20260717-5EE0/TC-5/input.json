@@ -1,8 +1,6 @@
 {
   "case_id": "TC-5",
-  "case_kind": "edge",
-  "description": "인식 불가(unknown) hunk가 포함된 PR — evidence_complete=False + BLOCKED 검증",
-  "changed_files": ["pipeline.py", "unknown_binary.bin"],
-  "has_unknown_hunk": true,
-  "unknown_file": "unknown_binary.bin"
+  "status": "BLOCKED",
+  "evidence_complete": false,
+  "failure_code": "evidence_incomplete"
 }

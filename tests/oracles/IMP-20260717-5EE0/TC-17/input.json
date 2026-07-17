@@ -1,0 +1,12 @@
+{
+  "case_id": "TC-17",
+  "case_kind": "exception",
+  "description": "invalid findings schema — BLOCKED 처리",
+  "shards": [
+    {
+      "verdict": "APPROVE_TO_USER",
+      "pr_head_sha": "a",
+      "findings": "not-a-list"
+    }
+  ]
+}

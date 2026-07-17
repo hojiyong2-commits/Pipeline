@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-15",
+  "case_kind": "edge",
+  "description": "preflight blocks CLI — pr_split_required 시 CLI 미호출",
+  "metrics": {
+    "changed_product_lines": 2000
+  }
+}

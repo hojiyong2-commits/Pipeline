@@ -1,8 +1,8 @@
 {
   "case_id": "TC-2",
-  "case_kind": "normal",
-  "description": "8,000줄 테스트 파일이 테스트명/assertion/fixture SHA 요약으로 변환되는지 검증",
-  "file_type": "test",
-  "file_lines": 8000,
-  "file_path": "tests/e2e/test_large_sample.py"
+  "full_file_in_evidence": false,
+  "contains_test_names": true,
+  "contains_assertion_summary": true,
+  "contains_fixture_sha": true,
+  "evidence_chars_max": 30000
 }

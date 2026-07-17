@@ -1,0 +1,5 @@
+{
+  "case_id": "TC-18",
+  "raw_accept_excluded": true,
+  "reason": "raw_accept_secret"
+}

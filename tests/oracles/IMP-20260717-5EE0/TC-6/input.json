@@ -1,9 +1,6 @@
 {
   "case_id": "TC-6",
-  "case_kind": "edge",
-  "description": "critical changed symbol 목록에서 일부 누락 — BLOCKED 검증",
-  "changed_files": ["pipeline.py"],
-  "critical_symbols": ["_cmd_gates_request_accept", "_cmd_gates_accept"],
-  "evidence_covers_symbols": ["_cmd_gates_request_accept"],
-  "missing_symbol": "_cmd_gates_accept"
+  "status": "BLOCKED",
+  "failure_code": "critical_symbol_missing",
+  "missing_symbols": ["_cmd_gates_accept"]
 }

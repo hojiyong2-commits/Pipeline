@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-12",
+  "case_kind": "normal",
+  "description": "contract/policy 변경 시 캐시 무효화",
+  "trigger_reason": "contract_changed"
+}
