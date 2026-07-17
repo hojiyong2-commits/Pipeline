@@ -1,0 +1,13 @@
+{
+  "case_id": "TC-36",
+  "case_kind": "error",
+  "scenario": "_parse_codex_cli_shard_output verdict schema/consistency edge cases",
+  "cases": [
+    {"name": "missing_file", "result_file_exists": false},
+    {"name": "reject_empty_findings", "content": {"verdict": "REJECT", "findings": []}},
+    {"name": "approve_with_findings", "content": {"verdict": "APPROVE_TO_USER", "findings": [{"issue": "x"}]}},
+    {"name": "extra_field", "content": {"verdict": "APPROVE_TO_USER", "findings": [], "unexpected": 1}},
+    {"name": "bad_enum", "content": {"verdict": "MAYBE"}},
+    {"name": "valid_reject", "content": {"verdict": "REJECT", "findings": [{"issue": "x"}]}}
+  ]
+}

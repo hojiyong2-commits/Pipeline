@@ -77,14 +77,28 @@ def test_tc24_sharding_on_by_default(pipe, isolated_state, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# TC-25: CODEX_CLI_MOCK=1로 _call_codex_cli_for_shard 실행 + aggregate 확인
+# TC-25: _cli_factory DI seam으로 _call_codex_cli_for_shard 실행 + aggregate 확인
+#   (REJECT#3 P0-3: CODEX_CLI_MOCK 승인 우회 분기가 제거되어 DI seam으로 마이그레이션함)
 # ---------------------------------------------------------------------------
 def test_tc25_aggregate_called_via_mock(pipe, monkeypatch):
-    """CODEX_CLI_MOCK=1로 _call_codex_cli_for_shard가 APPROVE_TO_USER를 반환하고,
-    _aggregate_shard_verdicts가 APPROVED를 반환한다."""
-    monkeypatch.setenv("CODEX_CLI_MOCK", "1")
+    """_cli_factory DI seam으로 _call_codex_cli_for_shard가 APPROVE_TO_USER를 반환하고,
+    _aggregate_shard_verdicts가 APPROVED를 반환한다.
+
+    REJECT#3 P0-3: production CODEX_CLI_MOCK 승인 우회 분기는 완전히 제거되었으므로
+    테스트 결정성은 CODEX_CLI_MOCK 환경변수가 아닌 _cli_factory 주입으로 확보한다.
+    """
+    monkeypatch.delenv("CODEX_CLI_MOCK", raising=False)
     shard = {"shard_id": "shard-core", "pr_head_sha": "a" * 40}
-    result = pipe._call_codex_cli_for_shard(shard)
+
+    def _fake_cli(s, _permit):
+        return {
+            "shard_id": s.get("shard_id"),
+            "verdict": "APPROVE_TO_USER",
+            "findings": [],
+            "pr_head_sha": s.get("pr_head_sha"),
+        }
+
+    result = pipe._call_codex_cli_for_shard(shard, _cli_factory=_fake_cli)
     assert result["verdict"] == "APPROVE_TO_USER"
     assert result["shard_id"] == "shard-core"
 

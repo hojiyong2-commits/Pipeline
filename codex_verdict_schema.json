@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["verdict"],
+  "properties": {
+    "verdict": {"type": "string", "enum": ["APPROVE_TO_USER", "REJECT"]},
+    "findings": {"type": "array"},
+    "review_notes": {"type": "string"}
+  },
+  "additionalProperties": false
+}

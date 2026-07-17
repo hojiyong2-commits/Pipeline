@@ -24913,72 +24913,207 @@ def _serialize_shard_to_prompt(shard: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-# [Purpose]: IMP-20260717-5EE0 MT-10 — Codex CLI stdout을 strict verdict schema로 파싱한다.
-# [Assumptions]: stdout에 verdict JSON이 한 줄 이상 포함된다(JSONL 또는 단일 JSON).
-# [Vulnerability & Risks]: APPROVE_TO_USER/REJECT 이외의 값은 승인으로 인정하지 않고 verdict_parse_failure
-#            ERROR를 반환한다(fail-closed — mock/garbage로 승인 우회 방지).
-# [Improvement]: findings 항목 스키마(scope/severity 등)를 여기서 함께 검증할 수 있다.
-def _parse_codex_cli_shard_output(
-    stdout: str, shard_id: str, pr_head_sha: str
-) -> Dict[str, Any]:
-    """Codex CLI stdout을 strict verdict schema로 파싱한다.
+# [Purpose]: IMP-20260717-5EE0 MT-11(REJECT#3 P0-2) — codex_verdict_schema.json 계약 경로 SSoT.
+# [Assumptions]: 스키마 파일은 repo 루트에 있으며 draft-07 JSON schema다.
+# [Vulnerability & Risks]: 파일이 없거나 로드 실패해도 내장 fallback 스키마로 검증을 계속한다(fail-closed).
+# [Improvement]: 스키마 버전 필드를 추가하여 verdict 계약 진화를 추적할 수 있다.
+def _codex_verdict_schema_path() -> Path:
+    """codex_verdict_schema.json 절대 경로를 반환한다.
+
+    Returns:
+        codex_verdict_schema.json 경로(repo 루트 기준).
+    """
+    return BASE_DIR / "codex_verdict_schema.json"
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-11(REJECT#3 P0-2) — Codex verdict 객체를 strict schema로 검증한다.
+# [Assumptions]: obj는 json.loads로 파싱된 dict다(호출자가 dict 여부를 이미 확인).
+# [Vulnerability & Risks]: schema 위반/enum 위반/추가 필드는 모두 False로 fail-closed 처리한다.
+#            jsonschema 미설치 환경(신규 의존성 회피)에서도 동일 규칙을 수동 검증한다.
+# [Improvement]: findings 항목의 세부 스키마(scope/severity)까지 검증하도록 확장할 수 있다.
+def _validate_codex_verdict_obj(obj: Any) -> bool:
+    """Codex verdict dict가 codex_verdict_schema.json 계약을 만족하는지 검증한다.
+
+    스키마는 _codex_verdict_schema_path()로 로드한다. 파일 로드 실패 시
+    내장 fallback 규칙(동일 계약 기준)으로 검증을 계속한다(fail-closed).
 
     Args:
-        stdout: Codex CLI 표준 출력(None이면 빈 문자열로 취급).
+        obj: 검증 대상(dict가 아니면 즉시 False).
+    Returns:
+        스키마를 만족하면 True, 아니면 False(fail-closed).
+    """
+    if not isinstance(obj, dict):
+        return False
+    # 스키마 파일에서 allowed_keys와 verdict enum을 로드 (SSoT: codex_verdict_schema.json)
+    allowed_keys: set = {"verdict", "findings", "review_notes"}
+    valid_verdicts: tuple = ("APPROVE_TO_USER", "REJECT")
+    try:
+        schema_path = _codex_verdict_schema_path()
+        if schema_path.exists():
+            import json as _json
+            schema = _json.loads(schema_path.read_text(encoding="utf-8"))
+            props = schema.get("properties", {})
+            if props:
+                allowed_keys = set(props.keys())
+            verdict_enum = props.get("verdict", {}).get("enum")
+            if isinstance(verdict_enum, list) and verdict_enum:
+                valid_verdicts = tuple(verdict_enum)
+    except Exception:
+        pass  # fallback to hardcoded values above
+    # 계약 검증
+    if set(obj.keys()) - allowed_keys:
+        return False  # additionalProperties=False
+    if "verdict" not in obj:
+        return False
+    if obj.get("verdict") not in valid_verdicts:
+        return False
+    if "findings" in obj and not isinstance(obj["findings"], list):
+        return False
+    if "review_notes" in obj and not isinstance(obj["review_notes"], str):
+        return False
+    return True
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-11(REJECT#3 P0-2) — Codex CLI --output-last-message 결과 파일을
+#            strict verdict schema로 파싱한다. codex exec --json은 JSONL 이벤트를 stdout에 흘리므로
+#            verdict는 stdout이 아닌 --output-last-message 파일에서 읽는다.
+# [Assumptions]: result_file_path는 codex CLI가 --output-last-message로 기록한 단일 JSON 파일 경로다.
+# [Vulnerability & Risks]: 파일 없음/파싱 실패/스키마 위반/REJECT-빈findings/APPROVE-비어있지않은findings는
+#            모두 verdict_parse_failure ERROR로 반환한다(fail-closed — reject_count 미소모, mock 우회 방지).
+# [Improvement]: findings 항목 스키마(scope/severity 등)를 여기서 함께 검증할 수 있다.
+def _parse_codex_cli_shard_output(
+    result_file_path: str, shard_id: str, pr_head_sha: str
+) -> Dict[str, Any]:
+    """Codex CLI 결과 파일(--output-last-message)을 strict verdict schema로 파싱한다.
+
+    Args:
+        result_file_path: --output-last-message가 기록한 결과 파일 경로(None/비str 금지).
         shard_id: shard 식별자(None/비str 금지).
         pr_head_sha: PR head SHA(None/비str 금지).
     Returns:
         {shard_id, verdict, findings, pr_head_sha[, error_reason]}.
     Raises:
-        TypeError: shard_id/pr_head_sha가 None이거나 str이 아닌 경우.
+        TypeError: 인자가 None이거나 str이 아닌 경우.
     """
-    if shard_id is None or pr_head_sha is None:
-        raise TypeError("shard_id and pr_head_sha must not be None")
+    if shard_id is None or pr_head_sha is None or result_file_path is None:
+        raise TypeError("result_file_path/shard_id/pr_head_sha must not be None")
     if not isinstance(shard_id, str):
         raise TypeError(f"shard_id must be str, got {type(shard_id).__name__}")
     if not isinstance(pr_head_sha, str):
         raise TypeError(f"pr_head_sha must be str, got {type(pr_head_sha).__name__}")
+    if not isinstance(result_file_path, str):
+        raise TypeError(
+            f"result_file_path must be str, got {type(result_file_path).__name__}"
+        )
 
-    text = str(stdout or "")
-    for raw in text.strip().splitlines():
-        raw = raw.strip()
-        if not raw:
-            continue
-        try:
-            obj = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        verdict = str(obj.get("verdict", "") or "")
-        if verdict in ("APPROVE_TO_USER", "REJECT"):
-            findings = obj.get("findings", [])
-            if not isinstance(findings, list):
-                findings = []
-            return {
-                "shard_id": shard_id,
-                "verdict": verdict,
-                "findings": findings,
-                "pr_head_sha": pr_head_sha,
-            }
+    def _parse_error() -> Dict[str, Any]:
+        return {
+            "shard_id": shard_id,
+            "verdict": "ERROR",
+            "findings": [],
+            "pr_head_sha": pr_head_sha,
+            "error_reason": "verdict_parse_failure",
+        }
+
+    result_path = Path(result_file_path)
+    if not result_path.exists():
+        return _parse_error()  # 파일 없음 → verdict_parse_failure(reject_count 미소모)
+    try:
+        raw = _read_text_fallback(result_path)  # utf-8→cp949→latin-1 4-enc fallback
+    except OSError:
+        return _parse_error()
+    try:
+        obj = json.loads(raw)
+    except json.JSONDecodeError:
+        return _parse_error()
+    if not _validate_codex_verdict_obj(obj):
+        return _parse_error()  # schema 위반 → fail-closed
+
+    verdict = str(obj.get("verdict", "") or "")
+    findings = obj.get("findings", [])
+    if not isinstance(findings, list):
+        return _parse_error()
+    # REJECT는 최소 1개 finding이 있어야 유효하다(빈 REJECT는 계약 위반).
+    if verdict == "REJECT" and len(findings) == 0:
+        return _parse_error()
+    # APPROVE_TO_USER는 findings가 비어 있어야 유효하다(승인인데 finding 존재 = 모순).
+    if verdict == "APPROVE_TO_USER" and len(findings) != 0:
+        return _parse_error()
     return {
         "shard_id": shard_id,
-        "verdict": "ERROR",
-        "findings": [],
+        "verdict": verdict,
+        "findings": findings,
         "pr_head_sha": pr_head_sha,
-        "error_reason": "verdict_parse_failure",
     }
 
 
-# [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제5) — 단일 사용 Codex shard-review permit을 발급한다.
-#            에이전트가 자동 발급하지 못하도록 CODEX_RUN_AUTHORIZED=1(사용자 명시)만 허용한다.
+# [Purpose]: IMP-20260717-5EE0 MT-11(REJECT#3 P0-4) — OS별 authorize-run 안내 명령을 반환한다.
+#            Windows PowerShell은 `CODEX_RUN_AUTHORIZED=1 python ...` 인라인 prefix를 지원하지 않으므로
+#            $env: 설정/해제 형태로 안내한다.
+# [Assumptions]: sys.platform이 'win32'면 PowerShell, 그 외는 POSIX 셸로 간주한다.
+# [Vulnerability & Risks]: 순수 함수(부작용 없음). 잘못된 안내는 사용자가 permit을 발급하지 못하게 한다.
+# [Improvement]: cmd.exe(set) 변형까지 세분화할 수 있다.
+def _codex_authorize_cmd_hint() -> str:
+    """현재 OS에 맞는 authorize-run 실행 안내 문자열을 반환한다.
+
+    Returns:
+        PowerShell($env:) 또는 POSIX(inline env prefix) 실행 안내 텍스트.
+    """
+    if sys.platform == "win32":
+        return (
+            '$env:CODEX_RUN_AUTHORIZED="1"\n'
+            "  python pipeline.py gates codex-review --authorize-run\n"
+            "  Remove-Item Env:CODEX_RUN_AUTHORIZED"
+        )
+    return "CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-11(REJECT#3 P0-5) — permit 발급 전 working tree가 HEAD와 일치하는지
+#            검증한다. tracked 소스가 커밋되지 않으면 검토 대상(SHA)과 실제 코드가 어긋나므로 차단한다.
+# [Assumptions]: git이 PATH에 있고 현재 디렉토리가 git 워킹트리다.
+# [Vulnerability & Risks]: git 미설치/타임아웃/비정상 종료/dirty는 모두 working_tree_dirty로 fail-closed _die.
+# [Improvement]: 특정 경로만 검사하도록 pathspec를 인자로 받을 수 있다.
+def _verify_working_tree_integrity() -> None:
+    """permit 발급 전 tracked source 파일의 working-tree가 HEAD와 일치하는지 검증한다.
+
+    Raises:
+        SystemExit: git 실행 불가/타임아웃/비정상 종료 또는 working tree가 dirty한 경우.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=30,
+        )
+        if result.returncode != 0:
+            _die(
+                "[BLOCKED] failure_code=working_tree_dirty\n"
+                f"  git diff 실행 오류: {result.stderr.strip()}"
+            )
+        changed = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+        if changed:
+            _die(
+                "[BLOCKED] failure_code=working_tree_dirty\n"
+                f"  tracked 소스 파일이 HEAD와 다릅니다: {changed}\n"
+                "  git add와 commit 후 재시도하세요."
+            )
+    except FileNotFoundError:
+        _die("[BLOCKED] failure_code=working_tree_dirty\n  git 실행 파일을 찾을 수 없습니다.")
+    except subprocess.TimeoutExpired:
+        _die("[BLOCKED] failure_code=working_tree_dirty\n  git 명령 타임아웃.")
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-10/MT-11(REJECT#2 문제5, REJECT#3 P0-1) — 단일 사용 Codex shard-review
+#            permit을 발급한다. 에이전트가 자동 발급하지 못하도록 CODEX_RUN_AUTHORIZED=1(사용자 명시)만
+#            허용하고, permit에 review_plan_sha + contract_sha를 함께 봉인하여 검토 대상 drift를 차단한다.
 # [Assumptions]: 사용자가 gates codex-review --authorize-run으로 명시적으로 실행한다.
-# [Vulnerability & Risks]: 환경변수 없으면 fail-closed로 _die한다. permit은 원자적으로 기록한다.
+# [Vulnerability & Risks]: 환경변수 없으면 fail-closed로 _die한다. working tree가 dirty하면 발급을 차단한다.
+#            permit은 원자적으로 기록한다.
 # [Improvement]: permit에 서명(HMAC)을 추가하면 위·변조 탐지가 가능하다.
 def _issue_codex_shard_review_permit(
     pipeline_id: str,
     pr_head_sha: str,
     review_plan_sha: str,
+    contract_sha: str = "",
     expiry_seconds: int = 3600,
 ) -> Dict[str, Any]:
     """단일 사용 permit을 발급한다(CODEX_RUN_AUTHORIZED=1 필수).
@@ -24987,21 +25122,28 @@ def _issue_codex_shard_review_permit(
         pipeline_id: 활성 파이프라인 ID(None/비str/빈문자열 금지).
         pr_head_sha: 검토 대상 PR head SHA(None/비str 금지).
         review_plan_sha: review_plan SHA(None/비str 금지).
+        contract_sha: 검토 대상 contract SHA(None/비str 금지; 빈 문자열 허용 — 하위 호환).
         expiry_seconds: 만료 초(양수만 허용; 0/음수 금지).
     Returns:
         발급된 permit dict.
     Raises:
         TypeError/ValueError: 인자 검증 실패 시.
-        SystemExit: CODEX_RUN_AUTHORIZED != "1"인 경우(fail-closed).
+        SystemExit: CODEX_RUN_AUTHORIZED != "1"이거나 working tree가 dirty한 경우(fail-closed).
     """
     if pipeline_id is None or pr_head_sha is None or review_plan_sha is None:
         raise TypeError("pipeline_id/pr_head_sha/review_plan_sha must not be None")
+    if contract_sha is None:
+        raise TypeError("contract_sha must not be None")
     if not isinstance(pipeline_id, str):
         raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
     if len(pipeline_id) == 0:
         raise ValueError("pipeline_id must not be empty")
-    if not isinstance(pr_head_sha, str) or not isinstance(review_plan_sha, str):
-        raise TypeError("pr_head_sha and review_plan_sha must be str")
+    if (
+        not isinstance(pr_head_sha, str)
+        or not isinstance(review_plan_sha, str)
+        or not isinstance(contract_sha, str)
+    ):
+        raise TypeError("pr_head_sha/review_plan_sha/contract_sha must be str")
     if not isinstance(expiry_seconds, int) or isinstance(expiry_seconds, bool):
         raise TypeError("expiry_seconds must be int")
     if expiry_seconds <= 0:  # negative/zero not allowed: permit 만료는 미래여야 함
@@ -25011,8 +25153,11 @@ def _issue_codex_shard_review_permit(
         _die(
             "[BLOCKED] failure_code=permit_unauthorized\n"
             "  permit은 사용자가 직접 CODEX_RUN_AUTHORIZED=1 환경변수로 발급해야 합니다.\n"
-            "  실행: CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
+            f"  실행:\n  {_codex_authorize_cmd_hint()}"
         )
+
+    # REJECT#3 P0-5: permit 발급 전 working tree 정합성 검증(dirty면 fail-closed 차단).
+    _verify_working_tree_integrity()
 
     from datetime import datetime, timedelta, timezone  # noqa: PLC0415
     now = datetime.now(timezone.utc)
@@ -25021,6 +25166,7 @@ def _issue_codex_shard_review_permit(
         "pipeline_id": pipeline_id,
         "pr_head_sha": pr_head_sha,
         "review_plan_sha": review_plan_sha,
+        "contract_sha": contract_sha,
         "issued_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "expires_at": expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "consumed": False,
@@ -25030,15 +25176,18 @@ def _issue_codex_shard_review_permit(
     return permit
 
 
-# [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제5) — permit을 검증하고 원자적으로 소비한다.
-#            없음/소비됨/파이프라인 불일치/stale(head 변경)/만료를 모두 fail-closed로 차단한다.
+# [Purpose]: IMP-20260717-5EE0 MT-10/MT-11(REJECT#2 문제5, REJECT#3 P0-1) — permit을 검증하고 원자적으로
+#            소비한다. 없음/소비됨/파이프라인 불일치/head stale/review_plan stale/contract stale/만료를
+#            모두 fail-closed로 차단한다.
 # [Assumptions]: permit은 _issue_codex_shard_review_permit이 발급한 dict다.
-# [Vulnerability & Risks]: 소비 후 consumed=True로 표시하여 재사용을 차단한다(단일 사용).
-# [Improvement]: review_plan_sha 불일치도 stale로 차단하도록 강화할 수 있다.
+# [Vulnerability & Risks]: 모든 검증 통과 후에만 consumed=True로 표시하여 재사용을 차단한다(단일 사용).
+#            review_plan_sha/contract_sha 불일치는 검토 대상이 달라진 것이므로 stale로 차단한다.
+# [Improvement]: permit HMAC 서명 검증을 추가할 수 있다.
 def _check_and_consume_permit(
     pipeline_id: str,
     pr_head_sha: str,
     review_plan_sha: str,
+    current_contract_sha: str = "",
 ) -> Dict[str, Any]:
     """permit을 검증하고 원자적으로 소비한다.
 
@@ -25046,6 +25195,7 @@ def _check_and_consume_permit(
         pipeline_id: 활성 파이프라인 ID(None/비str/빈문자열 금지).
         pr_head_sha: 현재 PR head SHA(None/비str 금지).
         review_plan_sha: 현재 review_plan SHA(None/비str 금지).
+        current_contract_sha: 현재 contract SHA(None/비str 금지; 빈 문자열 허용 — 하위 호환).
     Returns:
         소비된 permit dict.
     Raises:
@@ -25054,19 +25204,25 @@ def _check_and_consume_permit(
     """
     if pipeline_id is None or pr_head_sha is None or review_plan_sha is None:
         raise TypeError("pipeline_id/pr_head_sha/review_plan_sha must not be None")
+    if current_contract_sha is None:
+        raise TypeError("current_contract_sha must not be None")
     if not isinstance(pipeline_id, str):
         raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
     if len(pipeline_id) == 0:
         raise ValueError("pipeline_id must not be empty")
-    if not isinstance(pr_head_sha, str) or not isinstance(review_plan_sha, str):
-        raise TypeError("pr_head_sha and review_plan_sha must be str")
+    if (
+        not isinstance(pr_head_sha, str)
+        or not isinstance(review_plan_sha, str)
+        or not isinstance(current_contract_sha, str)
+    ):
+        raise TypeError("pr_head_sha/review_plan_sha/current_contract_sha must be str")
 
     permit_path = _shard_review_permit_path()
     if not permit_path.exists():
         _die(
             "[BLOCKED] failure_code=permit_missing\n"
             "  shard review permit이 없습니다. 사용자가 다음으로 발급해야 합니다:\n"
-            "  CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
+            f"  {_codex_authorize_cmd_hint()}"
         )
     try:
         permit = json.loads(permit_path.read_text(encoding="utf-8"))
@@ -25090,6 +25246,20 @@ def _check_and_consume_permit(
             "[BLOCKED] failure_code=permit_stale\n"
             "  PR head SHA가 변경되었습니다. --authorize-run으로 재발급하세요."
         )
+    # REJECT#3 P0-1: review_plan_sha 불일치 → 검토 계획이 달라짐(stale). fail-closed 차단.
+    #   None/누락은 ""로 정규화(legacy permit 하위 호환); 실제 값 drift는 여전히 차단된다.
+    if str(permit.get("review_plan_sha") or "") != review_plan_sha:
+        _die(
+            "[BLOCKED] failure_code=permit_review_plan_stale\n"
+            "  review_plan SHA가 변경되었습니다. --authorize-run으로 재발급하세요."
+        )
+    # REJECT#3 P0-1: contract_sha 불일치 → 검토 대상 계약이 달라짐(stale). fail-closed 차단.
+    #   None/누락은 ""로 정규화(legacy permit 하위 호환); 실제 값 drift는 여전히 차단된다.
+    if str(permit.get("contract_sha") or "") != current_contract_sha:
+        _die(
+            "[BLOCKED] failure_code=permit_contract_stale\n"
+            "  contract SHA가 변경되었습니다. --authorize-run으로 재발급하세요."
+        )
 
     from datetime import datetime, timezone  # noqa: PLC0415
     try:
@@ -25111,14 +25281,14 @@ def _check_and_consume_permit(
     return permit
 
 
-# [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제4) — 단일 shard에 대해 실제 Codex CLI(subprocess)를
-#            호출하여 verdict를 반환한다. mock/DI는 테스트 seam으로 격리되고, permit gate는 handler에서
-#            강제되어 CODEX_CLI_MOCK=1만으로는 production 승인이 불가하다.
+# [Purpose]: IMP-20260717-5EE0 MT-10/MT-11(REJECT#2 문제4, REJECT#3 P0-3) — 단일 shard에 대해 실제
+#            Codex CLI(subprocess)를 호출하여 verdict를 반환한다. CODEX_CLI_MOCK 승인 우회 분기는
+#            완전히 제거되었으며, 테스트는 _cli_factory DI seam 또는 실제 subprocess만 사용한다.
 # [Assumptions]: shard dict에 shard_id/pr_head_sha/evidence_sources가 있다. permit은 handler가 이미
-#            소비하여 전달한다(있으면).
+#            소비하여 전달한다(있으면). verdict는 codex exec --output-last-message 파일에서 읽는다.
 # [Vulnerability & Risks]: timeout/network/auth/미설치/파싱 실패는 REJECT가 아닌 ERROR로 분류한다
 #            (fail-closed — CLI 오류를 거절로 오인하여 rate-limit을 소모하지 않음). 입력이 shard 상한을
-#            초과하면 CLI 호출 전에 input_too_large ERROR로 차단한다.
+#            초과하면 CLI 호출 전에 input_too_large ERROR로 차단한다. mock 승인 경로는 존재하지 않는다.
 # [Improvement]: 스트리밍 파싱과 부분 결과 재시도를 추가하면 대형 리뷰 안정성이 오른다.
 def _call_codex_cli_for_shard(
     shard: Dict[str, Any],
@@ -25146,17 +25316,8 @@ def _call_codex_cli_for_shard(
     shard_id = str(shard.get("shard_id", "") or "")
     pr_head_sha = str(shard.get("pr_head_sha", "") or "")
 
-    # 1) test DI seam(CODEX_CLI_MOCK=1): 함수 단위 결정성 검증용. handler permit gate가
-    #    production 오용을 차단하므로 여기서는 mock을 승인으로 매핑해도 실제 완료를 만들 수 없다.
-    if os.environ.get("CODEX_CLI_MOCK") == "1":
-        return {
-            "shard_id": shard_id,
-            "verdict": "APPROVE_TO_USER",
-            "findings": [],
-            "pr_head_sha": pr_head_sha,
-        }
-
-    # 2) 입력 크기 가드(fail-closed): shard prompt가 상한을 초과하면 CLI 호출 전에 ERROR.
+    # 1) 입력 크기 가드(fail-closed): shard prompt가 상한을 초과하면 CLI 호출 전에 ERROR.
+    #    REJECT#3 P0-3: CODEX_CLI_MOCK=1 mock 승인 분기는 제거되었다. 테스트는 _cli_factory를 사용한다.
     prompt_text = _serialize_shard_to_prompt(shard)
     if len(prompt_text) > SHARD_HARD_BUDGET:
         return {
@@ -25167,11 +25328,11 @@ def _call_codex_cli_for_shard(
             "error_reason": "input_too_large",
         }
 
-    # 3) 테스트 전용 CLI factory 주입(프로덕션 None 고정).
+    # 2) 테스트 전용 CLI factory 주입(프로덕션 None 고정 — 우회 불가).
     if _cli_factory is not None:
         return _cli_factory(shard, permit)
 
-    # 4) permit gate: 소비된 permit이 없으면 실제 Codex CLI를 호출하지 않는다(codex_cli_not_connected).
+    # 3) permit gate: 소비된 permit이 없으면 실제 Codex CLI를 호출하지 않는다(codex_cli_not_connected).
     #    handler가 permit을 소비하여 전달하는 경우에만 실제 subprocess 경로로 진입한다. 이것이
     #    사용자 미승인 상태(및 테스트)에서 실제 Codex 호출을 원천 차단한다(하위 호환 error_reason 유지).
     if permit is None:
@@ -25183,7 +25344,7 @@ def _call_codex_cli_for_shard(
             "error_reason": "codex_cli_not_connected",
         }
 
-    # 5) Codex CLI 실행 파일 탐색. 없으면 미연결 ERROR(하위 호환 error_reason 유지).
+    # 4) Codex CLI 실행 파일 탐색. 없으면 미연결 ERROR(하위 호환 error_reason 유지).
     codex_bin = _find_codex_bin()
     if not codex_bin:
         return {
@@ -25194,40 +25355,85 @@ def _call_codex_cli_for_shard(
             "error_reason": "codex_cli_not_connected",
         }
 
-    # 6) 실제 Codex CLI subprocess 호출(_invoke_codex_exec SSoT 패턴: codex exec --json -C <root> -).
-    cmd = [codex_bin, "exec", "--json", "-C", str(BASE_DIR), "-"]
-    env = {k: v for k, v in os.environ.items() if k != "OPENAI_API_KEY"}
+    # 5) 실제 Codex CLI subprocess 호출. verdict는 stdout JSONL이 아닌 --output-last-message 파일에서
+    #    읽는다(codex exec --json은 thread/item/turn 이벤트를 stdout에 흘리므로 verdict가 stdout에 없다).
+    #    --ephemeral로 세션을 남기지 않고, --sandbox read-only로 파일 변경을 원천 차단한다.
+    result_fd, result_file = tempfile.mkstemp(
+        prefix=f"codex_verdict_{shard_id or 'shard'}_", suffix=".json"
+    )
+    os.close(result_fd)  # subprocess가 직접 파일에 기록하므로 fd는 즉시 닫는다.
     try:
-        proc = subprocess.run(
-            cmd, input=prompt_text, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", env=env, timeout=600, check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
-                "pr_head_sha": pr_head_sha, "error_reason": "timeout"}
-    except FileNotFoundError:
-        return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
-                "pr_head_sha": pr_head_sha, "error_reason": "codex_cli_not_found"}
-    except OSError as exc:
-        return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
-                "pr_head_sha": pr_head_sha, "error_reason": f"cli_oserror: {exc}"}
+        cmd = [
+            codex_bin, "exec", "--json",
+            "--output-last-message", result_file,
+            "--ephemeral",
+            "--sandbox", "read-only",
+            "-C", str(BASE_DIR), "-",
+        ]
+        env = {k: v for k, v in os.environ.items() if k != "OPENAI_API_KEY"}
+        try:
+            proc = subprocess.run(
+                cmd, input=prompt_text, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", env=env, timeout=600, check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
+                    "pr_head_sha": pr_head_sha, "error_reason": "timeout"}
+        except FileNotFoundError:
+            return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
+                    "pr_head_sha": pr_head_sha, "error_reason": "codex_cli_not_found"}
+        except OSError as exc:
+            return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
+                    "pr_head_sha": pr_head_sha, "error_reason": f"cli_oserror: {exc}"}
 
-    if proc.returncode != 0:
-        stdout_low = (proc.stdout or "").lower()
-        stderr_low = (proc.stderr or "").lower()
-        if "usage limit" in stdout_low or "usage limit" in stderr_low:
-            err = "usage_limit"
-        elif "auth" in stderr_low or "login" in stderr_low:
-            err = "authentication_failed"
-        elif "network" in stderr_low or "connection" in stderr_low:
-            err = "network_error"
-        else:
-            err = f"cli_exit_{proc.returncode}"
-        return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
-                "pr_head_sha": pr_head_sha, "error_reason": err}
+        # 6) stdout JSONL 이벤트는 감사 로그로 보존한다(파이프라인 계약 경로).
+        _write_shard_audit_log(shard_id, proc.stdout or "")
 
-    # 7) stdout을 strict verdict schema로 파싱한다.
-    return _parse_codex_cli_shard_output(proc.stdout, shard_id, pr_head_sha)
+        if proc.returncode != 0:
+            stdout_low = (proc.stdout or "").lower()
+            stderr_low = (proc.stderr or "").lower()
+            if "usage limit" in stdout_low or "usage limit" in stderr_low:
+                err = "usage_limit"
+            elif "auth" in stderr_low or "login" in stderr_low:
+                err = "authentication_failed"
+            elif "network" in stderr_low or "connection" in stderr_low:
+                err = "network_error"
+            else:
+                err = f"cli_exit_{proc.returncode}"
+            return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
+                    "pr_head_sha": pr_head_sha, "error_reason": err}
+
+        # 7) --output-last-message 결과 파일을 strict verdict schema로 파싱한다.
+        return _parse_codex_cli_shard_output(result_file, shard_id, pr_head_sha)
+    finally:
+        # 임시 결과 파일은 항상 정리한다(감사 로그는 계약 경로에 별도 보존).
+        try:
+            os.unlink(result_file)
+        except OSError:
+            pass
+
+
+# [Purpose]: IMP-20260717-5EE0 MT-11(REJECT#3 P0-3) — Codex CLI stdout JSONL 이벤트를 shard별 감사
+#            로그(shard_audit_log_<shard_id>.jsonl)로 보존한다. verdict 판정과 분리된 관측용 로그다.
+# [Assumptions]: stdout은 codex exec --json이 흘린 JSONL 이벤트 텍스트다(비어 있을 수 있음).
+# [Vulnerability & Risks]: 로그 쓰기 실패는 검토 흐름을 막지 않는다(best-effort). 경로는 계약 SSoT.
+# [Improvement]: 로그 로테이션/압축을 추가할 수 있다.
+def _write_shard_audit_log(shard_id: str, stdout_jsonl: str) -> None:
+    """Codex CLI stdout JSONL을 shard 감사 로그 파일에 기록한다(best-effort).
+
+    Args:
+        shard_id: shard 식별자(None/비str면 'unknown'으로 정규화).
+        stdout_jsonl: codex exec --json stdout 텍스트(None이면 빈 문자열).
+    """
+    safe_id = shard_id if isinstance(shard_id, str) and shard_id else "unknown"
+    # 파일명 안전화: 경로 구분자 제거(계약 경로 이탈 방지).
+    safe_id = safe_id.replace("/", "_").replace("\\", "_").replace("..", "_")
+    try:
+        log_path = _codex_review_plan_path().parent / f"shard_audit_log_{safe_id}.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text(str(stdout_jsonl or ""), encoding="utf-8")
+    except OSError:
+        pass  # 감사 로그 실패는 검토 판정을 막지 않는다(fail-safe).
 
 
 # [Purpose]: BUG-20260628-F52C MT-3 — gates codex-review 핸들러. staged snapshot(또는 현재
@@ -25264,7 +25470,15 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             if _ar_shards
             else _sha256_text(json.dumps(_ar_plan, sort_keys=True, ensure_ascii=False, default=str))
         )
-        _issued = _issue_codex_shard_review_permit(_ar_pid, _ar_head, _ar_rp_sha)
+        # REJECT#3 P0-1: contract_sha를 permit에 봉인한다(shard에 기록된 값 우선, 없으면 plan에서).
+        _ar_contract_sha = (
+            str(_ar_shards[0].get("contract_sha256", "") or "")
+            if _ar_shards
+            else str(_ar_plan.get("contract_sha256", "") or "")
+        )
+        _issued = _issue_codex_shard_review_permit(
+            _ar_pid, _ar_head, _ar_rp_sha, _ar_contract_sha
+        )
         print(json.dumps({
             "status": "PERMIT_ISSUED",
             "permit_id": _issued["permit_id"],
@@ -25492,7 +25706,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 _auto_head = str(_shard_plan[0].get("pr_head_sha", "") or "")
                 _auto_rp_sha = str(_shard_plan[0].get("review_plan_sha256", "") or "")
                 _auto_contract_sha = str(_shard_plan[0].get("contract_sha256", "") or "")
-                _permit = _check_and_consume_permit(pipeline_id, _auto_head, _auto_rp_sha)
+                # REJECT#3 P0-1: contract_sha도 permit 검증에 전달한다(stale drift fail-closed).
+                _permit = _check_and_consume_permit(
+                    pipeline_id, _auto_head, _auto_rp_sha, _auto_contract_sha
+                )
                 _required_ids = [str(_s.get("shard_id", "") or "") for _s in _shard_plan]
                 _shard_results_auto = [
                     _call_codex_cli_for_shard(_s, _permit) for _s in _shard_plan

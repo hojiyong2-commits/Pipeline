@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-32",
+  "case_kind": "normal",
+  "scenario": "permit review_plan_sha mismatch → permit_review_plan_stale, contract_sha mismatch → permit_contract_stale, all-match → consumed",
+  "permit": {"review_plan_sha": "sha_A", "contract_sha": "cX", "pr_head_sha": "head123", "consumed": false},
+  "check_review_plan_mismatch": {"current_review_plan_sha": "sha_B", "current_contract_sha": "cX"},
+  "check_contract_mismatch": {"current_review_plan_sha": "sha_A", "current_contract_sha": "cY"},
+  "check_all_match": {"current_review_plan_sha": "sha_A", "current_contract_sha": "cX"}
+}

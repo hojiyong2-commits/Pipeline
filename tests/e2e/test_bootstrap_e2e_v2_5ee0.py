@@ -295,5 +295,237 @@ def test_tc31b_missing_required_shard_errors(pipe):
     assert "s2" in agg.get("missing_shard_ids", [])
 
 
+# ===========================================================================
+# REJECT#3 P0-1~P0-5 검증 (TC-32 ~ TC-42)
+# ===========================================================================
+
+
+def _write_permit(pipe, review_plan_sha="rp_sha", contract_sha="c_sha",
+                  pr_head_sha="head123", consumed=False):
+    """격리된 경로에 permit 파일을 기록하고 경로를 반환한다."""
+    permit_path = pipe._shard_review_permit_path()
+    permit_path.parent.mkdir(parents=True, exist_ok=True)
+    permit = {
+        "pipeline_id": PIPELINE_ID,
+        "pr_head_sha": pr_head_sha,
+        "review_plan_sha": review_plan_sha,
+        "contract_sha": contract_sha,
+        "issued_at": "2026-07-17T00:00:00Z",
+        "expires_at": "2099-12-31T23:59:59Z",
+        "consumed": consumed,
+        "permit_id": "test-permit-id",
+    }
+    permit_path.write_text(json.dumps(permit), encoding="utf-8")
+    return permit_path
+
+
+# ---------------------------------------------------------------------------
+# TC-32: review_plan_sha 불일치 permit → permit_review_plan_stale (P0-1)
+# ---------------------------------------------------------------------------
+def test_tc32_permit_review_plan_stale_blocks(pipe, tmp_path, monkeypatch):
+    """permit.review_plan_sha != 현재 → permit_review_plan_stale로 SystemExit, CLI 미호출."""
+    state_path = tmp_path / "pipeline_state.json"
+    _write_isolated_state(state_path)
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+    _write_permit(pipe, review_plan_sha="sha_A", contract_sha="cX", pr_head_sha="head123")
+
+    with pytest.raises(SystemExit):
+        # current review_plan_sha "sha_B" (불일치) → 차단
+        pipe._check_and_consume_permit(PIPELINE_ID, "head123", "sha_B", "cX")
+
+
+# ---------------------------------------------------------------------------
+# TC-33: contract_sha 불일치 permit → permit_contract_stale (P0-1)
+# ---------------------------------------------------------------------------
+def test_tc33_permit_contract_stale_blocks(pipe, tmp_path, monkeypatch):
+    """permit.contract_sha != 현재 → permit_contract_stale로 SystemExit."""
+    state_path = tmp_path / "pipeline_state.json"
+    _write_isolated_state(state_path)
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+    _write_permit(pipe, review_plan_sha="sha_A", contract_sha="cX", pr_head_sha="head123")
+
+    with pytest.raises(SystemExit):
+        # review_plan_sha 일치("sha_A")하지만 contract_sha 불일치("cY") → 차단
+        pipe._check_and_consume_permit(PIPELINE_ID, "head123", "sha_A", "cY")
+
+
+# ---------------------------------------------------------------------------
+# TC-34: review_plan_sha + contract_sha 모두 일치 → 정상 소비 (P0-1)
+# ---------------------------------------------------------------------------
+def test_tc34_permit_all_match_consumes(pipe, tmp_path, monkeypatch):
+    """모든 SHA 일치 시 permit이 정상 소비되고 contract_sha가 보존된다."""
+    state_path = tmp_path / "pipeline_state.json"
+    _write_isolated_state(state_path)
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+    _write_permit(pipe, review_plan_sha="sha_A", contract_sha="cX", pr_head_sha="head123")
+
+    consumed = pipe._check_and_consume_permit(PIPELINE_ID, "head123", "sha_A", "cX")
+    assert consumed["consumed"] is True
+    assert consumed["contract_sha"] == "cX"
+    # 재사용 시 permit_consumed로 차단
+    with pytest.raises(SystemExit):
+        pipe._check_and_consume_permit(PIPELINE_ID, "head123", "sha_A", "cX")
+
+
+# ---------------------------------------------------------------------------
+# TC-35: 결과 파일의 유효 APPROVE verdict 파싱 (P0-2)
+# ---------------------------------------------------------------------------
+def test_tc35_parser_valid_approve(pipe, tmp_path):
+    """--output-last-message 파일의 유효 APPROVE_TO_USER를 파싱한다."""
+    result_file = tmp_path / "verdict.json"
+    result_file.write_text(json.dumps({"verdict": "APPROVE_TO_USER", "findings": []}), encoding="utf-8")
+    out = pipe._parse_codex_cli_shard_output(str(result_file), "s1", "abc")
+    assert out["verdict"] == "APPROVE_TO_USER"
+    assert out["findings"] == []
+    assert "error_reason" not in out
+
+
+# ---------------------------------------------------------------------------
+# TC-36: 결과 파일 없음 → verdict_parse_failure ERROR (P0-2)
+# ---------------------------------------------------------------------------
+def test_tc36_parser_missing_file_is_error(pipe, tmp_path):
+    """결과 파일이 없으면 verdict_parse_failure ERROR(reject_count 미소모)."""
+    missing = tmp_path / "nonexistent.json"
+    out = pipe._parse_codex_cli_shard_output(str(missing), "s1", "abc")
+    assert out["verdict"] == "ERROR"
+    assert out["error_reason"] == "verdict_parse_failure"
+
+
+# ---------------------------------------------------------------------------
+# TC-37: REJECT + 빈 findings → ERROR / REJECT + findings → REJECT (P0-2)
+# ---------------------------------------------------------------------------
+def test_tc37_reject_findings_consistency(pipe, tmp_path):
+    """REJECT는 최소 1개 finding이 있어야 유효하다."""
+    empty_reject = tmp_path / "empty_reject.json"
+    empty_reject.write_text(json.dumps({"verdict": "REJECT", "findings": []}), encoding="utf-8")
+    out = pipe._parse_codex_cli_shard_output(str(empty_reject), "s1", "abc")
+    assert out["verdict"] == "ERROR"
+    assert out["error_reason"] == "verdict_parse_failure"
+
+    valid_reject = tmp_path / "valid_reject.json"
+    valid_reject.write_text(json.dumps({"verdict": "REJECT", "findings": [{"issue": "x"}]}), encoding="utf-8")
+    out2 = pipe._parse_codex_cli_shard_output(str(valid_reject), "s1", "abc")
+    assert out2["verdict"] == "REJECT"
+    assert len(out2["findings"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# TC-38: APPROVE + 비어있지 않은 findings / 추가 필드 → ERROR (P0-2 schema)
+# ---------------------------------------------------------------------------
+def test_tc38_approve_findings_and_schema_violation(pipe, tmp_path):
+    """APPROVE인데 findings가 있거나 스키마 위반이면 verdict_parse_failure."""
+    approve_with_findings = tmp_path / "aw.json"
+    approve_with_findings.write_text(
+        json.dumps({"verdict": "APPROVE_TO_USER", "findings": [{"issue": "x"}]}), encoding="utf-8"
+    )
+    out = pipe._parse_codex_cli_shard_output(str(approve_with_findings), "s1", "abc")
+    assert out["verdict"] == "ERROR"
+    assert out["error_reason"] == "verdict_parse_failure"
+
+    # additionalProperties=False 위반
+    extra_field = tmp_path / "extra.json"
+    extra_field.write_text(
+        json.dumps({"verdict": "APPROVE_TO_USER", "findings": [], "unexpected": 1}), encoding="utf-8"
+    )
+    out2 = pipe._parse_codex_cli_shard_output(str(extra_field), "s1", "abc")
+    assert out2["verdict"] == "ERROR"
+
+    # verdict enum 위반
+    bad_enum = tmp_path / "bad.json"
+    bad_enum.write_text(json.dumps({"verdict": "MAYBE"}), encoding="utf-8")
+    out3 = pipe._parse_codex_cli_shard_output(str(bad_enum), "s1", "abc")
+    assert out3["verdict"] == "ERROR"
+
+
+# ---------------------------------------------------------------------------
+# TC-39: CODEX_CLI_MOCK 제거 확인 + _cli_factory DI seam (P0-3)
+# ---------------------------------------------------------------------------
+def test_tc39_mock_removed_factory_works(pipe, monkeypatch):
+    """CODEX_CLI_MOCK=1은 더 이상 승인하지 않고, 결정성은 _cli_factory로만 확보된다."""
+    monkeypatch.setenv("CODEX_CLI_MOCK", "1")
+    shard = {"shard_id": "s1", "pr_head_sha": "a" * 40}
+    # mock 분기 제거 → permit None이므로 codex_cli_not_connected ERROR (승인 아님)
+    out = pipe._call_codex_cli_for_shard(shard)
+    assert out["verdict"] != "APPROVE_TO_USER"
+    assert out["verdict"] == "ERROR"
+
+    # _cli_factory DI seam은 정상 동작
+    def _fac(s, _p):
+        return {"shard_id": s["shard_id"], "verdict": "APPROVE_TO_USER",
+                "findings": [], "pr_head_sha": s["pr_head_sha"]}
+    out2 = pipe._call_codex_cli_for_shard(shard, _cli_factory=_fac)
+    assert out2["verdict"] == "APPROVE_TO_USER"
+
+
+# ---------------------------------------------------------------------------
+# TC-40: fake_codex.py가 --output-last-message에 verdict 기록 + 파서 통합 (P0-3)
+# ---------------------------------------------------------------------------
+def test_tc40_fake_codex_writes_and_parses(pipe, tmp_path):
+    """fake_codex.py가 결과 파일을 기록하고, 그 파일을 파서가 읽어 verdict를 산출한다."""
+    fake_codex = REPO_ROOT / "tests" / "e2e" / "fake_codex.py"
+    assert fake_codex.exists(), "fake_codex.py가 존재해야 함"
+    out_file = tmp_path / "last_message.json"
+
+    # APPROVE 경로
+    env = {**os.environ, "FAKE_CODEX_VERDICT": "APPROVE_TO_USER", "FAKE_CODEX_FINDINGS": "[]"}
+    proc = subprocess.run(
+        [sys.executable, str(fake_codex), "exec", "--json",
+         "--output-last-message", str(out_file), "-"],
+        env=env, capture_output=True, text=True, timeout=60, check=False,
+    )
+    assert proc.returncode == 0
+    parsed = pipe._parse_codex_cli_shard_output(str(out_file), "s1", "abc")
+    assert parsed["verdict"] == "APPROVE_TO_USER"
+
+    # REJECT 경로
+    env2 = {**os.environ, "FAKE_CODEX_VERDICT": "REJECT",
+            "FAKE_CODEX_FINDINGS": json.dumps([{"issue": "bug"}])}
+    out_file2 = tmp_path / "last_message2.json"
+    subprocess.run(
+        [sys.executable, str(fake_codex), "--output-last-message", str(out_file2)],
+        env=env2, capture_output=True, text=True, timeout=60, check=False,
+    )
+    parsed2 = pipe._parse_codex_cli_shard_output(str(out_file2), "s2", "abc")
+    assert parsed2["verdict"] == "REJECT"
+
+
+# ---------------------------------------------------------------------------
+# TC-41: OS별 authorize-run 안내 명령 (P0-4)
+# ---------------------------------------------------------------------------
+def test_tc41_os_specific_authorize_hint(pipe, monkeypatch):
+    """win32는 PowerShell $env: 형식, POSIX는 inline env prefix 형식으로 안내한다."""
+    monkeypatch.setattr(pipe.sys, "platform", "win32")
+    win_hint = pipe._codex_authorize_cmd_hint()
+    assert "$env:CODEX_RUN_AUTHORIZED" in win_hint
+    assert "Remove-Item Env:CODEX_RUN_AUTHORIZED" in win_hint
+
+    monkeypatch.setattr(pipe.sys, "platform", "linux")
+    posix_hint = pipe._codex_authorize_cmd_hint()
+    assert posix_hint.startswith("CODEX_RUN_AUTHORIZED=1 python")
+    assert "$env:" not in posix_hint
+
+
+# ---------------------------------------------------------------------------
+# TC-42: working tree 정합성 검증 (P0-5)
+# ---------------------------------------------------------------------------
+def test_tc42_working_tree_integrity(pipe, monkeypatch):
+    """clean working tree는 통과, dirty tree는 working_tree_dirty로 SystemExit."""
+    import types
+
+    def _fake_run_clean(cmd, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pipe.subprocess, "run", _fake_run_clean)
+    # clean → 예외 없이 통과
+    pipe._verify_working_tree_integrity()
+
+    def _fake_run_dirty(cmd, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout="pipeline.py\ncore/x.py\n", stderr="")
+
+    monkeypatch.setattr(pipe.subprocess, "run", _fake_run_dirty)
+    with pytest.raises(SystemExit):
+        pipe._verify_working_tree_integrity()
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

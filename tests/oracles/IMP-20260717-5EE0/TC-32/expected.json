@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-32",
+  "case_kind": "normal",
+  "check_review_plan_mismatch_result": "BLOCKED:permit_review_plan_stale",
+  "check_contract_mismatch_result": "BLOCKED:permit_contract_stale",
+  "check_all_match_result": "CONSUMED",
+  "consumed_permit_contract_sha": "cX"
+}
