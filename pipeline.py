@@ -8332,12 +8332,21 @@ def _issue_codex_run_permit(
 def _consume_codex_run_permit(permit: Dict[str, Any]) -> Dict[str, Any]:
     """PENDING permit을 CONSUMED로 표시하고 파일에 기록한다(1회용 — 재사용 차단).
 
+    IMP-20260712-DAE1 REJECT#6 MT-R6-1: 파일 쓰기 실패를 무시하지 않는다(fail-closed).
+    이전에는 `except OSError: pass`로 쓰기 실패를 삼켰기 때문에, CONSUMED 상태가 디스크에
+    반영되지 않아도 함수가 CONSUMED dict를 반환했다. 그 결과 다음 check에서 permit이 여전히
+    PENDING으로 관측되어 동일 permit으로 실제 Codex CLI를 재실행할 수 있는 재사용 취약점이 있었다.
+    이제 쓰기 실패 시 RuntimeError(failure_code=codex_run_permit_consume_failed)를 raise하며,
+    호출자(Codex CLI 호출 경로)는 이를 잡아 BLOCKED로 처리해야 한다.
+
     Args:
         permit: 소비할 PENDING permit dict.
     Returns:
-        CONSUMED로 표시된 permit dict.
+        CONSUMED로 표시된 permit dict (디스크 기록 성공 시에만 반환).
     Raises:
         TypeError: permit이 None/비dict인 경우.
+        RuntimeError: 파일 쓰기 실패 시(failure_code=codex_run_permit_consume_failed).
+            쓰기 실패 시 CONSUMED dict를 반환하지 않는다 — 호출자는 BLOCKED를 반환해야 한다.
     """
     if permit is None:
         raise TypeError("permit must not be None")
@@ -8346,17 +8355,107 @@ def _consume_codex_run_permit(permit: Dict[str, Any]) -> Dict[str, Any]:
     _consumed = dict(permit)
     _consumed["status"] = "CONSUMED"
     _consumed["consumed_at"] = _now()
+    _p = _codex_run_permit_path()
+    _p.parent.mkdir(parents=True, exist_ok=True)
     try:
-        _p = _codex_run_permit_path()
-        _p.parent.mkdir(parents=True, exist_ok=True)
         _p.write_text(
             json.dumps(_consumed, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-    except OSError:
-        # 파일 기록 실패는 무시한다 — 소비 표시 실패 시 다음 check에서 다시 PENDING이 관측되지만,
-        # snapshot 바인딩이 유효한 경우에만 재사용 가능하므로 안전 측면 손실은 제한적이다.
-        pass
+    except OSError as exc:
+        # 쓰기 실패: CONSUMED 상태가 디스크에 반영되지 않으면 permit을 재사용할 수 있으므로
+        # 절대 무시하지 않는다(fail-closed). 호출자가 Codex CLI 호출을 차단해야 한다.
+        raise RuntimeError(
+            f"failure_code=codex_run_permit_consume_failed: "
+            f"permit CONSUMED 상태를 디스크에 기록하지 못했습니다 (재사용 위험) — {exc}"
+        ) from exc
     return _consumed
+
+
+# [Purpose]: IMP-20260712-DAE1 REJECT#6 MT-R6-2 — permit 검증(순수)과 소비(I/O)를 원자적으로 묶는다.
+#            기존에는 _check_codex_run_permit(순수) 통과 후 별도로 _consume_codex_run_permit(I/O)을
+#            호출했으므로, 두 프로세스가 동시에 같은 PENDING permit을 읽고 모두 통과(check)한 뒤 각자
+#            소비할 수 있는 TOCTOU 경합이 존재했다. 이 함수는 O_EXCL lock 파일로 임계 구역을 만들고,
+#            lock 획득 후 permit을 재로딩·재검증하여 정확히 한 호출만 CONSUMED에 성공하도록 보장한다.
+# [Assumptions]: _codex_run_permit_path()는 PIPELINE_STATE_PATH 격리를 따르며, 동일 permit 파일을
+#            바라보는 두 호출은 같은 lock 경로(.lock)를 공유한다. os.O_EXCL은 Windows/Unix 모두에서
+#            원자적 create-or-fail을 제공한다(Python 3.9+).
+# [Vulnerability & Risks]: 프로세스가 lock 획득 직후 비정상 종료하면 stale lock 파일이 남아 다음
+#            호출이 codex_run_permit_lock_failed로 차단될 수 있다(fail-closed로 안전 측면 손실 없음).
+#            이 경우 사용자가 .lock 파일을 수동 제거한 뒤 --authorize-run을 재실행해야 한다.
+# [Improvement]: lock 파일에 PID/타임스탬프를 기록해 stale lock 자동 회수(TTL)를 추가할 수 있다.
+def _atomic_claim_codex_run_permit(
+    pipeline_id: str,
+    review_epoch: str,
+    pr_head_sha: str,
+    review_bundle_sha256: str,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """permit을 원자적으로 claim한다. 성공 시 CONSUMED permit dict를 반환한다.
+
+    Windows/Unix 모두에서 동작하는 원자적 방식으로 lock 파일(O_EXCL)을 사용한다.
+    두 프로세스가 동시에 호출하면 정확히 하나만 성공하고 나머지는 BLOCKED(False)를 반환한다.
+    lock 획득 후에는 permit을 재로딩·재검증하여(TOCTOU 방지) 여전히 PENDING인 경우에만 소비한다.
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID.
+        review_epoch: 현재 review_epoch(contract migration 값).
+        pr_head_sha: 현재 PR head SHA.
+        review_bundle_sha256: 현재 review bundle SHA-256.
+    Returns:
+        (success, failure_reason, consumed_permit_or_None).
+        success=True이면 failure_reason="", consumed_permit은 CONSUMED dict.
+        success=False이면 consumed_permit=None.
+        failure_reason ∈ {"no_permit", "consumed", "missing_snapshot_component",
+            "stale_snapshot", "codex_run_permit_consume_failed",
+            "codex_run_permit_lock_failed"}.
+    """
+    # 1. permit 로드 + 사전 검증(순수 함수). lock 획득 비용 전에 빠른 실패 경로 제공.
+    _permit = _load_codex_run_permit()
+    _authorized, _reason = _check_codex_run_permit(
+        _permit,
+        pipeline_id=pipeline_id,
+        review_epoch=review_epoch,
+        pr_head_sha=pr_head_sha,
+        review_bundle_sha256=review_bundle_sha256,
+    )
+    if not _authorized:
+        return False, _reason, None
+
+    # 2. 원자적 lock 획득(O_EXCL: 두 번째 프로세스는 FileExistsError). 획득 실패 시 즉시 차단.
+    _lock_path = _codex_run_permit_path().with_suffix(".lock")
+    try:
+        _lock_fd = os.open(str(_lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(_lock_fd)
+    except FileExistsError:
+        # 다른 프로세스가 이미 claim 임계 구역 안에 있다.
+        return False, "codex_run_permit_lock_failed", None
+    except OSError as exc:
+        return False, f"codex_run_permit_lock_failed: {exc}", None
+
+    # 3. lock 보유 상태에서 permit을 재로딩·재검증(TOCTOU 방지). 앞선 프로세스가 이미 소비했다면
+    #    여기서 status!=PENDING이 관측되어 consumed로 차단되므로 이중 소비가 발생하지 않는다.
+    try:
+        _permit2 = _load_codex_run_permit()
+        _authorized2, _reason2 = _check_codex_run_permit(
+            _permit2,
+            pipeline_id=pipeline_id,
+            review_epoch=review_epoch,
+            pr_head_sha=pr_head_sha,
+            review_bundle_sha256=review_bundle_sha256,
+        )
+        if not _authorized2:
+            return False, _reason2, None
+        # 4. lock 보유 상태에서 소비. 쓰기 실패 시 RuntimeError → 소비 실패로 BLOCKED.
+        try:
+            _consumed = _consume_codex_run_permit(_permit2)  # type: ignore[arg-type]
+        except RuntimeError as exc:
+            return False, str(exc), None
+        return True, "", _consumed
+    finally:
+        # lock 파일은 소비 성공 여부와 무관하게 항상 정리한다.
+        try:
+            _lock_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 # [Purpose]: BUG-20260702-E69E — Codex Review 입력 bundle(codex_review_bundle.json)의 경로를
@@ -27982,6 +28081,149 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     if not pipeline_id:
         _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다.")
 
+    # IMP-20260712-DAE1 REJECT#6 MT-R6-3: --start-epoch와 --authorize-run 동시 사용 차단.
+    #   두 인자는 서로 다른 승인 단계(epoch 시작 vs 개별 CLI 실행 허가)이며, 한 명령에서 함께
+    #   지정하면 어느 흐름이 실행되는지 모호하고 절차를 우회할 여지가 생긴다 → fail-closed BLOCKED.
+    _req_start_epoch = str(getattr(args, "start_epoch", None) or "").strip()
+    _req_authorize_run = bool(getattr(args, "authorize_run", False))
+    if _req_start_epoch and _req_authorize_run:
+        _die(
+            "[BLOCKED] failure_code=codex_review_conflicting_flags\n"
+            "  --start-epoch와 --authorize-run은 동시에 사용할 수 없습니다.\n"
+            "  올바른 3단계 순서:\n"
+            "  Step 1: CODEX_START_EPOCH_USER_CONFIRMED=1 python pipeline.py gates codex-review "
+            "--start-epoch '재설계 이유'\n"
+            "  Step 2: CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run\n"
+            "  Step 3: python pipeline.py gates codex-review"
+        )
+
+    # IMP-20260712-DAE1 REJECT#6 MT-R6-4: --preflight-only — Codex CLI 호출 없이 현재 HEAD의
+    #   최종 prompt를 생성·검증하는 dry-run 경로. permit을 소비하지 않으며(발급/claim 미수행),
+    #   circuit breaker NON_CONVERGING 상태에서도 실행 가능하다(진단 목적). 8개 필수 필드를 출력한다.
+    if bool(getattr(args, "preflight_only", False)):
+        # 1. current HEAD SHA
+        try:
+            _pf_head_r = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            _pf_head_sha = (
+                _pf_head_r.stdout.strip() if _pf_head_r.returncode == 0 else "unknown"
+            )
+        except Exception:  # noqa: BLE001
+            _pf_head_sha = "unknown"
+
+        # 2. review_epoch (contract migration 값 — 없으면 안내 문구)
+        _pf_mig = (
+            state.get("codex_review_contract_migration")
+            if isinstance(state, dict) else None
+        )
+        _pf_epoch = (
+            str(_pf_mig.get("review_epoch", "") or "")
+            if isinstance(_pf_mig, dict) else ""
+        )
+
+        # 3. review bundle SHA256 (+ bundle 경로)
+        _pf_bundle_sha, _pf_bundle_path = _build_codex_review_bundle(state, pipeline_id)
+
+        # 4. final prompt 생성 (실 CLI 경로와 동일하게 semantic evidence를 주입). 실패해도 die하지 않는다.
+        _pf_prompt = ""
+        try:
+            _pf_bundle_dict: Dict[str, Any] = {}
+            if _pf_bundle_path:
+                _pf_loaded = json.loads(Path(_pf_bundle_path).read_text(encoding="utf-8"))
+                if isinstance(_pf_loaded, dict):
+                    _pf_bundle_dict = _pf_loaded
+            if _pf_bundle_dict:
+                _pf_sem = _build_codex_semantic_evidence(
+                    pipeline_id,
+                    list(_pf_bundle_dict.get("changed_files", []) or []),
+                    list(_pf_bundle_dict.get("included_functions", []) or []),
+                )
+                _pf_prompt_bundle = dict(_pf_bundle_dict)
+                _pf_prompt_bundle["diff_hunks"] = _pf_sem["diff_hunks"]
+                _pf_prompt_bundle["function_before_after_shas"] = (
+                    _pf_sem["function_before_after_shas"]
+                )
+                _pf_prompt_bundle["test_assertions"] = _pf_sem["test_assertions"]
+                _pf_prompt_bundle["oracle_results"] = _pf_sem["oracle_results"]
+                _pf_prompt_bundle["evidence_complete"] = _pf_sem["evidence_complete"]
+                _pf_prompt = _build_codex_prompt_for_review(_pf_prompt_bundle, pipeline_id)
+        except Exception as _pf_exc:  # noqa: BLE001
+            _pf_prompt = ""
+            print(f"  [경고] prompt 생성 오류: {_pf_exc}")
+        _pf_prompt_chars = len(_pf_prompt)
+
+        # 5. evidence_complete 확인 (예산 초과 시 구조화 축소로 필수 증거 유실 여부 판정)
+        _pf_evidence_complete = True
+        if _pf_prompt_chars > CODEX_CLI_SAFE_INPUT_CHARS:
+            _pf_reduced, _pf_evidence_complete = _build_structured_codex_input(
+                _pf_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+            )
+
+        # 6. post-build preflight 검사 (bundle 로드 실패 시 BLOCKED 취급)
+        _pf_preflight: Dict[str, Any] = {
+            "result": "BLOCKED", "preflight_checks_passed": 0,
+            "preflight_checks_failed": 0, "failure_codes": [],
+        }
+        try:
+            _pf_pf_dict: Dict[str, Any] = {}
+            if _pf_bundle_path:
+                _pf_pf_loaded = json.loads(
+                    Path(_pf_bundle_path).read_text(encoding="utf-8")
+                )
+                if isinstance(_pf_pf_loaded, dict):
+                    _pf_pf_dict = _pf_pf_loaded
+            if _pf_pf_dict and isinstance(state, dict):
+                _pf_preflight = _run_codex_preflight_checks(
+                    _pf_pf_dict, state, pipeline_id
+                )
+        except Exception as _pf_pf_exc:  # noqa: BLE001
+            _pf_preflight = {
+                "result": "BLOCKED", "preflight_checks_passed": 0,
+                "preflight_checks_failed": 0,
+                "failure_codes": [f"preflight_exception: {_pf_pf_exc}"],
+            }
+
+        # 7. critical hunk 수집 (PR diff에서 HIGH_RISK/pipeline.py/CLAUDE.md 변경 파일)
+        _pf_critical_hunks: List[str] = []
+        try:
+            _pf_hunk_r = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--name-only"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            _pf_changed = [
+                f.strip() for f in _pf_hunk_r.stdout.splitlines() if f.strip()
+            ]
+            _pf_critical_patterns = list(CODEX_HIGH_RISK_PATHS) + ["pipeline.py", "CLAUDE.md"]
+            _pf_critical_hunks = [
+                f for f in _pf_changed
+                if any(p in f for p in _pf_critical_patterns)
+            ]
+        except Exception:  # noqa: BLE001
+            _pf_critical_hunks = []
+
+        # 출력: 8개 필수 필드
+        print("[CODEX REVIEW --preflight-only]")
+        print(f"  current_head_sha: {_pf_head_sha}")
+        print(f"  review_epoch: {_pf_epoch or '(없음 — --start-epoch 필요)'}")
+        print(f"  review_bundle_sha256: {_pf_bundle_sha or '(계산 실패)'}")
+        print(f"  final_prompt_chars: {_pf_prompt_chars}")
+        print(f"  safe_limit_chars: {CODEX_CLI_SAFE_INPUT_CHARS}")
+        print(f"  evidence_complete: {_pf_evidence_complete}")
+        print(f"  critical_hunk_count: {len(_pf_critical_hunks)}")
+        if _pf_critical_hunks:
+            print(f"  critical_hunk_ids: {', '.join(_pf_critical_hunks[:5])}")
+        print(f"  post_build_preflight: {_pf_preflight.get('result', 'UNKNOWN')}")
+        print(f"    checks_passed: {_pf_preflight.get('preflight_checks_passed', 0)}")
+        print(f"    checks_failed: {_pf_preflight.get('preflight_checks_failed', 0)}")
+        if _pf_preflight.get("failure_codes"):
+            print(f"    failure_codes: {_pf_preflight['failure_codes']}")
+        print("  [--preflight-only 완료] Codex CLI 미호출, permit 미소비")
+        sys.exit(0)
+
     # REJECT#21(IMP-20260712-DAE1) AC-5: --start-epoch 운영 경로 — 사용자 결정에 의한 contract migration.
     #   circuit breaker NON_CONVERGING 발동 후 사용자가 직접 실행하는 유일한 운영 진입점.
     #   _record_user_authorized_contract_migration을 호출하여 새 review_epoch를 시작한다.
@@ -28874,15 +29116,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             #   테스트 seam(_fake_codex_bin=CODEX_REVIEW_FAKE_BIN)에서는 이 gate를 면제한다 —
             #   production은 CODEX_REVIEW_FAKE_BIN을 설정하지 않으므로 실제 CLI 경로는 항상 gate된다.
             if not _fake_codex_bin:
-                _run_permit = _load_codex_run_permit()
-                _permit_ok, _permit_reason = _check_codex_run_permit(
-                    _run_permit,
-                    pipeline_id=pipeline_id,
-                    review_epoch=_current_epoch,
-                    pr_head_sha=_pre_cli_head_sha,
-                    review_bundle_sha256=_review_bundle_sha256,
+                # IMP-20260712-DAE1 REJECT#6 MT-R6-2: 검증+소비를 원자적으로 묶어 TOCTOU 경합을
+                #   차단한다. _atomic_claim_codex_run_permit은 O_EXCL lock 안에서 permit을 재검증한
+                #   뒤 소비하므로, 두 프로세스가 동시에 같은 PENDING permit을 재실행할 수 없다.
+                #   또한 소비(디스크 기록) 실패는 codex_run_permit_consume_failed로 fail-closed
+                #   BLOCKED되어, CONSUMED 미반영 상태로 CLI가 호출되는 재사용 취약점을 제거한다.
+                _permit_claimed, _permit_reason, _consumed_permit = (
+                    _atomic_claim_codex_run_permit(
+                        pipeline_id,
+                        _current_epoch,
+                        _pre_cli_head_sha,
+                        _review_bundle_sha256,
+                    )
                 )
-                if not _permit_ok:
+                if not _permit_claimed:
                     _write_codex_review_blocked_invalidation(
                         pipeline_id, "codex_review_run_not_authorized",
                         prev_reject_count, prev_cli_error_count,
@@ -28894,14 +29141,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     )
                     _die(
                         "[BLOCKED] failure_code=codex_review_run_not_authorized\n"
-                        f"  실제 Codex CLI 실행 허가가 없습니다 (사유: {_permit_reason}).\n"
+                        f"  실제 Codex CLI 실행 허가를 claim하지 못했습니다 (사유: {_permit_reason}).\n"
                         "  Codex CLI를 호출하지 않았습니다 (fail-closed).\n"
                         "  사용자가 직접 아래 명령으로 1회용 실행 허가를 발급한 뒤 재실행하세요:\n"
                         "  CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
                     )
-                # 허가 통과 → 즉시 소비(CONSUMED)하여 재사용을 차단한다.
-                assert _run_permit is not None  # _permit_ok==True이면 None 불가
-                _consume_codex_run_permit(_run_permit)
             # REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js를 exec 실행 파일로 고정한다.
             _auto_run = _invoke_codex_exec(
                 _selected_model_now,
@@ -36530,6 +36774,14 @@ def build_parser() -> argparse.ArgumentParser:
             "1회용 Codex CLI 실행 허가(run permit)를 발급합니다. 현재 review_epoch/PR head SHA/"
             "review bundle SHA에 묶이며, 다음 실제 Codex CLI 호출 1회에만 유효합니다. "
             "CODEX_RUN_AUTHORIZED=1 환경변수를 설정하고 사용자가 직접 실행해야 합니다."
+        ),
+    )
+    # IMP-20260712-DAE1 REJECT#6 MT-R6-4: Codex CLI 호출 없이 최종 prompt를 생성·검증하는 dry-run 경로.
+    p_gate_codex.add_argument(
+        "--preflight-only", dest="preflight_only", action="store_true", default=False,
+        help=(
+            "Codex CLI 호출 없이 현재 HEAD의 최종 prompt를 생성·검증하는 dry-run 경로. "
+            "permit을 소비하지 않으며 NON_CONVERGING 상태에서도 실행 가능."
         ),
     )
 

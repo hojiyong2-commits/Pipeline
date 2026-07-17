@@ -1291,14 +1291,20 @@ def test_r5_run_not_authorized_blocks_cli() -> None:
     assert reason == "no_permit"
 
     # 실행 허가 개념이 실제 CLI 호출 직전 경로에 배선되어 있는지 소스로 확인(정의만-존재 방지).
+    #   IMP-20260712-DAE1 REJECT#6 MT-R6-2: 검증+소비를 원자적으로 묶은 _atomic_claim_codex_run_permit이
+    #   CLI 경로의 배선 지점이다(_check_codex_run_permit은 그 내부에서 재검증에 사용된다).
     import inspect
     src = inspect.getsource(pipeline._cmd_gates_codex_review)
-    assert "_check_codex_run_permit" in src, "run permit 검사가 CLI 경로에 배선돼야 함"
+    assert "_atomic_claim_codex_run_permit" in src, "run permit claim이 CLI 경로에 배선돼야 함"
     assert "codex_review_run_not_authorized" in src
-    # 검사가 실제 CLI 호출(_invoke_codex_exec)보다 먼저 위치해야 한다.
-    assert src.index("_check_codex_run_permit") < src.index("_auto_run = _invoke_codex_exec"), (
-        "run permit 검사는 실제 CLI 호출 이전에 수행돼야 한다(CLI 미호출 BLOCKED)"
+    # claim이 실제 CLI 호출(_invoke_codex_exec)보다 먼저 위치해야 한다.
+    assert src.index("_atomic_claim_codex_run_permit") < src.index("_auto_run = _invoke_codex_exec"), (
+        "run permit claim은 실제 CLI 호출 이전에 수행돼야 한다(CLI 미호출 BLOCKED)"
     )
+    # 원자적 claim 내부에서 순수 검증 함수가 재사용되는지 확인(TOCTOU 재검증 배선).
+    claim_src = inspect.getsource(pipeline._atomic_claim_codex_run_permit)
+    assert "_check_codex_run_permit" in claim_src, "atomic claim 내부에 permit 재검증이 있어야 함"
+    assert "_consume_codex_run_permit" in claim_src, "atomic claim 내부에 permit 소비가 있어야 함"
 
 
 # ------------------------------------------------------------------ #
@@ -1382,6 +1388,236 @@ def test_r5_run_permit_single_use(tmp_path: Path, monkeypatch) -> None:
         pr_head_sha="head_A", review_bundle_sha256="bundle_A",
     )
     assert ok2 is False and reason2 == "consumed"
+
+
+# ================================================================== #
+# REJECT#6 회귀 테스트 (IMP-20260712-DAE1 REJECT#6)
+# ================================================================== #
+def _permit_state(
+    tmp_path: Path, monkeypatch, extra: Optional[Dict] = None
+) -> Tuple[Path, Path]:
+    """격리된 state와 codex_run_permit.json이 있는 환경을 만든다.
+
+    PIPELINE_STATE_PATH를 in-process로 설정하여 pipeline._codex_run_permit_path()가
+    tmp_path/.pipeline/codex_run_permit.json을 가리키도록 격리한다(실제 .pipeline 오염 방지).
+    """
+    state_path, pdir = _setup_state(
+        tmp_path,
+        {
+            "pipeline_id": _PID,
+            "current_phase": 7,
+            "codex_review_contract_migration": {
+                "review_epoch": "epoch-r6-test",
+                "new_contract_sha256": "abc123",
+            },
+        },
+    )
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+    permit = {
+        "status": "PENDING",
+        "pipeline_id": _PID,
+        "review_epoch": "epoch-r6-test",
+        "pr_head_sha": "deadbeef1234",
+        "review_bundle_sha256": "beefdead5678",
+        "issued_at": "2026-07-17T00:00:00Z",
+    }
+    if extra:
+        permit.update(extra)
+    permit_path = pdir / "codex_run_permit.json"
+    permit_path.write_text(json.dumps(permit, ensure_ascii=False), encoding="utf-8")
+    return state_path, permit_path
+
+
+# 테스트 R6-1: PermissionError → CLI 미호출 + codex_run_permit_consume_failed
+def test_r6_consume_write_fail_blocks_cli(tmp_path: Path, monkeypatch) -> None:
+    """_consume_codex_run_permit 쓰기 실패(PermissionError) → RuntimeError + failure_code."""
+    import unittest.mock as mock
+
+    # PIPELINE_STATE_PATH 격리 — parent.mkdir이 실제 .pipeline을 건드리지 않도록.
+    state_path = tmp_path / "pipeline_state.json"
+    state_path.write_text(json.dumps({"pipeline_id": _PID}), encoding="utf-8")
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+
+    permit: Dict[str, object] = {
+        "status": "PENDING",
+        "pipeline_id": _PID,
+        "review_epoch": "epoch-r6",
+        "pr_head_sha": "abc123",
+        "review_bundle_sha256": "def456",
+        "issued_at": "2026-01-01T00:00:00Z",
+    }
+    # PermissionError를 강제로 발생시킨다.
+    consumed_ok = True
+    with mock.patch(
+        "pathlib.Path.write_text", side_effect=PermissionError("access denied")
+    ):
+        try:
+            pipeline._consume_codex_run_permit(permit)
+            consumed_ok = True
+        except RuntimeError as exc:
+            consumed_ok = False
+            assert "codex_run_permit_consume_failed" in str(exc), str(exc)
+    assert not consumed_ok, "_consume_codex_run_permit must raise RuntimeError on write failure"
+
+
+# 테스트 R6-2: 쓰기 실패 후 permit이 PENDING 상태 유지(재사용 불가)
+def test_r6_consume_write_fail_permit_not_consumed(tmp_path: Path, monkeypatch) -> None:
+    """쓰기 실패 후 permit 파일이 PENDING 상태를 유지하는지 확인."""
+    import unittest.mock as mock
+
+    state_path, permit_path = _permit_state(tmp_path, monkeypatch)
+
+    original_content = permit_path.read_text(encoding="utf-8")
+    permit = json.loads(original_content)
+
+    # 쓰기 강제 실패
+    with mock.patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
+        try:
+            pipeline._consume_codex_run_permit(permit)
+        except RuntimeError:
+            pass  # 예상된 예외
+
+    # permit 파일은 여전히 PENDING
+    after = json.loads(permit_path.read_text(encoding="utf-8"))
+    assert after["status"] == "PENDING", (
+        f"permit must remain PENDING after write failure, got: {after['status']}"
+    )
+
+
+# 테스트 R6-3: 두 스레드 동시 claim → 정확히 하나만 성공
+def test_r6_concurrent_claim_only_one_succeeds(tmp_path: Path, monkeypatch) -> None:
+    """_atomic_claim_codex_run_permit: 두 스레드 동시 호출 → 최대 하나만 CLI 진입."""
+    import concurrent.futures
+
+    state_path, permit_path = _permit_state(tmp_path, monkeypatch)
+    pipeline_id = _PID
+    review_epoch = "epoch-r6-test"
+    pr_head_sha = "deadbeef1234"
+    bundle_sha = "beefdead5678"
+
+    def try_claim() -> bool:
+        success, reason, consumed = pipeline._atomic_claim_codex_run_permit(
+            pipeline_id, review_epoch, pr_head_sha, bundle_sha
+        )
+        return success
+
+    # 두 스레드로 동시 시도 (같은 permit 파일 공유).
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(try_claim), pool.submit(try_claim)]
+        results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    # 정확히 하나만 성공해야 한다(원자적 claim).
+    success_count = sum(1 for r in results if r is True)
+    assert success_count <= 1, f"동시 claim에서 최대 1개만 성공해야 함, 실제: {success_count}"
+
+
+# 테스트 R6-4: CLI error 후에도 permit PENDING 복귀 안 됨
+def test_r6_claimed_permit_not_reverted_on_cli_error(tmp_path: Path, monkeypatch) -> None:
+    """claim 성공 후 CLI error가 나도 permit이 PENDING으로 돌아가지 않음."""
+    state_path, permit_path = _permit_state(tmp_path, monkeypatch)
+
+    # 직접 claim 실행
+    success, reason, consumed = pipeline._atomic_claim_codex_run_permit(
+        _PID, "epoch-r6-test", "deadbeef1234", "beefdead5678"
+    )
+    assert success, f"initial claim should succeed: {reason}"
+
+    # permit 파일 상태 확인 — CONSUMED여야 함
+    after = json.loads(permit_path.read_text(encoding="utf-8"))
+    assert after["status"] == "CONSUMED", (
+        f"permit must be CONSUMED after claim, got: {after['status']}"
+    )
+
+    # 재claim 시도 — BLOCKED
+    success2, reason2, _ = pipeline._atomic_claim_codex_run_permit(
+        _PID, "epoch-r6-test", "deadbeef1234", "beefdead5678"
+    )
+    assert not success2, "재claim이 성공하면 안 됨"
+    assert reason2 in ("consumed", "codex_run_permit_lock_failed"), (
+        f"unexpected reason: {reason2}"
+    )
+
+
+# 테스트 R6-5: --start-epoch + --authorize-run 동시 플래그 → codex_review_conflicting_flags BLOCKED
+def test_r6_conflicting_flags_start_epoch_and_authorize_run(tmp_path: Path) -> None:
+    """--start-epoch와 --authorize-run 동시 지정 → codex_review_conflicting_flags BLOCKED."""
+    state_path, _ = _setup_state(
+        tmp_path,
+        {
+            "pipeline_id": _PID,
+            "current_phase": 7,
+            "codex_review_contract_migration": {"review_epoch": "epoch-r6"},
+        },
+    )
+    r = _run_cli(
+        state_path,
+        ["gates", "codex-review", "--start-epoch", "test-reason", "--authorize-run"],
+        extra_env={
+            "CODEX_START_EPOCH_USER_CONFIRMED": "1",
+            "CODEX_RUN_AUTHORIZED": "1",
+        },
+    )
+    combined = r.stdout + r.stderr
+    assert r.returncode != 0, f"충돌 플래그 → 비0 exit 코드여야 함: {combined[:400]}"
+    assert "codex_review_conflicting_flags" in combined, combined[:400]
+
+
+# 테스트 R6-6: --preflight-only 실행 후 CLI 미호출 확인
+def test_r6_preflight_only_no_cli_call(tmp_path: Path) -> None:
+    """--preflight-only: Codex CLI fake marker 미생성(CLI 미호출 확인)."""
+    state_path, _ = _setup_state(
+        tmp_path,
+        {
+            "pipeline_id": _PID,
+            "current_phase": 7,
+            "codex_review_contract_migration": {"review_epoch": "epoch-r6"},
+            "codex_review_loop_state": {"status": "NON_CONVERGING", "reject_count": 3},
+        },
+    )
+    bin_dir = tmp_path / "bin"
+    marker = tmp_path / "codex_called.marker"
+    _make_fake_codex(bin_dir, marker)
+
+    r = _run_cli(
+        state_path,
+        ["gates", "codex-review", "--preflight-only"],
+        fake_bin_dir=bin_dir,
+    )
+    combined = r.stdout + r.stderr
+    assert r.returncode == 0, f"--preflight-only는 exit 0이어야 함: {combined[:400]}"
+    assert not marker.exists(), "--preflight-only에서 Codex CLI가 호출되면 안 됨"
+
+
+# 테스트 R6-7: --preflight-only 출력에 8개 필수 필드 포함 확인
+def test_r6_preflight_only_outputs_required_fields(tmp_path: Path) -> None:
+    """--preflight-only 출력에 8개 필수 필드가 모두 포함되는지 확인."""
+    state_path, _ = _setup_state(
+        tmp_path,
+        {
+            "pipeline_id": _PID,
+            "current_phase": 7,
+            "codex_review_contract_migration": {"review_epoch": "epoch-r6"},
+        },
+    )
+    r = _run_cli(
+        state_path,
+        ["gates", "codex-review", "--preflight-only"],
+    )
+    combined = r.stdout + r.stderr
+    assert r.returncode == 0, f"--preflight-only exit 0 실패: {combined[:400]}"
+
+    required_fields = [
+        "current_head_sha",
+        "review_epoch",
+        "review_bundle_sha256",
+        "final_prompt_chars",
+        "safe_limit_chars",
+        "evidence_complete",
+        "critical_hunk_count",
+        "post_build_preflight",
+    ]
+    for field in required_fields:
+        assert field in combined, f"필수 필드 '{field}' 누락: {combined[:600]}"
 
 
 if __name__ == "__main__":
