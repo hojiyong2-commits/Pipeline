@@ -1,54 +1,54 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-07-17T19:09:42Z",
+  "generated_at": "2026-07-17T23:35:46Z",
   "pipeline_id": "IMP-20260717-5EE0",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "d7672c4609163b079890e1d6d3376cd93eed44db",
+  "commit_hint": "dba5a1139990a0bed8b3be049edd4e00088b9dbc",
   "state": {
-    "current_phase": "harness",
-    "phase_completed_at": "2026-07-17T18:51:38Z",
-    "report_file": "module_handover_MT-10.xml",
-    "evidence": "core/acceptance/scorers.py,pipeline.py,tests/e2e/test_bootstrap_e2e_v2_5ee0.py,tests/e2e/test_bootstrap_rework_5ee0.py,tests/e2e/test_codex_bootstrap_5ee0.py,tests/oracles/IMP-20260717-5EE0/TC-1/input.json,tests/oracles/IMP-20260717-5EE0/TC-10/expected.json,tests/oracles/IMP-20260717-5EE0/TC-10/input.json,tests/oracles/IMP-20260717-5EE0/TC-11/expected.json,tests/oracles/IMP-20260717-5EE0/TC-11/input.json,tests/oracles/IMP-20260717-5EE0/TC-12/expected.json,tests/oracles/IMP-20260717-5EE0/TC-12/input.json,tests/oracles/IMP-20260717-5EE0/TC-13/expected.json,tests/oracles/IMP-20260717-5EE0/TC-13/input.json,tests/oracles/IMP-20260717-5EE0/TC-14/expected.json,tests/oracles/IMP-20260717-5EE0/TC-14/input.json,tests/oracles/IMP-20260717-5EE0/TC-15/expected.json,tests/oracles/IMP-20260717-5EE0/TC-15/input.json,tests/oracles/IMP-20260717-5EE0/TC-16/expected.json,tests/oracles/IMP-20260717-5EE0/TC-16/input.json,tests/oracles/IMP-20260717-5EE0/TC-17/expected.json,tests/oracles/IMP-20260717-5EE0/TC-17/input.json,tests/oracles/IMP-20260717-5EE0/TC-18/expected.json,tests/oracles/IMP-20260717-5EE0/TC-18/input.json,tests/oracles/IMP-20260717-5EE0/TC-19/expected.json,tests/oracles/IMP-20260717-5EE0/TC-19/input.json,tests/oracles/IMP-20260717-5EE0/TC-2/input.json,tests/oracles/IMP-20260717-5EE0/TC-20/expected.json,tests/oracles/IMP-20260717-5EE0/TC-20/input.json,tests/oracles/IMP-20260717-5EE0/TC-21/input.json,tests/oracles/IMP-20260717-5EE0/TC-22/input.json,tests/oracles/IMP-20260717-5EE0/TC-3/expected.json,tests/oracles/IMP-20260717-5EE0/TC-3/input.json,tests/oracles/IMP-20260717-5EE0/TC-4/expected.json,tests/oracles/IMP-20260717-5EE0/TC-4/input.json,tests/oracles/IMP-20260717-5EE0/TC-5/input.json,tests/oracles/IMP-20260717-5EE0/TC-6/input.json,tests/oracles/IMP-20260717-5EE0/TC-7/expected.json,tests/oracles/IMP-20260717-5EE0/TC-7/input.json,tests/oracles/IMP-20260717-5EE0/TC-8/expected.json,tests/oracles/IMP-20260717-5EE0/TC-8/input.json,tests/oracles/IMP-20260717-5EE0/TC-9/input.json"
+    "current_phase": "sec",
+    "phase_completed_at": "2026-07-17T23:32:25Z",
+    "report_file": "dev_handover_MT11.xml",
+    "evidence": "codex_verdict_schema.json,core/acceptance/scorers.py,pipeline.py,tests/e2e/fake_codex.py,tests/e2e/test_bootstrap_e2e_v2_5ee0.py,tests/e2e/test_bootstrap_rework_5ee0.py,tests/e2e/test_codex_bootstrap_5ee0.py,tests/oracles/IMP-20260717-5EE0/TC-1/input.json,tests/oracles/IMP-20260717-5EE0/TC-10/expected.json,tests/oracles/IMP-20260717-5EE0/TC-10/input.json,tests/oracles/IMP-20260717-5EE0/TC-11/expected.json,tests/oracles/IMP-20260717-5EE0/TC-11/input.json,tests/oracles/IMP-20260717-5EE0/TC-12/expected.json,tests/oracles/IMP-20260717-5EE0/TC-12/input.json,tests/oracles/IMP-20260717-5EE0/TC-13/expected.json,tests/oracles/IMP-20260717-5EE0/TC-13/input.json,tests/oracles/IMP-20260717-5EE0/TC-14/expected.json,tests/oracles/IMP-20260717-5EE0/TC-14/input.json,tests/oracles/IMP-20260717-5EE0/TC-15/expected.json,tests/oracles/IMP-20260717-5EE0/TC-15/input.json,tests/oracles/IMP-20260717-5EE0/TC-16/expected.json,tests/oracles/IMP-20260717-5EE0/TC-16/input.json,tests/oracles/IMP-20260717-5EE0/TC-17/expected.json,tests/oracles/IMP-20260717-5EE0/TC-17/input.json,tests/oracles/IMP-20260717-5EE0/TC-18/expected.json,tests/oracles/IMP-20260717-5EE0/TC-18/input.json,tests/oracles/IMP-20260717-5EE0/TC-19/expected.json,tests/oracles/IMP-20260717-5EE0/TC-19/input.json,tests/oracles/IMP-20260717-5EE0/TC-2/input.json,tests/oracles/IMP-20260717-5EE0/TC-20/expected.json,tests/oracles/IMP-20260717-5EE0/TC-20/input.json,tests/oracles/IMP-20260717-5EE0/TC-21/input.json,tests/oracles/IMP-20260717-5EE0/TC-22/input.json,tests/oracles/IMP-20260717-5EE0/TC-3/expected.json,tests/oracles/IMP-20260717-5EE0/TC-3/input.json,tests/oracles/IMP-20260717-5EE0/TC-32/expected.json,tests/oracles/IMP-20260717-5EE0/TC-32/input.json,tests/oracles/IMP-20260717-5EE0/TC-36/expected.json,tests/oracles/IMP-20260717-5EE0/TC-36/input.json,tests/oracles/IMP-20260717-5EE0/TC-4/expected.json,tests/oracles/IMP-20260717-5EE0/TC-4/input.json,tests/oracles/IMP-20260717-5EE0/TC-5/input.json,tests/oracles/IMP-20260717-5EE0/TC-6/input.json,tests/oracles/IMP-20260717-5EE0/TC-7/expected.json,tests/oracles/IMP-20260717-5EE0/TC-7/input.json,tests/oracles/IMP-20260717-5EE0/TC-8/expected.json,tests/oracles/IMP-20260717-5EE0/TC-8/input.json,tests/oracles/IMP-20260717-5EE0/TC-9/input.json,tests/oracles/IMP-20260717-5EE0/TC-N10/expected.json,tests/oracles/IMP-20260717-5EE0/TC-N10/input.json"
   },
   "agent_run": {
-    "run_id": "dev-f8cab27b04d6535e",
+    "run_id": "dev-d61bcc8d846b0ba4",
     "phase": "dev",
     "agent_id": "dev-agent",
     "status": "COMPLETED",
-    "output_file": "module_handover_MT-10.xml",
-    "output_sha256": "b0bc2c6c71488cb2f1e605b0cf81a6210beb309917c9d7de69ccd3d659c60fdc",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260717-5EE0/dev/agent_receipt_dev-f8cab27b04d6535e.json",
-    "receipt_sha256": "839338d7d06a751a825bbe489d2daf62d281d13f7a4e5ccdbc3a062d55ebf80a",
+    "output_file": "dev_handover_MT11.xml",
+    "output_sha256": "5884009cc539cd4c669fc6156478c57fd3a023fe676270824a45582bca2194e3",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260717-5EE0/dev/agent_receipt_dev-d61bcc8d846b0ba4.json",
+    "receipt_sha256": "b69e07848d94d43f781ac128e9824b8d0093b7829459c5f02f7e76ba40540013",
     "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260717-5EE0\\dev\\dev-f8cab27b04d6535e.json"
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260717-5EE0\\dev\\dev-d61bcc8d846b0ba4.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260717-5EE0\\dev\\dev-f8cab27b04d6535e.json",
-      "path": ".pipeline/phase_evidence/IMP-20260717-5EE0/dev/agent_receipt_dev-f8cab27b04d6535e.json",
-      "sha256": "839338d7d06a751a825bbe489d2daf62d281d13f7a4e5ccdbc3a062d55ebf80a",
-      "size_bytes": 510,
+      "source": ".pipeline\\agent_receipts\\IMP-20260717-5EE0\\dev\\dev-d61bcc8d846b0ba4.json",
+      "path": ".pipeline/phase_evidence/IMP-20260717-5EE0/dev/agent_receipt_dev-d61bcc8d846b0ba4.json",
+      "sha256": "b69e07848d94d43f781ac128e9824b8d0093b7829459c5f02f7e76ba40540013",
+      "size_bytes": 507,
       "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "module_handover_MT-10.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260717-5EE0/dev/report_module_handover_MT-10.xml",
-      "sha256": "b0bc2c6c71488cb2f1e605b0cf81a6210beb309917c9d7de69ccd3d659c60fdc",
-      "size_bytes": 7881,
+      "source": "dev_handover_MT11.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260717-5EE0/dev/report_dev_handover_MT11.xml",
+      "sha256": "5884009cc539cd4c669fc6156478c57fd3a023fe676270824a45582bca2194e3",
+      "size_bytes": 4186,
       "requires_force_add": true
     },
     {
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260717-5EE0/dev/scope_manifest_scope_manifest.json",
-      "sha256": "ab17af24925f5223750693290cd029dfe9a11ea7e116507db5c2598771809ebc",
-      "size_bytes": 9925,
-      "requires_force_add": true
+      "sha256": "ec82a9e26d4b60289e6cd55988eb2db3ee45c8fa54f24be54bfe89e8e077d9fb",
+      "size_bytes": 12709,
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [

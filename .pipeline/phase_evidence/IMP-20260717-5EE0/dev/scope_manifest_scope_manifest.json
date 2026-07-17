@@ -232,9 +232,28 @@
         {
           "mt_id": "MT-8",
           "implemented_ac": [
-            "AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8",
-            "AC-9", "AC-10", "AC-11", "AC-12", "AC-13", "AC-14", "AC-15",
-            "AC-16", "AC-17", "AC-18", "AC-19", "AC-20", "AC-21", "AC-22"
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-5",
+            "AC-6",
+            "AC-7",
+            "AC-8",
+            "AC-9",
+            "AC-10",
+            "AC-11",
+            "AC-12",
+            "AC-13",
+            "AC-14",
+            "AC-15",
+            "AC-16",
+            "AC-17",
+            "AC-18",
+            "AC-19",
+            "AC-20",
+            "AC-21",
+            "AC-22"
           ],
           "changed_files": [
             "tests/e2e/test_codex_bootstrap_5ee0.py"
@@ -271,6 +290,59 @@
           ],
           "implementation_evidence": [
             "_cmd_gates_codex_review: CODEX_REVIEW_SHARDING=1 env-gated 블록 추가. 기본 off로 기존 흐름 무손상."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-11",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_bootstrap_e2e_v2_5ee0.py",
+        "tests/e2e/test_bootstrap_rework_5ee0.py",
+        "codex_verdict_schema.json",
+        "tests/e2e/fake_codex.py",
+        "tests/oracles/IMP-20260717-5EE0/TC-32/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-32/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-36/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-36/expected.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-N10/input.json",
+        "tests/oracles/IMP-20260717-5EE0/TC-N10/expected.json"
+      ],
+      "affected_functions": [
+        "_check_and_consume_permit",
+        "_issue_codex_shard_review_permit",
+        "_parse_codex_cli_shard_output",
+        "_call_codex_cli_for_shard",
+        "_verify_working_tree_integrity",
+        "_codex_authorize_cmd_hint",
+        "_validate_codex_verdict_obj",
+        "_write_shard_audit_log",
+        "_cmd_gates_codex_review"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-11",
+          "implemented_ac": [
+            "AC-15",
+            "AC-18",
+            "AC-19"
+          ],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_bootstrap_e2e_v2_5ee0.py",
+            "tests/e2e/test_bootstrap_rework_5ee0.py",
+            "codex_verdict_schema.json",
+            "tests/e2e/fake_codex.py",
+            "tests/oracles/IMP-20260717-5EE0/TC-32/input.json",
+            "tests/oracles/IMP-20260717-5EE0/TC-32/expected.json",
+            "tests/oracles/IMP-20260717-5EE0/TC-36/input.json",
+            "tests/oracles/IMP-20260717-5EE0/TC-36/expected.json",
+            "tests/oracles/IMP-20260717-5EE0/TC-N10/input.json",
+            "tests/oracles/IMP-20260717-5EE0/TC-N10/expected.json"
+          ],
+          "implementation_evidence": [
+            "REJECT#3 rework: P0-1 permit review_plan_sha/contract_sha 검증. P0-2 --output-last-message 파서+schema. P0-3 CODEX_CLI_MOCK 제거+fake_codex.py. P0-4 OS별 PowerShell 안내. P0-5 working_tree_integrity 검증. TC-32~TC-42 11개 추가."
           ]
         }
       ]
