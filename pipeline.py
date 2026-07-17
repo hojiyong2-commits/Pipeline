@@ -28900,6 +28900,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                         "  CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
                     )
                 # 허가 통과 → 즉시 소비(CONSUMED)하여 재사용을 차단한다.
+                assert _run_permit is not None  # _permit_ok==True이면 None 불가
                 _consume_codex_run_permit(_run_permit)
             # REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js를 exec 실행 파일로 고정한다.
             _auto_run = _invoke_codex_exec(

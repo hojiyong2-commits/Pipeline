@@ -1253,7 +1253,9 @@ def test_r5_ambiguous_verdict_fail_closed() -> None:
     assert pipeline._parse_json_verdict(ndjson) is None
 
     # 대조군: 단일 verdict는 정상 파싱된다(회귀 방지).
-    assert pipeline._parse_json_verdict(approve)["verdict"] == "APPROVED"
+    _parsed_approve = pipeline._parse_json_verdict(approve)
+    assert _parsed_approve is not None
+    assert _parsed_approve["verdict"] == "APPROVED"
     single_reject = pipeline._parse_json_verdict(reject)
     assert single_reject is not None and single_reject["verdict"] == "REJECTED"
 
@@ -1368,8 +1370,10 @@ def test_r5_run_permit_single_use(tmp_path: Path, monkeypatch) -> None:
     assert ok is True and reason == ""
 
     # 소비 → CONSUMED.
+    assert loaded is not None  # _check_codex_run_permit ok==True이므로 None 불가
     pipeline._consume_codex_run_permit(loaded)
     reloaded = pipeline._load_codex_run_permit()
+    assert reloaded is not None
     assert reloaded["status"] == "CONSUMED"
 
     # 재사용 시도 → consumed로 차단(snapshot이 여전히 일치해도 재사용 불가).
