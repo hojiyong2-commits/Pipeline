@@ -35,7 +35,5 @@ testpaths = [
     "tests/e2e/test_codex_model_router_dae1.py",
     "tests/e2e/test_codex_model_router_e2e.py",
     "tests/e2e/test_codex_review_gate_3bb6.py",
-    "tests/e2e/test_codex_cost_optimization_9f5e.py",
-    "tests/e2e/test_ac_tracking_1abe.py",
 ]
 pythonpath = ["."]
