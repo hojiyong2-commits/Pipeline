@@ -20,7 +20,7 @@
     "output_file": "dev_handover_r6.xml",
     "output_sha256": "3aa67330e37d4a4a1d0756b547d6535555e270f6a240cba44bc2c5406e4c6b05",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/agent_receipt_dev-8ba8641f2bf2cef7.json",
-    "receipt_sha256": "164142347aeee75aedbb61bd83386b16064639a09937c289c33e2088594e7a52",
+    "receipt_sha256": "6192e5dddb2c6ab4073d0addc460a0ce5f151de35112594d75e0941e19d368d1",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260712-DAE1\\dev\\dev-8ba8641f2bf2cef7.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260712-DAE1\\dev\\dev-8ba8641f2bf2cef7.json",
       "path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/agent_receipt_dev-8ba8641f2bf2cef7.json",
-      "sha256": "164142347aeee75aedbb61bd83386b16064639a09937c289c33e2088594e7a52",
+      "sha256": "6192e5dddb2c6ab4073d0addc460a0ce5f151de35112594d75e0941e19d368d1",
       "size_bytes": 518,
       "requires_force_add": false
     },
@@ -46,7 +46,7 @@
       "label": "scope_manifest",
       "source": "scope_manifest_full_r6.json",
       "path": ".pipeline/phase_evidence/IMP-20260712-DAE1/dev/scope_manifest_scope_manifest_full_r6.json",
-      "sha256": "32477fa5f5fea5c0f01f7da1e482056c03aeefaa8e8aa3d07e52a26de960ac83",
+      "sha256": "5b87f14cdfc3e040625a094a53eeee54fc6cbbbfc760b9742e85faf6419a1fe0",
       "size_bytes": 26153,
       "requires_force_add": false
     }
