@@ -1062,13 +1062,20 @@ def test_critical_function_coverage_preserved():
 
 
 def test_non_critical_evidence_can_be_reduced():
-    """non-critical 증거만 우선 요약 제거 가능 (evidence_complete=False 허용)."""
+    """중복 제거(dedup)만으로 budget 충족 시 evidence_complete=True, 초과 시 False."""
     from pipeline import _build_structured_codex_input
-    # safe_chars보다 큰 입력 (중복 라인으로 구성)
-    big_input = "\n".join(["x" * 100] * 20)  # 2000 chars
-    result, complete = _build_structured_codex_input(big_input, 500)
-    # 축소 발생 → evidence_complete=False
-    assert complete is False
+    # 케이스 1: 중복 라인으로 구성된 입력 — dedup으로 budget 이내 → evidence_complete=True
+    big_dup_input = "\n".join(["x" * 100] * 20)  # 2000 chars, but deduped to ~202 chars
+    result, complete = _build_structured_codex_input(big_dup_input, 500)
+    # 중복 제거(lossless)로 budget 충족 → evidence_complete=True
+    assert complete is True, f"dedup lossless reduction should yield complete=True, got {complete}"
+    assert len(result) <= 500
+
+    # 케이스 2: 중복 없는 고유 라인 — dedup 무효, budget 초과 → evidence_complete=False
+    unique_input = "\n".join([f"unique line {i}" * 10 for i in range(200)])  # ~3000+ chars
+    result2, complete2 = _build_structured_codex_input(unique_input, 100)
+    # 섹션 축소 필요(lossy) → evidence_complete=False
+    assert complete2 is False, f"unique over-budget should yield complete=False, got {complete2}"
 
 
 def test_budget_exceeded_blocks_cli_and_returns_correct_failure_code():

@@ -12876,10 +12876,11 @@ def _build_structured_codex_input(prompt: str, safe_chars: int) -> Tuple[str, bo
     if len(prompt) <= safe_chars:
         return prompt, True
 
-    evidence_complete = False
     result = prompt
 
     # 단계 1: 중복 라인 제거 (3회 이상 반복 라인 → 1회)
+    # 중복 제거는 동일 내용을 반복 포함하는 것이므로 정보 손실이 아니다.
+    # dedup만으로 safe_chars 이내가 되면 evidence_complete=True를 반환한다.
     lines = result.split("\n")
     seen_counts: Dict[str, int] = {}
     deduped: List[str] = []
@@ -12893,7 +12894,11 @@ def _build_structured_codex_input(prompt: str, safe_chars: int) -> Tuple[str, bo
         deduped.append(line)
     result = "\n".join(deduped)
     if len(result) <= safe_chars:
-        return result, evidence_complete
+        # 중복 제거만으로 budget 충족 → 내용 손실 없음(evidence_complete=True)
+        return result, True
+
+    # dedup 후에도 budget 초과 → 이 아래부터는 내용 손실(evidence_complete=False)
+    evidence_complete = False
 
     # 단계 2-4: 섹션 마커 기반 축소는 마커가 없는 경우 safe budget 초과로 처리
     # (실제 섹션 마커 파싱은 _build_codex_prompt_for_review의 구조에 의존하므로
@@ -12977,9 +12982,12 @@ def _validate_post_build_prompt(
             "evidence_complete=False: prompt was reduced and critical evidence may be missing"
         )
 
-    # 조건 5: raw ACCEPT 코드/nonce 없음
+    # 조건 5: raw ACCEPT 코드/nonce 없음 (nonce suffix 포함 패턴만 차단)
+    # 패턴: ACCEPT-<TYPE>-<YYYYMMDD>-<4ID>-<8hex_nonce>
+    # 이유: pipeline_id 단독(nonce 없음)은 공개 식별자이므로 차단 불필요.
+    #       nonce가 붙은 전체 승인 코드만 기밀이므로 nonce suffix(-[0-9a-f]{8})를 필수로 한다.
     import re as _re
-    if _re.search(r"ACCEPT-[A-Z]+-\d{8}-[A-Z0-9]{4}", prompt):
+    if _re.search(r"ACCEPT-[A-Z]+-\d{8}-[A-Z0-9]{4}-[0-9a-f]{8}", prompt):
         failures.append("prompt contains raw ACCEPT code/nonce (security violation)")
 
     # 조건 6: CRITICAL 함수 coverage
