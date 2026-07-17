@@ -2504,7 +2504,7 @@ CODEX_ALLOWED_MODELS: frozenset = frozenset({
 # 한글 등 multibyte 입력에서 오판(과다 축소/미검출)이 발생한다. 이 값은 하드 한도가 아니라
 # 안전 예산이며, 초과 시 구조화 축소(_build_structured_codex_input) 후 post-build preflight로
 # 필수 증거 보존을 검증한다(fail-closed).
-CODEX_CLI_SAFE_INPUT_CHARS = 900_000
+CODEX_CLI_SAFE_INPUT_CHARS = 1_000_000
 
 # REJECT#32 Fix: trust-chain 모듈 상수 — 단독 변경도 CRITICAL로 분류한다.
 # 이 상수들이 변경되면 라우터 동작·모델 정책·신뢰 경계 자체가 바뀔 수 있으므로
