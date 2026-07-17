@@ -1,0 +1,9 @@
+{
+  "changed_files": ["pipeline.py"],
+  "changed_functions": ["_cmd_gates_request_accept"],
+  "changed_lines": 50,
+  "pipeline_type": "IMP",
+  "execution_profile": "HIGH_RISK",
+  "previous_reject_count": 0,
+  "previous_cli_error_count": 0
+}

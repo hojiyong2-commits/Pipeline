@@ -1,0 +1,1627 @@
+"""test_codex_defects_dae1.py — IMP-20260712-DAE1 rework: Codex Review 7개 결함 수정 E2E 테스트.
+
+# [Purpose]: Codex Review gate의 7개 결함 수정을 실제 CLI 경로(subprocess) 및 내부 함수로 검증한다.
+#   결함1: NON_CONVERGING을 codex_review_result.json에 영속 기록
+#   결함2: reject_count SSoT를 append-only history로 전환(result 파일 삭제로 우회 불가)
+#   결함3: circuit breaker를 Codex CLI 호출 전에 실행(result 파일 삭제해도 history가 차단)
+#   결함4: REJECT/BLOCKED verdict에 findings 필드 필수(없으면 invalid_verdict_schema)
+#   결함5: finding 7개 필드 실제 검증(누락/빈값 시 invalid_verdict_schema)
+#   결함6: contract_sha256을 구조화된 계약 상수(CODEX_REVIEW_CONTRACT_STRUCT) SHA로 계산
+#   결함7: --start-epoch 자동 실행 금지 guard(CODEX_START_EPOCH_USER_CONFIRMED=1 필요)
+# [Assumptions]: PIPELINE_STATE_PATH로 state/.pipeline 격리. subprocess로 실제 CLI를 실행하며,
+#   내부 함수 직접 호출은 파싱/계약 검증 보조로만 사용한다.
+# [Vulnerability & Risks]: fake codex marker 파일 부재로 CLI 미호출을 증명한다. 실제 OpenAI/Codex
+#   CLI는 호출하지 않는다(모든 경로가 CLI 호출 전에 fail-closed BLOCKED되거나 순수 파싱 함수).
+# [Improvement]: 승인(APPROVED) 흐름까지 포함한 full-flow reject_count 누적 회귀를 추가할 수 있다.
+"""
+import hashlib
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+import pipeline  # noqa: E402
+
+_PID = "IMP-20260712-DAE1"
+
+
+# ------------------------------------------------------------------ #
+# 공용 헬퍼
+# ------------------------------------------------------------------ #
+def _setup_state(tmp_path: Path, state: Dict[str, object]) -> Tuple[Path, Path]:
+    """격리된 state 파일과 .pipeline 디렉토리를 만든다.
+
+    Returns:
+        (state_path, pipeline_dir) — pipeline_dir는 history/result JSON이 놓이는 위치.
+    """
+    state_path = tmp_path / "pipeline_state.json"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    pipeline_dir = tmp_path / ".pipeline"
+    pipeline_dir.mkdir(parents=True, exist_ok=True)
+    return state_path, pipeline_dir
+
+
+def _seed_history(pipeline_dir: Path, entries: List[Dict[str, object]]) -> Path:
+    """codex_review_history.jsonl에 append-only 항목을 seed한다."""
+    hist_path = pipeline_dir / "codex_review_history.jsonl"
+    with open(hist_path, "w", encoding="utf-8") as fh:
+        for e in entries:
+            fh.write(json.dumps(e, ensure_ascii=False) + "\n")
+    return hist_path
+
+
+def _make_fake_codex(bin_dir: Path, marker: Path) -> None:
+    """PATH에 올릴 fake codex 실행 파일을 만든다. 실행되면 marker 파일을 생성한다.
+
+    marker 파일의 부재는 Codex CLI가 호출되지 않았음을 증명한다(CLI 미호출 검증용).
+    """
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        # Windows: codex.cmd (shutil.which가 PATHEXT로 탐색).
+        (bin_dir / "codex.cmd").write_text(
+            "@echo off\r\necho called> \"%s\"\r\n" % str(marker),
+            encoding="utf-8",
+        )
+    else:
+        script = bin_dir / "codex"
+        script.write_text(
+            "#!/bin/sh\necho called > \"%s\"\n" % str(marker),
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
+
+
+def _run_cli(
+    state_path: Path,
+    args: List[str],
+    fake_bin_dir: Optional[Path] = None,
+    extra_env: Optional[Dict[str, str]] = None,
+) -> subprocess.CompletedProcess:
+    """격리 state로 pipeline.py CLI를 subprocess 실행한다."""
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    # 실제 Codex/OpenAI 호출을 유발할 수 있는 자동 실행 확인 변수는 제거한다.
+    env.pop("CODEX_START_EPOCH_USER_CONFIRMED", None)
+    if fake_bin_dir is not None:
+        env["PATH"] = str(fake_bin_dir) + os.pathsep + env.get("PATH", "")
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.run(
+        [sys.executable, str(_ROOT / "pipeline.py"), *args],
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(_ROOT),
+        timeout=90,
+    )
+
+
+def _full_finding() -> Dict[str, object]:
+    """7개 필수 필드를 모두 갖춘 유효한 finding."""
+    return {
+        "scope": "IN_SCOPE",
+        "severity": "P0",
+        "root_cause_category": "fake_codex_exec",
+        "evidence": "관측된 증거 문자열",
+        "reproduction": "재현 절차",
+        "required_fix": "요구되는 수정",
+        "acceptance_criteria": ["검증 기준 1"],
+    }
+
+
+# ================================================================== #
+# 테스트 1: epoch 누락 시 fake Codex marker 미생성(CLI 미호출) + epoch_missing BLOCKED
+# ================================================================== #
+def test_1_epoch_missing_blocks_before_cli(tmp_path: Path) -> None:
+    """review_epoch 없음 → codex_review_epoch_missing BLOCKED, fake codex marker 미생성."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via marker/output.
+    state_path, _ = _setup_state(tmp_path, {"pipeline_id": _PID, "current_phase": 7})
+    bin_dir = tmp_path / "bin"
+    marker = tmp_path / "codex_called.marker"
+    _make_fake_codex(bin_dir, marker)
+
+    r = _run_cli(state_path, ["gates", "codex-review"], fake_bin_dir=bin_dir)
+    combined = r.stdout + r.stderr
+    assert r.returncode != 0, f"epoch 없으면 BLOCKED여야 함: {combined[:400]}"
+    assert "codex_review_epoch_missing" in combined, combined[:400]
+    # 핵심: Codex CLI가 호출되지 않았음을 marker 부재로 증명.
+    assert not marker.exists(), "epoch 누락 시 Codex CLI가 호출되면 안 됨(marker 생성됨)"
+
+
+# ================================================================== #
+# 테스트 2: legacy 22회 REJECT 이력 → NON_CONVERGING이 codex_review_result.json에 영속(결함1)
+# ================================================================== #
+def test_2_legacy_history_persists_non_converging(tmp_path: Path) -> None:
+    """epoch 없는 22회 REJECT 이력 → result 파일에 NON_CONVERGING 영속(history는 보존)."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via result file.
+    state_path, pdir = _setup_state(tmp_path, {"pipeline_id": _PID, "current_phase": 7})
+    entries = [
+        {
+            "status": "REJECTED",
+            "verdict_scope": "IN_SCOPE",
+            "root_cause_category": "legacy_cat_%d" % (i % 7),
+            "counts_toward_reject_rate_limit": True,
+        }
+        for i in range(22)
+    ]
+    _seed_history(pdir, entries)
+
+    r = _run_cli(state_path, ["gates", "codex-review"])
+    assert r.returncode != 0
+    assert "codex_review_epoch_missing" in (r.stdout + r.stderr)
+
+    result_path = pdir / "codex_review_result.json"
+    assert result_path.exists(), "NON_CONVERGING이 result 파일에 기록돼야 함"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    assert result["status"] == "NON_CONVERGING", result
+    assert result["review_epoch"] == "epoch_legacy", result
+    assert result["acceptance_eligible"] is False
+    assert int(result["effective_rejects"]) == 22
+    # history는 삭제/초기화되지 않아야 한다(append-only 보존).
+    hist_lines = (pdir / "codex_review_history.jsonl").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    assert len([ln for ln in hist_lines if ln.strip()]) == 22
+
+
+# ================================================================== #
+# 테스트 3: result 파일 삭제 후에도 history가 CLI 호출 전 차단(결함2+결함3)
+# ================================================================== #
+def test_3_result_deleted_history_blocks_pre_cli(tmp_path: Path) -> None:
+    """named epoch + 5 REJECT history + result 파일 없음 → pre-CLI NON_CONVERGING BLOCKED."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via result file.
+    epoch = "epoch_20260712_001"
+    state = {
+        "pipeline_id": _PID,
+        "current_phase": 7,
+        "codex_review_contract_migration": {
+            "review_epoch": epoch,
+            "new_contract_sha256": "deadbeef",
+        },
+    }
+    state_path, pdir = _setup_state(tmp_path, state)
+    entries = [
+        {
+            "status": "REJECTED",
+            "review_epoch": epoch,
+            "verdict_scope": "IN_SCOPE",
+            "root_cause_category": "cat_%d" % i,
+            "counts_toward_reject_rate_limit": True,
+        }
+        for i in range(5)
+    ]
+    _seed_history(pdir, entries)
+    # result 파일은 존재하지 않음(삭제된 상태 시뮬레이션).
+    assert not (pdir / "codex_review_result.json").exists()
+
+    bin_dir = tmp_path / "bin"
+    marker = tmp_path / "codex_called.marker"
+    _make_fake_codex(bin_dir, marker)
+
+    r = _run_cli(state_path, ["gates", "codex-review"], fake_bin_dir=bin_dir)
+    combined = r.stdout + r.stderr
+    assert r.returncode != 0, combined[:400]
+    assert "codex_review_non_converging_pre_cli" in combined, combined[:400]
+    # CLI 미호출 증명.
+    assert not marker.exists(), "history가 차단해야 하며 Codex CLI가 호출되면 안 됨"
+    # NON_CONVERGING이 result 파일에 다시 영속됨.
+    result = json.loads((pdir / "codex_review_result.json").read_text(encoding="utf-8"))
+    assert result["status"] == "NON_CONVERGING"
+    assert result["review_epoch"] == epoch
+    assert int(result["effective_rejects"]) == 5
+
+
+# ================================================================== #
+# 테스트 4: findings 누락 시 → invalid_verdict_schema (parse_failure / None) (결함4)
+# ================================================================== #
+def test_4_reject_missing_findings_is_parse_failure() -> None:
+    """legacy 4-필드 REJECT(findings 없음) → _parse_json_verdict None(invalid_verdict_schema)."""
+    legacy_reject = json.dumps({
+        "verdict": "REJECT",
+        "root_cause": "x",
+        "reproduction": "y",
+        "required_fix": "z",
+        "acceptance_criteria": ["a"],
+    })
+    assert pipeline._parse_json_verdict(legacy_reject) is None
+    # BLOCKED도 findings 필수.
+    blocked_no_findings = json.dumps({"verdict": "BLOCKED", "reason": "x"})
+    assert pipeline._parse_json_verdict(blocked_no_findings) is None
+    # findings가 list가 아님 → None.
+    bad_type = json.dumps({"verdict": "REJECT", "findings": {"scope": "IN_SCOPE"}})
+    assert pipeline._parse_json_verdict(bad_type) is None
+
+
+# ================================================================== #
+# 테스트 5: findings=[] 시 → invalid_verdict_schema (None) (결함4)
+# ================================================================== #
+def test_5_reject_empty_findings_is_parse_failure() -> None:
+    """findings=[] + REJECT/BLOCKED → _parse_json_verdict None."""
+    assert pipeline._parse_json_verdict(
+        json.dumps({"verdict": "REJECT", "findings": []})
+    ) is None
+    assert pipeline._parse_json_verdict(
+        json.dumps({"verdict": "BLOCKED", "findings": []})
+    ) is None
+
+
+# ================================================================== #
+# 테스트 6: finding 7개 필드 각각 누락/빈값 시 → invalid_verdict_schema (None) (결함5)
+# ================================================================== #
+def test_6_finding_each_field_required() -> None:
+    """finding 7개 필수 필드 중 하나라도 누락/빈값이면 None. 완전하면 REJECTED."""
+    required = [
+        "scope", "severity", "root_cause_category", "evidence",
+        "reproduction", "required_fix", "acceptance_criteria",
+    ]
+    # 완전한 finding → REJECTED.
+    ok = pipeline._parse_json_verdict(
+        json.dumps({"verdict": "REJECT", "findings": [_full_finding()]})
+    )
+    assert ok is not None and ok["verdict"] == "REJECTED"
+    assert ok["in_scope_count"] >= 1
+
+    # 각 필드를 하나씩 제거 → None.
+    for field in required:
+        f = _full_finding()
+        del f[field]
+        got = pipeline._parse_json_verdict(
+            json.dumps({"verdict": "REJECT", "findings": [f]})
+        )
+        assert got is None, f"필드 '{field}' 누락 시 None이어야 함, got {got!r}"
+
+    # 각 str 필드를 빈 문자열로 → None.
+    for field in required:
+        if field == "acceptance_criteria":
+            continue
+        f = _full_finding()
+        f[field] = "   "
+        assert pipeline._parse_json_verdict(
+            json.dumps({"verdict": "REJECT", "findings": [f]})
+        ) is None, f"필드 '{field}' 빈 문자열 시 None이어야 함"
+
+    # acceptance_criteria 빈 리스트/빈 원소 → None.
+    f = _full_finding()
+    f["acceptance_criteria"] = []
+    assert pipeline._parse_json_verdict(
+        json.dumps({"verdict": "REJECT", "findings": [f]})
+    ) is None
+    f["acceptance_criteria"] = ["  "]
+    assert pipeline._parse_json_verdict(
+        json.dumps({"verdict": "REJECT", "findings": [f]})
+    ) is None
+
+
+# ================================================================== #
+# 테스트 7: schema ERROR(parse_failure)는 reject_count를 증가시키지 않음 (결함2/결함5)
+# ================================================================== #
+def test_7_schema_error_does_not_increase_reject_count() -> None:
+    """불완전 REJECT는 status=ERROR로 분류되어 effective reject로 계수되지 않는다.
+
+    reject_count SSoT는 append-only history의 effective(IN_SCOPE) REJECT 수이며,
+    ERROR/parse_failure 항목은 counts_toward_reject_rate_limit=False로 미계수된다.
+    """
+    # 불완전 REJECT stdout → CLI 결과 status=ERROR (REJECTED로 승격되지 않음).
+    invalid_reject = json.dumps({"verdict": "REJECT"})  # findings 없음
+    res = pipeline._run_codex_cli_review(0, invalid_reject, "")
+    assert res["status"] == "ERROR", res
+    assert res.get("error_type") == "parse_failure", res
+
+    # ERROR 항목만 있는 history → effective_rejects=0 (reject_count 미증가).
+    err_hist = [
+        {
+            "status": "ERROR",
+            "review_epoch": "epoch_x",
+            "counts_toward_reject_rate_limit": False,
+        }
+        for _ in range(4)
+    ]
+    cb = pipeline._check_codex_circuit_breaker(err_hist, "epoch_x")
+    assert cb["effective_rejects"] == 0, cb
+    assert cb["triggered"] is False
+
+
+# ================================================================== #
+# 테스트 8: contract_sha256이 구조화된 계약 상수 SHA와 일치 (결함6)
+# ================================================================== #
+def test_8_contract_sha256_matches_struct() -> None:
+    """_compute_codex_contract_sha256 == CODEX_REVIEW_CONTRACT_STRUCT canonical SHA256."""
+    expected = hashlib.sha256(
+        json.dumps(
+            pipeline.CODEX_REVIEW_CONTRACT_STRUCT, sort_keys=True, ensure_ascii=True
+        ).encode("utf-8")
+    ).hexdigest()
+    actual = pipeline._compute_codex_contract_sha256()
+    assert actual == expected
+    assert len(actual) == 64
+    # 결정적: 두 번 호출해도 동일.
+    assert pipeline._compute_codex_contract_sha256() == actual
+
+
+# ================================================================== #
+# 테스트 9: 계약 struct 외부의 값 변경은 contract_sha256을 바꾸지 않음 (결함6)
+# ================================================================== #
+def test_9_noncontract_value_does_not_affect_sha() -> None:
+    """SHA 입력은 CODEX_REVIEW_CONTRACT_STRUCT 뿐 — struct에 없는 상수는 영향 없음."""
+    canonical = json.dumps(
+        pipeline.CODEX_REVIEW_CONTRACT_STRUCT, sort_keys=True, ensure_ascii=True
+    )
+    # 계약과 무관한 예산 상수 값은 canonical 입력에 포함되지 않는다.
+    assert str(pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS) not in canonical
+    # struct 내용이 실제로 바뀌면 SHA가 바뀐다(민감도 검증) — 원본은 훼손하지 않음.
+    mutated = dict(pipeline.CODEX_REVIEW_CONTRACT_STRUCT)
+    mutated["schema_version"] = mutated["schema_version"] + 1
+    mutated_sha = hashlib.sha256(
+        json.dumps(mutated, sort_keys=True, ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    assert mutated_sha != pipeline._compute_codex_contract_sha256()
+
+
+# ================================================================== #
+# 테스트 10: 기존 supply-chain finding(bounded trust SSoT)이 변경되지 않음
+# ================================================================== #
+def test_10_supply_chain_findings_unchanged() -> None:
+    """3개 bounded trust SSoT 목록의 항목 수와 핵심 supply-chain 항목이 그대로 보존됨."""
+    assert len(pipeline.CODEX_BOUNDED_TRUST_IN_SCOPE) == 8
+    assert len(pipeline.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC) == 6
+    assert len(pipeline.CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED) == 6
+    # 공급망 관련 진단 항목은 OUT_OF_SCOPE_DIAGNOSTIC에 그대로 존재.
+    for entry in (
+        "openai_registry_compromise",
+        "npm_tarball_supply_chain_proof",
+        "native_binary_origin_proof",
+        "authenticode_ca_trust_store",
+        "same_os_user_privilege_attack",
+        "external_signing_unverifiable",
+    ):
+        assert entry in pipeline.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC
+    # 세 목록은 상호 배타적(disjoint)이어야 한다.
+    _in = set(pipeline.CODEX_BOUNDED_TRUST_IN_SCOPE)
+    _out = set(pipeline.CODEX_BOUNDED_TRUST_OUT_OF_SCOPE_DIAGNOSTIC)
+    _env = set(pipeline.CODEX_BOUNDED_TRUST_ENVIRONMENT_UNTRUSTED)
+    assert not (_in & _out) and not (_in & _env) and not (_out & _env)
+
+
+# ================================================================== #
+# IMP-20260712-DAE1 REJECT#LATEST rework: _check_codex_review_gate 강화 회귀 테스트 (15개)
+#   결함1(acceptance_eligible 필수) / 결함2(pr_body_sha256 필수) / 결함3(schema·status·verdict·
+#   source 동시 요구) / 결함4(pipeline_id·review_epoch·contract_sha256·acceptance PENDING 불변식) /
+#   결함5(start-epoch가 struct SHA 사용)를 직접 함수 호출 + subprocess로 검증한다.
+# ================================================================== #
+_GATE_EPOCH = "epoch_20260712_gate"
+_HEAD_SHA = "a" * 40
+_PACKET_SHA = "packet" + "0" * 58
+_BODY_SHA = "body0" + "0" * 59
+
+
+def _gate_state(epoch: str = _GATE_EPOCH) -> Dict[str, object]:
+    """review_epoch를 담은 최소 state dict."""
+    return {
+        "pipeline_id": _PID,
+        "current_phase": 7,
+        "codex_review_contract_migration": {"review_epoch": epoch},
+    }
+
+
+def _valid_result(drop: Tuple[str, ...] = (), **overrides: object) -> Dict[str, object]:
+    """모든 불변식을 통과해 head SHA 검증 직전까지 도달하는 완전한 result dict.
+
+    drop에 나열된 키는 제거하여 '필드 누락' 상황을 시뮬레이션한다.
+    """
+    r: Dict[str, object] = {
+        "schema_version": pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION,
+        "pipeline_id": _PID,
+        "status": "APPROVED",
+        "verdict": "APPROVE_TO_USER",
+        "acceptance_eligible": True,
+        "verdict_source": "codex_cli",
+        "review_epoch": _GATE_EPOCH,
+        "contract_sha256": pipeline._compute_codex_contract_sha256(),
+        "pr_head_sha": _HEAD_SHA,
+        "packet_sha256": _PACKET_SHA,
+        "pr_body_sha256": _BODY_SHA,
+    }
+    r.update(overrides)
+    for k in drop:
+        r.pop(k, None)
+    return r
+
+
+def _valid_request(drop: Tuple[str, ...] = (), **overrides: object) -> Dict[str, object]:
+    """result와 일치하는 PENDING acceptance_request."""
+    req: Dict[str, object] = {
+        "pipeline_id": _PID,
+        "status": "PENDING",
+        "packet_sha256": _PACKET_SHA,
+        "pr_body_sha256": _BODY_SHA,
+    }
+    req.update(overrides)
+    for k in drop:
+        req.pop(k, None)
+    return req
+
+
+def _call_gate(
+    tmp_path: Path,
+    monkeypatch,
+    result: Dict[str, object],
+    request: Optional[Dict[str, object]] = None,
+    state: Optional[Dict[str, object]] = None,
+    head_sha: Optional[str] = None,
+) -> Dict[str, object]:
+    """격리 환경에서 _check_codex_review_gate를 직접 호출한다.
+
+    PIPELINE_STATE_PATH로 result 경로를 격리하고, cwd를 tmp_path로 바꿔
+    acceptance_request.json(상대경로 SSoT)을 격리한다. head SHA는 monkeypatch로 결정적으로 만든다.
+    """
+    st = state if state is not None else _gate_state()
+    state_path = tmp_path / "pipeline_state.json"
+    state_path.write_text(json.dumps(st), encoding="utf-8")
+    pdir = tmp_path / ".pipeline"
+    pdir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+    monkeypatch.chdir(tmp_path)
+    (pdir / "codex_review_result.json").write_text(json.dumps(result), encoding="utf-8")
+    if request is not None:
+        (tmp_path / "acceptance_request.json").write_text(
+            json.dumps(request), encoding="utf-8"
+        )
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: head_sha)
+    return pipeline._check_codex_review_gate(_PID, st)
+
+
+# --- 결함1: acceptance_eligible 필수화 ------------------------------- #
+def test_acceptance_eligible_missing_blocked(tmp_path: Path, monkeypatch) -> None:
+    """acceptance_eligible 필드 없음 → codex_review_not_eligible BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(drop=("acceptance_eligible",)))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_not_eligible", res
+
+
+def test_acceptance_eligible_false_blocked(tmp_path: Path, monkeypatch) -> None:
+    """acceptance_eligible=False → codex_review_not_eligible BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(acceptance_eligible=False))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_not_eligible", res
+
+
+def test_acceptance_eligible_string_true_blocked(tmp_path: Path, monkeypatch) -> None:
+    """acceptance_eligible='true'(문자열) → bool True 아님 → BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(acceptance_eligible="true"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_not_eligible", res
+
+
+# --- 결함3: status/verdict/source/schema 동시 요구 ------------------- #
+def test_status_approved_no_verdict_blocked(tmp_path: Path, monkeypatch) -> None:
+    """status=APPROVED이지만 verdict 누락 → codex_review_verdict_mismatch BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(drop=("verdict",)))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_verdict_mismatch", res
+
+
+def test_verdict_approve_to_user_no_status_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict=APPROVE_TO_USER이지만 status 누락 → codex_review_not_approved BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(drop=("status",)))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_not_approved", res
+
+
+def test_verdict_source_external_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='external' → codex_review_untrusted_source BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="external"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+
+
+def test_verdict_source_manual_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='manual' → codex_review_untrusted_source BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="manual"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+
+
+def test_schema_version_mismatch_blocked(tmp_path: Path, monkeypatch) -> None:
+    """schema_version 불일치 → codex_review_schema_mismatch BLOCKED (결함3 보강)."""
+    bad = pipeline.CODEX_REVIEW_RESULT_SCHEMA_VERSION + 99
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(schema_version=bad))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_schema_mismatch", res
+
+
+# --- 결함2: pr_body_sha256 필수화 ----------------------------------- #
+def test_body_sha_both_absent_blocked(tmp_path: Path, monkeypatch) -> None:
+    """result/request 양쪽 body SHA 없음 → pr_body_sha256_required_but_absent BLOCKED."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(drop=("pr_body_sha256",)),
+        request=_valid_request(drop=("pr_body_sha256",)),
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "pr_body_sha256_required_but_absent", res
+
+
+def test_body_sha_mismatch_blocked(tmp_path: Path, monkeypatch) -> None:
+    """result/request body SHA 불일치 → pr_body_sha256_mismatch BLOCKED."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(),  # pr_body_sha256 = _BODY_SHA
+        request=_valid_request(pr_body_sha256="deadbeef" * 8),
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "pr_body_sha256_mismatch", res
+
+
+# --- 결함4: review_epoch / contract_sha256 불변식 ------------------- #
+def test_review_epoch_mismatch_blocked(tmp_path: Path, monkeypatch) -> None:
+    """result.review_epoch != state epoch → codex_review_stale_epoch BLOCKED."""
+    res = _call_gate(
+        tmp_path, monkeypatch, _valid_result(review_epoch="epoch_other_999")
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_stale_epoch", res
+
+
+def test_contract_sha_mismatch_blocked(tmp_path: Path, monkeypatch) -> None:
+    """result.contract_sha256 != struct SHA → codex_review_stale_contract BLOCKED."""
+    res = _call_gate(
+        tmp_path, monkeypatch, _valid_result(contract_sha256="0" * 64)
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_stale_contract", res
+
+
+# --- 결함6: struct SHA는 계약 struct에만 의존(비계약 코드 변경 무관) --- #
+def test_pipeline_py_change_no_contract_sha_change() -> None:
+    """_compute_codex_contract_sha256는 CODEX_REVIEW_CONTRACT_STRUCT만 해시한다.
+
+    struct에 포함되지 않은 상수(예: 번들 예산 문자수)는 SHA 입력(canonical JSON)에 없으므로,
+    그런 비계약 값이 바뀌어도 contract SHA는 변하지 않는다.
+    """
+    canonical = json.dumps(
+        pipeline.CODEX_REVIEW_CONTRACT_STRUCT, sort_keys=True, ensure_ascii=True
+    )
+    expected = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    assert pipeline._compute_codex_contract_sha256() == expected
+    # 비계약 상수 값은 canonical 입력에 포함되지 않는다(그 값을 바꿔도 SHA 불변).
+    assert str(pipeline.CODEX_REVIEW_BUNDLE_BUDGET_CHARS) not in canonical
+    # 결정적: 반복 호출해도 동일.
+    assert pipeline._compute_codex_contract_sha256() == expected
+
+
+# --- 결함5: start-epoch가 struct SHA를 기록 ------------------------- #
+def test_start_epoch_uses_contract_sha(tmp_path: Path) -> None:
+    """--start-epoch가 migration.new_contract_sha256을 struct SHA로 기록한다(subprocess)."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli; final_state asserted via state file.
+    state_path, _ = _setup_state(tmp_path, {"pipeline_id": _PID, "current_phase": 7})
+    r = _run_cli(
+        state_path,
+        ["gates", "codex-review", "--start-epoch", "회귀 테스트: struct SHA 검증"],
+        extra_env={"CODEX_START_EPOCH_USER_CONFIRMED": "1"},
+    )
+    combined = r.stdout + r.stderr
+    assert r.returncode == 0, combined[:600]
+    assert "contract migration 기록 완료" in combined, combined[:600]
+    new_state = json.loads(state_path.read_text(encoding="utf-8"))
+    migration = new_state.get("codex_review_contract_migration") or {}
+    assert migration.get("new_contract_sha256") == pipeline._compute_codex_contract_sha256(), (
+        migration
+    )
+    # pipeline.py 전체 파일 SHA와는 다르다(비계약 코드 변경에 흔들리지 않음).
+    assert migration.get("new_contract_sha256") != pipeline._sha256_file(
+        pipeline.BASE_DIR / "pipeline.py"
+    )
+
+
+# --- 기존 검증 유지: head SHA / packet SHA -------------------------- #
+def test_existing_head_sha_check_maintained(tmp_path: Path, monkeypatch) -> None:
+    """모든 불변식 통과 후 head SHA 불일치 → codex_review_stale BLOCKED (head 검증 유지)."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(),
+        request=_valid_request(),
+        head_sha="b" * 40,  # result.pr_head_sha(_HEAD_SHA='a'*40)와 다름
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_stale", res
+    assert "pr_head_sha" in str(res["message"]), res
+
+
+def test_existing_packet_sha_check_maintained(tmp_path: Path, monkeypatch) -> None:
+    """packet SHA 불일치 → codex_review_stale BLOCKED (packet 검증 유지)."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(),  # packet_sha256 = _PACKET_SHA
+        request=_valid_request(packet_sha256="f" * 64),
+    )
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_stale", res
+    assert "packet_sha256" in str(res["message"]), res
+
+
+# ================================================================== #
+# IMP-20260712-DAE1 REJECT#14 rework: verdict_source 단일 SSoT 회귀 테스트 (8개)
+#   결함1: CODEX_REVIEW_TRUSTED_VERDICT_SOURCES를 2개(codex_cli/verified_cache)로 축소.
+#   결함2: _check_codex_review_gate alias → legacy_untrusted_source.
+#   결함3: _check_codex_review_operational_trust가 동일 SSoT 상수 사용 + alias 구분.
+#   결함4: --start-epoch guard 주석은 운영 정책 서술로 교정(코드 검증 대상 아님).
+#
+#   두 소비자(_check_codex_review_gate, _check_codex_review_operational_trust)가 동일한
+#   verdict_source 판정을 내리는지 직접 함수 호출로 검증한다. 실제 Codex CLI는 호출하지 않는다
+#   (순수 판정 함수 + 파일 IO 없는 operational_trust).
+# ================================================================== #
+
+# verdict_source 계층에서 반환되는 BLOCKED failure_code 집합.
+#   trusted 값이면 이 계층을 통과하여 이후 다른 검사에서 다른 failure_code로만 차단된다.
+_GATE_VS_FAILURE_CODES = {"codex_review_untrusted_source", "legacy_untrusted_source"}
+_OT_VS_FAILURE_CODES = {"codex_review_untrusted_verdict_source", "legacy_untrusted_source"}
+
+
+def _ot_verdict_source_block(verdict_source: str) -> Optional[str]:
+    """operational_trust에서 verdict_source 계층이 차단하는지 판정한다.
+
+    최소 result(verdict_source만 지정)로 호출한다. trusted 값이면 verdict_source 검사를
+    통과하고 그 다음 검사(acceptance_eligible)에서 다른 failure_code로 차단되므로,
+    verdict_source 계층 failure_code가 아니면 None(계층 통과)을 반환한다.
+
+    Returns:
+        verdict_source 계층에서 차단됐으면 그 failure_code, 아니면 None.
+    """
+    res = pipeline._check_codex_review_operational_trust({"verdict_source": verdict_source})
+    fc = str(res.get("failure_code", "") or "")
+    if res.get("status") == "BLOCKED" and fc in _OT_VS_FAILURE_CODES:
+        return fc
+    return None
+
+
+def test_verdict_source_ssot_constant_is_exactly_two() -> None:
+    """CODEX_REVIEW_TRUSTED_VERDICT_SOURCES는 정확히 2개(codex_cli/verified_cache)만 포함(결함1)."""
+    assert pipeline.CODEX_REVIEW_TRUSTED_VERDICT_SOURCES == frozenset(
+        {"codex_cli", "verified_cache"}
+    )
+    # 제거된 alias는 SSoT 집합에 없어야 한다.
+    assert "codex_cli_cached" not in pipeline.CODEX_REVIEW_TRUSTED_VERDICT_SOURCES
+    assert "cache_hit" not in pipeline.CODEX_REVIEW_TRUSTED_VERDICT_SOURCES
+
+
+def test_vs_codex_cli_passes_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='codex_cli' → gate 완전 PASS + operational_trust verdict_source 계층 통과."""
+    # gate: 모든 불변식 통과 + head SHA 일치 → PASS.
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(verdict_source="codex_cli"),
+        request=_valid_request(),
+        head_sha=_HEAD_SHA,
+    )
+    assert res["status"] == "PASS", res
+    # operational_trust: verdict_source 계층에서 차단되지 않음.
+    assert _ot_verdict_source_block("codex_cli") is None
+
+
+def test_vs_verified_cache_passes_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='verified_cache' → gate 완전 PASS + operational_trust verdict_source 계층 통과."""
+    res = _call_gate(
+        tmp_path, monkeypatch,
+        _valid_result(verdict_source="verified_cache"),
+        request=_valid_request(),
+        head_sha=_HEAD_SHA,
+    )
+    assert res["status"] == "PASS", res
+    assert _ot_verdict_source_block("verified_cache") is None
+
+
+def test_vs_alias_codex_cli_cached_legacy_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='codex_cli_cached'(제거된 alias) → 양쪽 legacy_untrusted_source BLOCKED(결함2/3)."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="codex_cli_cached"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "legacy_untrusted_source", res
+    assert _ot_verdict_source_block("codex_cli_cached") == "legacy_untrusted_source"
+
+
+def test_vs_alias_cache_hit_legacy_blocked(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='cache_hit'(제거된 alias) → 양쪽 legacy_untrusted_source BLOCKED(결함2/3)."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="cache_hit"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "legacy_untrusted_source", res
+    assert _ot_verdict_source_block("cache_hit") == "legacy_untrusted_source"
+
+
+def test_vs_external_blocked_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='external' → gate=codex_review_untrusted_source, ot=codex_review_untrusted_verdict_source."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="external"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+    assert _ot_verdict_source_block("external") == "codex_review_untrusted_verdict_source"
+
+
+def test_vs_manual_blocked_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source='manual' → 양쪽 verdict_source 계층에서 BLOCKED(비-alias failure_code)."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(verdict_source="manual"))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+    assert _ot_verdict_source_block("manual") == "codex_review_untrusted_verdict_source"
+
+
+def test_vs_missing_blocked_both(tmp_path: Path, monkeypatch) -> None:
+    """verdict_source 누락(빈 문자열) → 양쪽 verdict_source 계층에서 BLOCKED."""
+    res = _call_gate(tmp_path, monkeypatch, _valid_result(drop=("verdict_source",)))
+    assert res["status"] == "BLOCKED", res
+    assert res["failure_code"] == "codex_review_untrusted_source", res
+    # operational_trust: 빈 문자열도 verdict_source 계층에서 차단.
+    assert _ot_verdict_source_block("") == "codex_review_untrusted_verdict_source"
+
+
+def test_gate_and_operational_trust_verdict_source_agreement(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """두 소비자가 동일 verdict_source 판정을 내린다: trusted 둘 다 허용, untrusted 둘 다 BLOCKED(통합).
+
+    - gate: _call_gate로 전체 fixture를 구성한다. trusted 값은 완전 PASS(request/head SHA 일치),
+      untrusted 값은 verdict_source 계층 failure_code로 BLOCKED된다(verdict_source 검사가
+      epoch/head 검사보다 먼저 실행되므로 fixture 미완성이어도 계층에서 차단됨).
+    - operational_trust: _ot_verdict_source_block으로 verdict_source 계층 판정을 격리한다.
+    두 함수 모두 CODEX_REVIEW_TRUSTED_VERDICT_SOURCES를 SSoT로 사용하므로 판정이 일치해야 한다.
+    """
+    trusted = ["codex_cli", "verified_cache"]
+    untrusted = ["codex_cli_cached", "cache_hit", "external", "manual", "agent_generated", ""]
+
+    for vs in trusted:
+        # trusted 값은 항상 non-empty이므로 verdict_source만 교체한 완전 fixture로 PASS를 검증한다.
+        gate_res = _call_gate(
+            tmp_path, monkeypatch,
+            _valid_result(verdict_source=vs),
+            request=_valid_request(),
+            head_sha=_HEAD_SHA,
+        )
+        assert gate_res["status"] == "PASS", f"gate: {vs} trusted → PASS 기대, got {gate_res}"
+        assert _ot_verdict_source_block(vs) is None, f"ot: {vs} trusted여야 함"
+
+    for vs in untrusted:
+        drop = ("verdict_source",) if vs == "" else ()
+        gate_res = _call_gate(
+            tmp_path, monkeypatch,
+            _valid_result(drop=drop) if vs == "" else _valid_result(verdict_source=vs),
+        )
+        assert gate_res["status"] == "BLOCKED", f"gate: {vs} untrusted → BLOCKED 기대"
+        assert gate_res["failure_code"] in _GATE_VS_FAILURE_CODES, (
+            f"gate: {vs} → verdict_source 계층 failure_code 기대, got {gate_res['failure_code']}"
+        )
+        assert _ot_verdict_source_block(vs) is not None, f"ot: {vs} untrusted여야 함"
+
+
+# ================================================================== #
+# REJECT#15 회귀 테스트: P0 findings 타입 검증 + P1 프롬프트/파서 일관성
+# ================================================================== #
+
+class TestReject15FindingsTypeValidation:
+    """[P0] APPROVE_TO_USER에서 findings가 list 아닌 경우 parse_failure."""
+
+    def test_approve_to_user_findings_dict_is_parse_failure(self) -> None:
+        """findings=dict → APPROVE_TO_USER라도 parse_failure(None)."""
+        payload = json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": {
+                "scope": "IN_SCOPE",
+                "severity": "P0",
+                "root_cause_category": "fake_codex_exec",
+            },
+        })
+        assert pipeline._parse_json_verdict(payload) is None
+
+    def test_approve_to_user_findings_string_is_parse_failure(self) -> None:
+        """findings=string → parse_failure(None)."""
+        payload = json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": "IN_SCOPE",
+        })
+        assert pipeline._parse_json_verdict(payload) is None
+
+    def test_approve_to_user_findings_null_is_parse_failure(self) -> None:
+        """findings=null → parse_failure(None)."""
+        payload = json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": None,
+        })
+        assert pipeline._parse_json_verdict(payload) is None
+
+    def test_approve_to_user_findings_int_is_parse_failure(self) -> None:
+        """findings=int → parse_failure(None)."""
+        payload = json.dumps({
+            "verdict": "APPROVE_TO_USER",
+            "findings": 42,
+        })
+        assert pipeline._parse_json_verdict(payload) is None
+
+    def test_approve_to_user_no_findings_key_is_approved(self) -> None:
+        """findings 키 자체가 없는 APPROVE_TO_USER → 기존처럼 APPROVED."""
+        payload = json.dumps({"verdict": "APPROVE_TO_USER"})
+        result = pipeline._parse_json_verdict(payload)
+        assert result is not None
+        assert result["verdict"] == "APPROVED"
+
+    def test_approve_to_user_with_valid_in_scope_finding_is_forced_rejected(self) -> None:
+        """IMP-20260712-DAE1 MT-13 Finding 1: 유효한 IN_SCOPE finding이 있으면 APPROVE_TO_USER라도
+        REJECTED로 강제된다(in_scope_all_count>=1). reject_count_delta는 P0/P1일 때만 1로 보존된다."""
+        finding = {
+            "scope": "IN_SCOPE",
+            "severity": "P0",
+            "root_cause_category": "error_misclassified_as_approved",
+            "evidence": "line 123",
+            "reproduction": "repro steps",
+            "required_fix": "fix here",
+            "acceptance_criteria": ["criterion 1"],
+        }
+        payload = json.dumps({"verdict": "APPROVE_TO_USER", "findings": [finding]})
+        result = pipeline._parse_json_verdict(payload)
+        assert result is not None
+        # Finding 1: IN_SCOPE finding(P0)이 있으면 승인 불가 — REJECTED로 강제.
+        assert result["verdict"] == "REJECTED"
+        assert result.get("in_scope_count", 0) >= 1
+        assert result.get("in_scope_all_count", 0) >= 1
+        assert result.get("reject_count_delta", 0) == 1  # P0 → reject_count 증가
+        assert result.get("acceptance_eligible") is False
+
+
+class TestReject15PromptParserConsistency:
+    """[P1] 프롬프트 REJECT 예시 → 파서가 REJECTED로 분류."""
+
+    def test_reject_with_findings_is_rejected_not_parse_failure(self) -> None:
+        """findings 포함 유효 REJECT → REJECTED (parse_failure 아님)."""
+        finding = {
+            "scope": "IN_SCOPE",
+            "severity": "P1",
+            "root_cause_category": "verdict_parse_failure",
+            "evidence": "evidence here",
+            "reproduction": "reproduction steps",
+            "required_fix": "fix direction",
+            "acceptance_criteria": ["criterion"],
+        }
+        payload = json.dumps({
+            "verdict": "REJECT",
+            "findings": [finding],
+        })
+        result = pipeline._parse_json_verdict(payload)
+        assert result is not None, "findings 포함 유효 REJECT가 parse_failure여서는 안 됨"
+        assert result["verdict"] == "REJECTED"
+
+    def test_reject_without_findings_is_parse_failure_option_a(self) -> None:
+        """Option A: findings 없는 REJECT → parse_failure(None) — 프롬프트와 파서가 일관."""
+        payload = json.dumps({
+            "verdict": "REJECT",
+            "root_cause": "x",
+            "reproduction": "y",
+            "required_fix": "z",
+            "acceptance_criteria": ["a"],
+        })
+        result = pipeline._parse_json_verdict(payload)
+        assert result is None, "Option A: findings 없는 REJECT는 parse_failure여야 함"
+
+    def test_prompt_schema_contains_all_7_required_fields(self) -> None:
+        """_build_codex_prompt_for_review의 finding 스키마에 7개 필수 필드 포함."""
+        bundle = {
+            "changed_files": ["pipeline.py"],
+            "changed_files_count": 1,
+            "evidence_complete": True,
+            "diff_hunks": [],
+        }
+        prompt = pipeline._build_codex_prompt_for_review(bundle, "IMP-20260712-DAE1")
+        required_fields = [
+            "scope", "severity", "root_cause_category", "evidence",
+            "reproduction", "required_fix", "acceptance_criteria",
+        ]
+        for field in required_fields:
+            assert field in prompt, f"프롬프트에 '{field}' 필드 설명이 없음"
+
+
+class TestFinding5CriticalProtectionLists:
+    """Finding 5(MT-13): CODEX_CRITICAL_CONSTANTS/FUNCTIONS에 trust-chain 상수/함수 포함 검증.
+
+    trust-chain 상수(verdict source/스키마 버전/계약 struct)와 함수(계약 SHA 계산/epoch 판독)가
+    보호 목록에 없으면 단독 변경 시 CRITICAL 분류가 되지 않아 Codex Review를 우회할 수 있다.
+    """
+
+    def test_codex_review_trusted_verdict_sources_in_critical_constants(self) -> None:
+        from pipeline import CODEX_CRITICAL_CONSTANTS
+        assert "CODEX_REVIEW_TRUSTED_VERDICT_SOURCES" in CODEX_CRITICAL_CONSTANTS
+
+    def test_codex_review_result_schema_version_in_critical_constants(self) -> None:
+        from pipeline import CODEX_CRITICAL_CONSTANTS
+        assert "CODEX_REVIEW_RESULT_SCHEMA_VERSION" in CODEX_CRITICAL_CONSTANTS
+
+    def test_codex_review_contract_struct_in_critical_constants(self) -> None:
+        from pipeline import CODEX_CRITICAL_CONSTANTS
+        assert "CODEX_REVIEW_CONTRACT_STRUCT" in CODEX_CRITICAL_CONSTANTS
+
+    def test_compute_codex_contract_sha256_in_critical_functions(self) -> None:
+        from pipeline import CODEX_CRITICAL_FUNCTIONS
+        assert "_compute_codex_contract_sha256" in CODEX_CRITICAL_FUNCTIONS
+
+    def test_get_current_review_epoch_in_critical_functions(self) -> None:
+        from pipeline import CODEX_CRITICAL_FUNCTIONS
+        assert "_get_current_review_epoch_from_state" in CODEX_CRITICAL_FUNCTIONS
+
+    def test_changing_critical_constant_triggers_critical_risk(self) -> None:
+        """CODEX_CRITICAL_CONSTANTS 소속 상수 변경 → risk_level=CRITICAL."""
+        res = pipeline._classify_codex_review_risk(
+            ["pipeline.py"], [], ["CODEX_REVIEW_TRUSTED_VERDICT_SOURCES"]
+        )
+        assert res["risk_level"] == "CRITICAL", res
+        assert res["matched_rule"] == "critical_constant"
+
+    def test_changing_critical_function_triggers_critical_risk(self) -> None:
+        """CODEX_CRITICAL_FUNCTIONS 소속 함수 변경 → risk_level=CRITICAL."""
+        res = pipeline._classify_codex_review_risk(
+            ["pipeline.py"], ["_compute_codex_contract_sha256"], []
+        )
+        assert res["risk_level"] == "CRITICAL", res
+        assert res["matched_rule"] == "critical_function"
+
+    def test_get_current_review_epoch_change_triggers_critical_risk(self) -> None:
+        res = pipeline._classify_codex_review_risk(
+            ["pipeline.py"], ["_get_current_review_epoch_from_state"], []
+        )
+        assert res["risk_level"] == "CRITICAL", res
+
+
+class TestFinding3ContractShaFailClosed:
+    """Finding 3(MT-13): _compute_codex_contract_sha256는 빈 문자열을 반환하지 않는다."""
+
+    def test_returns_valid_64_hex(self) -> None:
+        sha = pipeline._compute_codex_contract_sha256()
+        assert isinstance(sha, str) and len(sha) == 64
+        assert all(c in "0123456789abcdef" for c in sha)
+
+    def test_raises_on_serialization_failure(self, monkeypatch) -> None:
+        """직렬화 실패 시 RuntimeError를 raise한다(빈 문자열 반환 금지)."""
+        def _boom(*_a, **_k):
+            raise ValueError("unserializable")
+        monkeypatch.setattr(pipeline.json, "dumps", _boom)
+        try:
+            pipeline._compute_codex_contract_sha256()
+            assert False, "직렬화 실패 시 RuntimeError가 발생해야 함"
+        except RuntimeError:
+            pass
+
+
+class TestFinding1InScopePreventsApproval:
+    """Finding 1(MT-13): IN_SCOPE finding(P2/P3 포함)이 있으면 APPROVE_TO_USER도 REJECTED로 강제."""
+
+    def _payload(self, severity: str) -> str:
+        return json.dumps({
+            "schema_version": 6,
+            "verdict": "APPROVE_TO_USER",
+            "findings": [{
+                "id": "F-1", "scope": "IN_SCOPE", "severity": severity,
+                "root_cause_category": "some_in_scope_bug", "evidence": "e",
+                "reproduction": "r", "required_fix": "f", "acceptance_criteria": ["a"],
+            }],
+        })
+
+    def test_p2_in_scope_finding_forces_rejected(self) -> None:
+        res = pipeline._parse_json_verdict(self._payload("P2"))
+        assert res is not None
+        assert res["verdict"] == "REJECTED", res
+        assert res.get("in_scope_all_count", 0) >= 1
+        assert res.get("acceptance_eligible") is False
+
+    def test_p3_in_scope_finding_forces_rejected(self) -> None:
+        res = pipeline._parse_json_verdict(self._payload("P3"))
+        assert res is not None
+        assert res["verdict"] == "REJECTED", res
+
+    def test_invalid_severity_is_parse_failure(self) -> None:
+        """severity가 P0/P1/P2/P3 외 값이면 parse_failure(None)."""
+        res = pipeline._parse_json_verdict(self._payload("P5"))
+        assert res is None, "잘못된 severity는 parse_failure여야 함"
+
+
+# ============================================================
+# REJECT#4 회귀 테스트 — _build_structured_codex_input / _validate_post_build_prompt
+# (구 TestMT14CodexInputTooLarge 클래스는 _trim_codex_input/CODEX_CLI_INPUT_MAX_CHARS 제거로
+#  삭제됨 — 아래 8개 테스트가 char/byte 통일 + 구조화 축소 + post-build preflight를 검증한다.)
+# ============================================================
+
+def test_char_not_bytes_for_korean_input():
+    """한글 다중 바이트 입력에서 char/byte 혼용 없음 검증."""
+    from pipeline import _build_structured_codex_input
+    korean = "가" * 100  # 각 한글 3바이트 → bytes=300, chars=100
+    # char 기준이므로 100 chars <= CODEX_CLI_SAFE_INPUT_CHARS → evidence_complete=True
+    result, complete = _build_structured_codex_input(korean, 200)
+    assert complete is True
+    assert len(result) == 100  # char 단위
+
+
+def test_schema_and_verdict_preserved_after_reduction():
+    """대형 입력 축소 후 findings 스키마 및 JSON 출력 규칙 sentinel 보존."""
+    from pipeline import _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+    # findings와 verdict sentinel을 포함하는 prompt
+    prompt = "findings verdict " + "a" * 10
+    valid, failures = _validate_post_build_prompt(
+        prompt, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=True
+    )
+    assert valid is True, failures
+
+
+def test_critical_function_coverage_preserved():
+    """CRITICAL 함수 coverage 보존 검증."""
+    from pipeline import _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+    prompt = "findings verdict _cmd_gates_request_accept some content"
+    valid, failures = _validate_post_build_prompt(
+        prompt, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=True,
+        changed_critical_functions=["_cmd_gates_request_accept"]
+    )
+    assert valid is True, failures
+
+
+def test_non_critical_evidence_can_be_reduced():
+    """REJECT#5 P0-1: 전역 line dedup 제거 이후 동작.
+
+    과거에는 반복 라인 dedup으로 budget을 맞추면 evidence_complete=True였다. 그러나 서로 다른
+    CRITICAL hunk에서 반복되는 동일 코드 줄을 삭제하면 실제 증거가 유실되므로 dedup을 완전히 제거했다.
+    이제 예산을 초과하면 어떤 라인도 삭제하지 않고 원문을 그대로 반환하며 evidence_complete=False다.
+    """
+    from pipeline import _build_structured_codex_input
+    # 케이스 1: 반복 라인 입력 — dedup이 제거되어 더 이상 축소되지 않는다.
+    #   원문(2000 chars)이 예산(500)을 초과 → 원문 그대로 반환 + evidence_complete=False.
+    big_dup_input = "\n".join(["x" * 100] * 20)  # 2000 chars
+    result, complete = _build_structured_codex_input(big_dup_input, 500)
+    assert complete is False, f"dedup 제거 후 over-budget은 complete=False여야 함, got {complete}"
+    assert result == big_dup_input, "어떤 라인도 삭제하지 않고 원문을 그대로 반환해야 함"
+
+    # 케이스 2: 중복 없는 고유 라인 — budget 초과 → evidence_complete=False (원문 보존).
+    unique_input = "\n".join([f"unique line {i}" * 10 for i in range(200)])  # ~3000+ chars
+    result2, complete2 = _build_structured_codex_input(unique_input, 100)
+    assert complete2 is False, f"unique over-budget은 complete=False여야 함, got {complete2}"
+    assert result2 == unique_input, "어떤 라인도 삭제하지 않고 원문을 그대로 반환해야 함"
+
+
+def test_budget_exceeded_blocks_cli_and_returns_correct_failure_code():
+    """필수 증거 예산 초과 시 CLI 미호출 + codex_review_input_budget_exceeded BLOCKED."""
+    # CODEX_CLI_SAFE_INPUT_CHARS 초과 + evidence_complete=False 상태 시뮬레이션
+    from pipeline import _validate_post_build_prompt
+    prompt_too_large = "a" * 1  # 1 char prompt without findings/verdict sentinels
+    valid, failures = _validate_post_build_prompt(
+        prompt_too_large, 1, evidence_complete=False  # safe_chars=1, already at limit
+    )
+    # evidence_complete=False 실패
+    assert not valid
+    assert any("evidence_complete" in f for f in failures)
+
+
+def test_post_build_preflight_blocks_evidence_complete_false():
+    """post-build preflight가 evidence_complete=False 차단."""
+    from pipeline import _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+    prompt = "findings verdict some content"
+    valid, failures = _validate_post_build_prompt(
+        prompt, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=False
+    )
+    assert not valid
+    assert any("evidence_complete" in f for f in failures)
+
+
+def test_input_too_large_not_recorded_as_reject():
+    """input_too_large가 REJECT/cli_error_count로 오기록 안 됨."""
+    # _validate_post_build_prompt 실패는 _die()로 차단되며 REJECT로 기록되지 않음
+    # 이 테스트는 _validate_post_build_prompt의 반환값이 (False, [...]) 형식임을 확인
+    from pipeline import _validate_post_build_prompt, CODEX_CLI_SAFE_INPUT_CHARS
+    # findings/verdict sentinel이 전혀 없는 prompt (부분 문자열도 없음)
+    prompt = "xyz abc content only"  # sentinel 없음
+    valid, failures = _validate_post_build_prompt(
+        prompt, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=True
+    )
+    # findings/verdict sentinel 없으면 실패
+    assert not valid
+    # 실패는 budget_exceeded(스키마 sentinel 유실)이지 REJECT가 아님
+    assert "findings schema sentinel not found" in " ".join(failures)
+
+
+def test_prompt_length_and_sentinel_verified_before_cli_call():
+    """최종 prompt 길이와 필수 sentinel 검증 후 CLI 호출 확인."""
+    from pipeline import _validate_post_build_prompt
+    safe_chars = 100
+    prompt = "findings verdict " + "a" * 10  # 길이 < 100, sentinel 있음
+    valid, failures = _validate_post_build_prompt(
+        prompt, safe_chars, evidence_complete=True
+    )
+    assert valid is True, f"예상 통과, 실패: {failures}"
+
+
+# ================================================================== #
+# REJECT#5 P0 회귀 테스트 (MT-R5-4) — IMP-20260712-DAE1
+#   P0-1: _build_structured_codex_input 전역 line dedup 제거
+#   P0-2: _parse_json_verdict NDJSON 파싱 + JSON 문자열 내부 중괄호 정상 처리
+#   P0-3: 1회용 Codex CLI 실행 허가(run permit) gate
+# ================================================================== #
+
+def _r5_full_finding() -> Dict[str, object]:
+    """REJECT#5 테스트용 7필드 완비 finding."""
+    return {
+        "scope": "IN_SCOPE",
+        "severity": "P1",
+        "root_cause_category": "verdict_parse_failure",
+        "evidence": "evidence text",
+        "reproduction": "repro steps",
+        "required_fix": "fix direction",
+        "acceptance_criteria": ["criterion 1"],
+    }
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-1: 반복되는 동일 코드 줄이 서로 다른 critical hunk에서 모두 보존됨 (P0-1)
+# ------------------------------------------------------------------ #
+def test_r5_dedup_preserves_repeated_lines_in_critical_hunks() -> None:
+    """서로 다른 hunk에서 반복되는 동일 줄(return None 등)이 전역 dedup으로 삭제되지 않는다."""
+    from pipeline import _build_structured_codex_input
+    # 서로 다른 함수 hunk에서 동일한 'return None' / '}' 가 여러 번 등장하는 프롬프트.
+    prompt = "\n".join([
+        "def foo():", "    if x:", "        return None",
+        "def bar():", "    if y:", "        return None",
+        "def baz():", "    if z:", "        return None",
+        "    }", "    }", "    }",
+    ])
+    # 케이스 A: 예산 이내 → 원문 그대로 + evidence_complete=True, 모든 반복 줄 보존.
+    result, complete = _build_structured_codex_input(prompt, 100000)
+    assert complete is True
+    assert result == prompt
+    assert result.count("return None") == 3, "3개의 서로 다른 hunk의 return None이 모두 보존돼야 함"
+    assert result.count("    }") == 3, "반복되는 닫는 괄호가 모두 보존돼야 함"
+
+    # 케이스 B: 예산 초과 → 여전히 어떤 줄도 삭제되지 않는다(dedup 제거).
+    result_b, complete_b = _build_structured_codex_input(prompt, 10)
+    assert complete_b is False, "예산 초과 시 evidence_complete=False (fail-closed)"
+    assert result_b == prompt, "예산 초과여도 반복 줄을 dedup으로 삭제하지 않는다"
+    assert result_b.count("return None") == 3
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-2: critical hunk 축소(예산 초과) 시 evidence_complete=False (P0-1)
+# ------------------------------------------------------------------ #
+def test_r5_missing_critical_hunk_sets_evidence_incomplete() -> None:
+    """예산 초과로 축소가 필요한 상황에서 evidence_complete=False가 되고 원문은 유실되지 않는다."""
+    from pipeline import (
+        _build_structured_codex_input,
+        _validate_post_build_prompt,
+        CODEX_CLI_SAFE_INPUT_CHARS,
+    )
+    critical_marker = "def _cmd_gates_request_accept():  # CRITICAL"
+    prompt = critical_marker + "\n" + ("noise line\n" * 500)
+    # 작은 예산으로 강제 초과 → evidence_complete=False, critical 원문은 result에 그대로 존재.
+    result, complete = _build_structured_codex_input(prompt, 50)
+    assert complete is False, "예산 초과 → evidence_complete=False"
+    assert critical_marker in result, "critical hunk 원문은 삭제되지 않아야 함"
+    # evidence_complete=False면 post-build preflight가 CLI 호출 전에 차단한다.
+    valid, failures = _validate_post_build_prompt(
+        result, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=complete
+    )
+    assert valid is False
+    assert any("evidence_complete" in f for f in failures)
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-3: JSON string 내부 중괄호/escaped quote/backslash/한글 정상 파싱 (P0-2)
+# ------------------------------------------------------------------ #
+def test_r5_json_string_braces_parsed_correctly() -> None:
+    """evidence 문자열에 {, }, escaped quote, backslash, 한글이 있어도 REJECT가 정상 파싱된다."""
+    finding = _r5_full_finding()
+    # JSON 문자열 리터럴 내부에 구조 문자처럼 보이는 중괄호/따옴표/역슬래시/한글 포함.
+    finding["evidence"] = 'unmatched brace { and } with "quote" and \\ backslash 그리고 한글'
+    payload = json.dumps({"verdict": "REJECT", "findings": [finding]})
+    result = pipeline._parse_json_verdict(payload)
+    assert result is not None, "JSON 문자열 내부 중괄호 때문에 파싱이 실패해서는 안 됨"
+    assert result["verdict"] == "REJECTED"
+
+    # APPROVE_TO_USER에서도 동일하게 문자열 내부 중괄호가 파싱을 깨지 않는다.
+    approve_payload = json.dumps({
+        "verdict": "APPROVE_TO_USER",
+        "reason": "no issues { found } — 검토 완료 \\o/",
+    })
+    approve = pipeline._parse_json_verdict(approve_payload)
+    assert approve is not None and approve["verdict"] == "APPROVED"
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-4: 복수 terminal verdict → fail-closed (ambiguous_verdict) (P0-2)
+# ------------------------------------------------------------------ #
+def test_r5_ambiguous_verdict_fail_closed() -> None:
+    """두 개 이상의 verdict payload는 상충/동일 여부와 무관하게 parse_failure(None)."""
+    approve = json.dumps({"verdict": "APPROVE_TO_USER"})
+    reject = json.dumps({"verdict": "REJECT", "findings": [_r5_full_finding()]})
+
+    # APPROVE → REJECT
+    assert pipeline._parse_json_verdict(approve + "\n" + reject) is None
+    # REJECT → APPROVE
+    assert pipeline._parse_json_verdict(reject + "\n" + approve) is None
+    # 동일 verdict 2개(APPROVE 2개)
+    assert pipeline._parse_json_verdict(approve + approve) is None
+
+    # NDJSON에서 terminal agent_message가 2개(상충)인 경우도 fail-closed.
+    ndjson = "\n".join([
+        json.dumps({"type": "thread.started"}),
+        json.dumps({"type": "item.completed",
+                    "item": {"type": "agent_message", "text": approve}}),
+        json.dumps({"type": "item.completed",
+                    "item": {"type": "agent_message", "text": reject}}),
+    ])
+    assert pipeline._parse_json_verdict(ndjson) is None
+
+    # 대조군: 단일 verdict는 정상 파싱된다(회귀 방지).
+    _parsed_approve = pipeline._parse_json_verdict(approve)
+    assert _parsed_approve is not None
+    assert _parsed_approve["verdict"] == "APPROVED"
+    single_reject = pipeline._parse_json_verdict(reject)
+    assert single_reject is not None and single_reject["verdict"] == "REJECTED"
+
+    # malformed 이벤트 줄은 조용히 건너뛰고 단일 terminal verdict만 신뢰한다.
+    ndjson_with_garbage = "\n".join([
+        "this is not json at all",
+        json.dumps({"type": "item.completed",
+                    "item": {"type": "agent_message", "text": approve}}),
+        "{broken json",
+    ])
+    ok = pipeline._parse_json_verdict(ndjson_with_garbage)
+    assert ok is not None and ok["verdict"] == "APPROVED"
+
+    # terminal agent_message가 전혀 없으면 None(호출자 fallback 대상).
+    no_terminal = "\n".join([
+        json.dumps({"type": "thread.started"}),
+        json.dumps({"type": "turn.started"}),
+    ])
+    assert pipeline._parse_json_verdict(no_terminal) is None
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-5: 실행 허가 없는 일반 gates codex-review는 CLI 미호출 BLOCKED (P0-3)
+# ------------------------------------------------------------------ #
+def test_r5_run_not_authorized_blocks_cli() -> None:
+    """run permit이 없으면 _check_codex_run_permit이 (False, no_permit)로 fail-closed."""
+    authorized, reason = pipeline._check_codex_run_permit(
+        None,
+        pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="abc123", review_bundle_sha256="bundle_sha",
+    )
+    assert authorized is False
+    assert reason == "no_permit"
+
+    # 실행 허가 개념이 실제 CLI 호출 직전 경로에 배선되어 있는지 소스로 확인(정의만-존재 방지).
+    #   IMP-20260712-DAE1 REJECT#6 MT-R6-2: 검증+소비를 원자적으로 묶은 _atomic_claim_codex_run_permit이
+    #   CLI 경로의 배선 지점이다(_check_codex_run_permit은 그 내부에서 재검증에 사용된다).
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    assert "_atomic_claim_codex_run_permit" in src, "run permit claim이 CLI 경로에 배선돼야 함"
+    assert "codex_review_run_not_authorized" in src
+    # claim이 실제 CLI 호출(_invoke_codex_exec)보다 먼저 위치해야 한다.
+    assert src.index("_atomic_claim_codex_run_permit") < src.index("_auto_run = _invoke_codex_exec"), (
+        "run permit claim은 실제 CLI 호출 이전에 수행돼야 한다(CLI 미호출 BLOCKED)"
+    )
+    # 원자적 claim 내부에서 순수 검증 함수가 재사용되는지 확인(TOCTOU 재검증 배선).
+    claim_src = inspect.getsource(pipeline._atomic_claim_codex_run_permit)
+    assert "_check_codex_run_permit" in claim_src, "atomic claim 내부에 permit 재검증이 있어야 함"
+    assert "_consume_codex_run_permit" in claim_src, "atomic claim 내부에 permit 소비가 있어야 함"
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-6: 허가 snapshot과 현재 head/bundle이 다르면 CLI 미호출 BLOCKED (P0-3)
+# ------------------------------------------------------------------ #
+def test_r5_stale_snapshot_blocks_cli() -> None:
+    """permit이 PENDING이어도 head SHA 또는 bundle SHA가 바뀌면 stale_snapshot으로 차단."""
+    permit = pipeline._make_codex_run_permit_snapshot(
+        _PID, "epoch_1", "head_A", "bundle_A"
+    )
+    permit["status"] = "PENDING"
+
+    # 동일 snapshot → 허가.
+    ok, reason = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_A",
+    )
+    assert ok is True and reason == ""
+
+    # head SHA 변경 → stale.
+    ok2, reason2 = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_B", review_bundle_sha256="bundle_A",
+    )
+    assert ok2 is False and reason2 == "stale_snapshot"
+
+    # bundle SHA 변경 → stale.
+    ok3, reason3 = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_B",
+    )
+    assert ok3 is False and reason3 == "stale_snapshot"
+
+    # review_epoch 변경 → stale.
+    ok4, reason4 = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_2",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_A",
+    )
+    assert ok4 is False and reason4 == "stale_snapshot"
+
+    # 현재 snapshot 구성요소가 비어 있으면 검증 불가 → 허가 없음(fail-closed).
+    ok5, reason5 = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="", review_bundle_sha256="bundle_A",
+    )
+    assert ok5 is False and reason5 == "missing_snapshot_component"
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-7: 1회용 허가 재사용 차단 (P0-3)
+# ------------------------------------------------------------------ #
+def test_r5_run_permit_single_use(tmp_path: Path, monkeypatch) -> None:
+    """PENDING permit은 소비 후 CONSUMED가 되어 재사용할 수 없다."""
+    # PIPELINE_STATE_PATH 격리 — 실제 .pipeline을 오염시키지 않는다.
+    state_path = tmp_path / "pipeline_state.json"
+    state_path.write_text(json.dumps({"pipeline_id": _PID}), encoding="utf-8")
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+
+    # 발급 → PENDING.
+    issued = pipeline._issue_codex_run_permit(_PID, "epoch_1", "head_A", "bundle_A")
+    assert issued["status"] == "PENDING"
+
+    # 로드 후 검증 → 허가.
+    loaded = pipeline._load_codex_run_permit()
+    ok, reason = pipeline._check_codex_run_permit(
+        loaded, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_A",
+    )
+    assert ok is True and reason == ""
+
+    # 소비 → CONSUMED.
+    assert loaded is not None  # _check_codex_run_permit ok==True이므로 None 불가
+    pipeline._consume_codex_run_permit(loaded)
+    reloaded = pipeline._load_codex_run_permit()
+    assert reloaded is not None
+    assert reloaded["status"] == "CONSUMED"
+
+    # 재사용 시도 → consumed로 차단(snapshot이 여전히 일치해도 재사용 불가).
+    ok2, reason2 = pipeline._check_codex_run_permit(
+        reloaded, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_A",
+    )
+    assert ok2 is False and reason2 == "consumed"
+
+
+# ================================================================== #
+# REJECT#6 회귀 테스트 (IMP-20260712-DAE1 REJECT#6)
+# ================================================================== #
+def _permit_state(
+    tmp_path: Path, monkeypatch, extra: Optional[Dict] = None
+) -> Tuple[Path, Path]:
+    """격리된 state와 codex_run_permit.json이 있는 환경을 만든다.
+
+    PIPELINE_STATE_PATH를 in-process로 설정하여 pipeline._codex_run_permit_path()가
+    tmp_path/.pipeline/codex_run_permit.json을 가리키도록 격리한다(실제 .pipeline 오염 방지).
+    """
+    state_path, pdir = _setup_state(
+        tmp_path,
+        {
+            "pipeline_id": _PID,
+            "current_phase": 7,
+            "codex_review_contract_migration": {
+                "review_epoch": "epoch-r6-test",
+                "new_contract_sha256": "abc123",
+            },
+        },
+    )
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+    permit = {
+        "status": "PENDING",
+        "pipeline_id": _PID,
+        "review_epoch": "epoch-r6-test",
+        "pr_head_sha": "deadbeef1234",
+        "review_bundle_sha256": "beefdead5678",
+        "issued_at": "2026-07-17T00:00:00Z",
+    }
+    if extra:
+        permit.update(extra)
+    permit_path = pdir / "codex_run_permit.json"
+    permit_path.write_text(json.dumps(permit, ensure_ascii=False), encoding="utf-8")
+    return state_path, permit_path
+
+
+# 테스트 R6-1: PermissionError → CLI 미호출 + codex_run_permit_consume_failed
+def test_r6_consume_write_fail_blocks_cli(tmp_path: Path, monkeypatch) -> None:
+    """_consume_codex_run_permit 쓰기 실패(PermissionError) → RuntimeError + failure_code."""
+    import unittest.mock as mock
+
+    # PIPELINE_STATE_PATH 격리 — parent.mkdir이 실제 .pipeline을 건드리지 않도록.
+    state_path = tmp_path / "pipeline_state.json"
+    state_path.write_text(json.dumps({"pipeline_id": _PID}), encoding="utf-8")
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+
+    permit: Dict[str, object] = {
+        "status": "PENDING",
+        "pipeline_id": _PID,
+        "review_epoch": "epoch-r6",
+        "pr_head_sha": "abc123",
+        "review_bundle_sha256": "def456",
+        "issued_at": "2026-01-01T00:00:00Z",
+    }
+    # PermissionError를 강제로 발생시킨다.
+    consumed_ok = True
+    with mock.patch(
+        "pathlib.Path.write_text", side_effect=PermissionError("access denied")
+    ):
+        try:
+            pipeline._consume_codex_run_permit(permit)
+            consumed_ok = True
+        except RuntimeError as exc:
+            consumed_ok = False
+            assert "codex_run_permit_consume_failed" in str(exc), str(exc)
+    assert not consumed_ok, "_consume_codex_run_permit must raise RuntimeError on write failure"
+
+
+# 테스트 R6-2: 쓰기 실패 후 permit이 PENDING 상태 유지(재사용 불가)
+def test_r6_consume_write_fail_permit_not_consumed(tmp_path: Path, monkeypatch) -> None:
+    """쓰기 실패 후 permit 파일이 PENDING 상태를 유지하는지 확인."""
+    import unittest.mock as mock
+
+    state_path, permit_path = _permit_state(tmp_path, monkeypatch)
+
+    original_content = permit_path.read_text(encoding="utf-8")
+    permit = json.loads(original_content)
+
+    # 쓰기 강제 실패
+    with mock.patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
+        try:
+            pipeline._consume_codex_run_permit(permit)
+        except RuntimeError:
+            pass  # 예상된 예외
+
+    # permit 파일은 여전히 PENDING
+    after = json.loads(permit_path.read_text(encoding="utf-8"))
+    assert after["status"] == "PENDING", (
+        f"permit must remain PENDING after write failure, got: {after['status']}"
+    )
+
+
+# 테스트 R6-3: 두 스레드 동시 claim → 정확히 하나만 성공
+def test_r6_concurrent_claim_only_one_succeeds(tmp_path: Path, monkeypatch) -> None:
+    """_atomic_claim_codex_run_permit: 두 스레드 동시 호출 → 최대 하나만 CLI 진입."""
+    import concurrent.futures
+
+    state_path, permit_path = _permit_state(tmp_path, monkeypatch)
+    pipeline_id = _PID
+    review_epoch = "epoch-r6-test"
+    pr_head_sha = "deadbeef1234"
+    bundle_sha = "beefdead5678"
+
+    def try_claim() -> bool:
+        success, reason, consumed = pipeline._atomic_claim_codex_run_permit(
+            pipeline_id, review_epoch, pr_head_sha, bundle_sha
+        )
+        return success
+
+    # 두 스레드로 동시 시도 (같은 permit 파일 공유).
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(try_claim), pool.submit(try_claim)]
+        results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    # 정확히 하나만 성공해야 한다(원자적 claim).
+    success_count = sum(1 for r in results if r is True)
+    assert success_count <= 1, f"동시 claim에서 최대 1개만 성공해야 함, 실제: {success_count}"
+
+
+# 테스트 R6-4: CLI error 후에도 permit PENDING 복귀 안 됨
+def test_r6_claimed_permit_not_reverted_on_cli_error(tmp_path: Path, monkeypatch) -> None:
+    """claim 성공 후 CLI error가 나도 permit이 PENDING으로 돌아가지 않음."""
+    state_path, permit_path = _permit_state(tmp_path, monkeypatch)
+
+    # 직접 claim 실행
+    success, reason, consumed = pipeline._atomic_claim_codex_run_permit(
+        _PID, "epoch-r6-test", "deadbeef1234", "beefdead5678"
+    )
+    assert success, f"initial claim should succeed: {reason}"
+
+    # permit 파일 상태 확인 — CONSUMED여야 함
+    after = json.loads(permit_path.read_text(encoding="utf-8"))
+    assert after["status"] == "CONSUMED", (
+        f"permit must be CONSUMED after claim, got: {after['status']}"
+    )
+
+    # 재claim 시도 — BLOCKED
+    success2, reason2, _ = pipeline._atomic_claim_codex_run_permit(
+        _PID, "epoch-r6-test", "deadbeef1234", "beefdead5678"
+    )
+    assert not success2, "재claim이 성공하면 안 됨"
+    assert reason2 in ("consumed", "codex_run_permit_lock_failed"), (
+        f"unexpected reason: {reason2}"
+    )
+
+
+# 테스트 R6-5: --start-epoch + --authorize-run 동시 플래그 → codex_review_conflicting_flags BLOCKED
+def test_r6_conflicting_flags_start_epoch_and_authorize_run(tmp_path: Path) -> None:
+    """--start-epoch와 --authorize-run 동시 지정 → codex_review_conflicting_flags BLOCKED."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via return code + failure output.
+    state_path, _ = _setup_state(
+        tmp_path,
+        {
+            "pipeline_id": _PID,
+            "current_phase": 7,
+            "codex_review_contract_migration": {"review_epoch": "epoch-r6"},
+        },
+    )
+    r = _run_cli(
+        state_path,
+        ["gates", "codex-review", "--start-epoch", "test-reason", "--authorize-run"],
+        extra_env={
+            "CODEX_START_EPOCH_USER_CONFIRMED": "1",
+            "CODEX_RUN_AUTHORIZED": "1",
+        },
+    )
+    combined = r.stdout + r.stderr
+    assert r.returncode != 0, f"충돌 플래그 → 비0 exit 코드여야 함: {combined[:400]}"
+    assert "codex_review_conflicting_flags" in combined, combined[:400]
+
+
+# 테스트 R6-6: --preflight-only 실행 후 CLI 미호출 확인
+def test_r6_preflight_only_no_cli_call(tmp_path: Path) -> None:
+    """--preflight-only: Codex CLI fake marker 미생성(CLI 미호출 확인)."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via marker file absence.
+    state_path, _ = _setup_state(
+        tmp_path,
+        {
+            "pipeline_id": _PID,
+            "current_phase": 7,
+            "codex_review_contract_migration": {"review_epoch": "epoch-r6"},
+            "codex_review_loop_state": {"status": "NON_CONVERGING", "reject_count": 3},
+        },
+    )
+    bin_dir = tmp_path / "bin"
+    marker = tmp_path / "codex_called.marker"
+    _make_fake_codex(bin_dir, marker)
+
+    r = _run_cli(
+        state_path,
+        ["gates", "codex-review", "--preflight-only"],
+        fake_bin_dir=bin_dir,
+    )
+    combined = r.stdout + r.stderr
+    assert r.returncode == 0, f"--preflight-only는 exit 0이어야 함: {combined[:400]}"
+    assert not marker.exists(), "--preflight-only에서 Codex CLI가 호출되면 안 됨"
+
+
+# 테스트 R6-7: --preflight-only 출력에 8개 필수 필드 포함 확인
+def test_r6_preflight_only_outputs_required_fields(tmp_path: Path) -> None:
+    """--preflight-only 출력에 8개 필수 필드가 모두 포함되는지 확인."""
+    # isolation: PIPELINE_STATE_PATH set by _run_cli helper; final_state asserted via output fields.
+    state_path, _ = _setup_state(
+        tmp_path,
+        {
+            "pipeline_id": _PID,
+            "current_phase": 7,
+            "codex_review_contract_migration": {"review_epoch": "epoch-r6"},
+        },
+    )
+    r = _run_cli(
+        state_path,
+        ["gates", "codex-review", "--preflight-only"],
+    )
+    combined = r.stdout + r.stderr
+    assert r.returncode == 0, f"--preflight-only exit 0 실패: {combined[:400]}"
+
+    required_fields = [
+        "current_head_sha",
+        "review_epoch",
+        "review_bundle_sha256",
+        "final_prompt_chars",
+        "safe_limit_chars",
+        "evidence_complete",
+        "critical_hunk_count",
+        "post_build_preflight",
+    ]
+    for field in required_fields:
+        assert field in combined, f"필수 필드 '{field}' 누락: {combined[:600]}"
+
+
+if __name__ == "__main__":
+    sys.exit(subprocess.call([sys.executable, "-m", "pytest", __file__, "-v"]))

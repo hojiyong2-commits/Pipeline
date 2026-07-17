@@ -1,0 +1,9 @@
+{
+  "changed_files": ["docs/report.md"],
+  "changed_functions": [],
+  "changed_lines": 20,
+  "pipeline_type": "IMP",
+  "execution_profile": "STANDARD",
+  "previous_reject_count": 0,
+  "previous_cli_error_count": 0
+}

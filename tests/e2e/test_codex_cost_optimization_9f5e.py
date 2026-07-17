@@ -49,6 +49,55 @@ PIPELINE_ID = "BUG-20260702-E69E-TEST"
 DUMMY_PACKET_SHA = "a" * 64  # verdict 기록용 dummy packet SHA (REJECT/APPROVE 경로)
 
 
+def _make_findings_reject_json(
+    *,
+    root_cause_category: str = "bundle_head_packet_sha_mismatch",
+    severity: str = "P1",
+    evidence: str = "structured finding evidence",
+    reproduction: str = "reproduce by running codex review",
+    required_fix: str = "apply the required structured fix",
+    acceptance_criterion: str = "issue resolved on re-review",
+) -> str:
+    """7-field findings[] REJECT verdict JSON 문자열을 생성한다 (bounded trust v2 스키마).
+
+    IMP-20260712-DAE1 MT-15: REJECT#2 rework 이후 _parse_json_verdict는 REJECT/BLOCKED verdict에
+    대해 findings[]의 7개 필수 필드(scope/severity/root_cause_category/evidence/reproduction/
+    required_fix/acceptance_criteria)를 검증한다. legacy 4-필드 REJECT는 parse_failure ERROR로
+    분류되므로, REJECTED를 기대하는 테스트는 이 구조화 findings[] payload를 사용해야 한다.
+    root_cause_category 기본값(bundle_head_packet_sha_mismatch)은 CODEX_BOUNDED_TRUST_IN_SCOPE
+    목록 값이므로 REJECTED + reject_count_delta=1(IN_SCOPE P0/P1)로 분류된다.
+
+    Args:
+        root_cause_category: bounded trust 분류 category (IN_SCOPE 목록 값이면 reject_count 증가).
+        severity: finding 심각도 (P0/P1/P2/P3 중 하나여야 함).
+        evidence: finding 증거 문자열 (non-empty).
+        reproduction: 재현 절차 문자열 (non-empty).
+        required_fix: 필요한 수정 문자열 (non-empty).
+        acceptance_criterion: 수용 기준 문자열 1개 (non-empty).
+    Returns:
+        직렬화된 7-field findings[] REJECT verdict JSON 문자열.
+    """
+    return json.dumps({
+        "schema_version": 6,
+        "verdict": "REJECT",
+        "findings": [
+            {
+                "scope": "IN_SCOPE",
+                "severity": severity,
+                "root_cause_category": root_cause_category,
+                "evidence": evidence,
+                "reproduction": reproduction,
+                "required_fix": required_fix,
+                "acceptance_criteria": [acceptance_criterion],
+            }
+        ],
+        "pipeline_id": "IMP-20260712-DAE1",
+        "reviewed_at": "2026-07-17T00:00:00Z",
+        "model_used": "gpt-5.6-sol",
+        "review_id": "test-review-id-mt15",
+    })
+
+
 def _no_gh_path() -> str:
     """gh CLI 디렉토리를 제거한 PATH를 반환한다 (git 등 다른 도구는 유지)."""
     gh = shutil.which("gh")
@@ -158,11 +207,16 @@ def _write_codex_result(tmp_path: Path, data: dict):
     )
 
 
-def _run_codex_review(tmp_path, state_file, *extra):
-    """gates codex-review를 CLI로 실행한다."""
+def _run_codex_review(tmp_path, state_file, *extra, env_extra=None):
+    """gates codex-review를 CLI로 실행한다.
+
+    IMP-20260712-DAE1 rework#2(요구3): --codex-cli-* 주입은 운영 환경에서 acceptance_eligible=true를
+    만들 수 없다. 주입 경로의 승인 자격을 검증하는 회귀 테스트는 env_extra로 PIPELINE_TEST_MODE=1을
+    전달하여 테스트 격리 모드에서 실행한다.
+    """
     return run_pipeline(
         "gates", "codex-review", *extra,
-        state_path=state_file, cwd=tmp_path,
+        state_path=state_file, cwd=tmp_path, env_extra=env_extra,
     )
 
 
@@ -191,10 +245,19 @@ def test_tc1_usage_limit_is_error_not_reject(isolated_pipeline):
 # ---------------------------------------------------------------------------
 def test_tc2_explicit_reject_increments_reject_count(isolated_pipeline):
     tmp_path, state_file = isolated_pipeline
+    # IMP-20260712-DAE1 MT-15: 7-field findings[] REJECT (bounded trust v2). legacy 4-필드는
+    # parse_failure ERROR로 분류되므로 REJECTED를 기대하는 이 케이스는 findings[] payload를 사용한다.
+    _reject_payload = _make_findings_reject_json(
+        root_cause_category="bundle_head_packet_sha_mismatch",
+        evidence="packet SHA mismatch detected",
+        reproduction="run with mismatched packet SHA",
+        required_fix="ensure packet SHA matches before acceptance",
+        acceptance_criterion="packet SHA matches on gates accept",
+    )
     result = _run_codex_review(
         tmp_path, state_file,
         "--codex-cli-exit-code", "0",
-        "--codex-cli-stdout", "REJECT - packet SHA mismatch detected",
+        "--codex-cli-stdout", _reject_payload,
         "--packet-sha256", DUMMY_PACKET_SHA,
     )
     final = _read_codex_result(tmp_path)
@@ -203,7 +266,6 @@ def test_tc2_explicit_reject_increments_reject_count(isolated_pipeline):
     assert final["reject_count"] == 1, final
     assert final["cli_error_count"] == 0, final
     assert final["verdict"] == "REJECT", final
-    assert final["reject_reason"] == "packet SHA mismatch detected", final
     assert final["acceptance_eligible"] is False, final
 
 
@@ -309,12 +371,16 @@ def test_tc7_retry_cli_error_allowed_on_error_state(isolated_pipeline):
         "--codex-cli-stdout", "APPROVE_TO_USER",
         "--packet-sha256", DUMMY_PACKET_SHA,
         "--retry-cli-error",
+        env_extra={"PIPELINE_TEST_MODE": "1"},  # 요구3: --codex-cli-* 주입 승인 자격은 테스트 격리에서만
     )
     final = _read_codex_result(tmp_path)
     # ERROR 상태에서 재시도 성공 → APPROVED로 전환 가능.
+    # IMP-20260712-DAE1: external CLI 주입(--codex-cli-*)은 항상 acceptance_eligible=false(운영 신뢰 게이트).
     assert result.returncode == 0, f"ERROR 상태 재시도는 허용되어야 함 (stderr={result.stderr})"
     assert final["status"] == "APPROVED", final
-    assert final["acceptance_eligible"] is True, final
+    assert final["acceptance_eligible"] is False, (
+        "external CLI 주입은 acceptance_eligible=false여야 한다 (IMP-20260712-DAE1)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +447,7 @@ def test_tc9_retry_cli_error_same_snapshot_allows_new_attempt(isolated_pipeline)
         "--codex-cli-stdout", "APPROVE_TO_USER",
         "--packet-sha256", DUMMY_PACKET_SHA,
         "--retry-cli-error",
+        env_extra={"PIPELINE_TEST_MODE": "1"},  # 요구3: --codex-cli-* 주입 승인 자격은 테스트 격리에서만
     )
     combined = result.stdout + result.stderr
     assert "codex_snapshot_changed_need_new_review" not in combined, combined
@@ -390,7 +457,8 @@ def test_tc9_retry_cli_error_same_snapshot_allows_new_attempt(isolated_pipeline)
     # 새 attempt_id가 생성되어 이전 값과 달라야 한다.
     assert final.get("attempt_id", "").startswith("cr-"), final
     assert final["attempt_id"] != "cr-prevattempt01", "retry는 새 attempt_id를 발급해야 함"
-    assert final["acceptance_eligible"] is True, final
+    # REJECT#12: --codex-cli-* 주입은 항상 acceptance_eligible=False (테스트 격리 주입 경로)
+    assert final["acceptance_eligible"] is False, final
 
 
 # ---------------------------------------------------------------------------
@@ -470,22 +538,39 @@ def test_tc13_parse_failure_and_json_verdict_cases(isolated_pipeline):
     f = run_and_read("--codex-cli-exit-code", "0", "--codex-cli-stdout", "REJECT")
     assert f["status"] == "ERROR" and f["error_type"] == "parse_failure", f
 
-    # valid "REJECT - some reason" → REJECTED (legacy fallback).
+    # REJECT#9: plaintext "REJECT - some reason" → parse_failure ERROR (legacy fallback 제거됨).
     f = run_and_read(
         "--codex-cli-exit-code", "0",
         "--codex-cli-stdout", "REJECT - genuine reason here",
         "--packet-sha256", DUMMY_PACKET_SHA,
     )
-    assert f["status"] == "REJECTED" and f["verdict"] == "REJECT", f
-    assert f["reject_reason"] == "genuine reason here", f
+    assert f["status"] == "ERROR" and f.get("error_type") == "parse_failure", f
 
-    # JSON {"verdict": "REJECT", "reason": "too short"} → REJECTED (JSON protocol).
+    # REJECT#9: JSON REJECT는 4-필드(root_cause/reproduction/required_fix/acceptance_criteria) 필수.
+    # 이전 {"verdict":"REJECT","reason":"..."} 형식 → parse_failure ERROR (필드 부족).
     f = run_and_read(
         "--codex-cli-exit-code", "0",
         "--codex-cli-stdout", '{"verdict": "REJECT", "reason": "too short"}',
         "--packet-sha256", DUMMY_PACKET_SHA,
     )
-    assert f["status"] == "REJECTED" and f["reject_reason"] == "too short", f
+    assert f["status"] == "ERROR" and f.get("error_type") == "parse_failure", f
+
+    # 7-field findings[] JSON REJECT → REJECTED (bounded trust v2 프로토콜).
+    _valid_reject = _make_findings_reject_json(
+        root_cause_category="verdict_parse_failure",
+        evidence="genuine reason here",
+        reproduction="reproduce by running review",
+        required_fix="fix the genuine issue",
+        acceptance_criterion="issue resolved",
+    )
+    f = run_and_read(
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", _valid_reject,
+        "--packet-sha256", DUMMY_PACKET_SHA,
+    )
+    assert f["status"] == "REJECTED" and f["verdict"] == "REJECT", f
+    # bounded trust v2: root_cause는 top-level이 아니라 findings[] 안에 있다.
+    assert isinstance(f.get("findings"), list) and len(f["findings"]) == 1, f
 
     # JSON {"verdict": "APPROVE_TO_USER"} → APPROVED (JSON protocol).
     f = run_and_read(
@@ -506,11 +591,19 @@ def test_tc13_parse_failure_and_json_verdict_cases(isolated_pipeline):
 def test_tc14_reject_count_not_increased_on_parse_failure(isolated_pipeline):
     tmp_path, state_file = isolated_pipeline
 
-    # 1차: 유효 REJECT → reject_count=1.
+    # 1차: 유효 REJECT (7-field findings[] JSON) → reject_count=1.
+    # IMP-20260712-DAE1 MT-15: IN_SCOPE finding이 있어야 reject_count_delta=1로 계수된다.
+    _valid_reject_14 = _make_findings_reject_json(
+        root_cause_category="bundle_head_packet_sha_mismatch",
+        evidence="real reason",
+        reproduction="real reproduction steps",
+        required_fix="real fix required",
+        acceptance_criterion="real criteria",
+    )
     _run_codex_review(
         tmp_path, state_file,
         "--codex-cli-exit-code", "0",
-        "--codex-cli-stdout", "REJECT - real reason",
+        "--codex-cli-stdout", _valid_reject_14,
         "--packet-sha256", DUMMY_PACKET_SHA,
     )
     first = _read_codex_result(tmp_path)
@@ -543,10 +636,18 @@ def test_tc10_error_then_retry_success_preserves_verdict(isolated_pipeline):
     first = _read_codex_result(tmp_path)
     assert first["status"] == "ERROR"
     # 2차: --retry-cli-error로 재시도, 이번엔 REJECT verdict.
+    # IMP-20260712-DAE1 MT-15: 7-field findings[] REJECT (bounded trust v2)
+    _r2_payload = _make_findings_reject_json(
+        root_cause_category="verdict_parse_failure",
+        evidence="contract audit failed",
+        reproduction="re-run codex review with failed contract",
+        required_fix="fix contract audit failures before acceptance",
+        acceptance_criterion="contract audit passes on retry",
+    )
     _run_codex_review(
         tmp_path, state_file,
         "--codex-cli-exit-code", "0",
-        "--codex-cli-stdout", "REJECT - contract audit failed",
+        "--codex-cli-stdout", _r2_payload,
         "--packet-sha256", DUMMY_PACKET_SHA,
         "--retry-cli-error",
     )
@@ -621,7 +722,7 @@ def test_tc15_approved_records_attempt_and_snapshot_identity(isolated_pipeline):
     # attempt 단위 상태 모델: attempt_id + effective 포인터.
     assert final.get("attempt_id", "").startswith("cr-"), final
     assert final.get("effective") is True, "APPROVED result는 effective=true여야 함"
-    assert final.get("schema_version") == 4, "attempt-model은 schema_version 4"
+    assert final.get("schema_version") == 6, "bounded trust v2는 schema_version 6 (IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION)"
     # snapshot_identity 중첩 dict가 6개 차원을 포함해야 한다.
     ident = final.get("snapshot_identity")
     assert isinstance(ident, dict), final
@@ -723,10 +824,25 @@ def test_tc_json_verdict_reject_count():
     sys.path.insert(0, str(Path(__file__).parents[2]))
     from pipeline import _run_codex_cli_review
 
-    json_reject = '{"schema_version":1,"verdict":"REJECT","reason":"security issue"}'
+    # IMP-20260712-DAE1 MT-15: findings 없는 단순 REJECT는 parse_failure ERROR (필드 부족).
+    # {"verdict":"REJECT","reason":"..."} 형식 → parse_failure ERROR.
+    _simple_reject = '{"schema_version":1,"verdict":"REJECT","reason":"security issue"}'
+    result_simple = _run_codex_cli_review(0, _simple_reject, "")
+    assert result_simple["status"] == "ERROR", result_simple
+    assert result_simple.get("error_type") == "parse_failure", result_simple
+
+    # 7-field findings[] JSON REJECT → REJECTED.
+    json_reject = _make_findings_reject_json(
+        root_cause_category="verdict_parse_failure",
+        evidence="security issue",
+        reproduction="trigger security check",
+        required_fix="fix the security issue",
+        acceptance_criterion="security check passes",
+    )
     result = _run_codex_cli_review(0, json_reject, "")
     assert result["status"] == "REJECTED", result
-    assert result["reject_reason"] == "security issue", result
+    # bounded trust v2: root_cause는 findings[] 안에 있다.
+    assert isinstance(result.get("findings"), list) and len(result["findings"]) == 1, result
 
     # verdict 값이 유효 집합(APPROVE_TO_USER/REJECT) 밖이면 승격하지 않고 parse_failure ERROR.
     bad_json = '{"schema_version":1,"verdict":"REJECTED","reason":"oops"}'

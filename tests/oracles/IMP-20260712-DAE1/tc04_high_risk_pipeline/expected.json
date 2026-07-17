@@ -1,0 +1,5 @@
+{
+  "risk_level": "HIGH",
+  "mode": "enforce",
+  "cache_allowed": "limited"
+}

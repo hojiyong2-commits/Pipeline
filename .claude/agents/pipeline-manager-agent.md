@@ -8,6 +8,117 @@ description: Pipeline Manager Agent — phase 순서 관리, agent 호출, pipel
 
 **Tier: Sonnet** | 순서 관리, receipt 확인, gate 기록 중심
 
+## Codex Model Router (IMP-20260712-DAE1)
+
+Pipeline Manager는 `gates codex-review` 실행 시 trust-chain risk에 따라 자동으로 Codex 모델을 선택합니다.
+
+### Risk 분류 규칙표
+
+| Risk Level | 트리거 조건 | 예시 |
+|---|---|---|
+| CRITICAL | CODEX_CRITICAL_FUNCTIONS에 해당하는 함수 변경 | _cmd_gates_request_accept, _cmd_gates_accept |
+| HIGH | CODEX_HIGH_RISK_PATHS에 해당하는 파일 변경 | pipeline.py, CLAUDE.md, .github/workflows/ |
+| MEDIUM | 코드 파일(.py/.ts/.js/.yaml) 변경 | 일반 구현 파일 |
+| LOW | 문서/보고서만 변경 | docs/, report.md |
+
+우선순위: CRITICAL > HIGH > MEDIUM > LOW.
+
+### 모델 라우팅 표 (REJECT#3: GPT-5.6 계열)
+
+| Risk Level | selected_model | selected_effort | mode | cache_allowed | force_review |
+|---|---|---|---|---|---|
+| LOW | gpt-5.6-luna | low | observe | true | false |
+| MEDIUM | gpt-5.6-terra | high | observe | true | false |
+| HIGH | gpt-5.6-sol | high | enforce | limited | false |
+| CRITICAL | gpt-5.6-sol | max | enforce | false | true |
+
+Codex Review는 GPT-5.6 계열 모델(gpt-5.6-luna/terra/sol)을 사용합니다. claude-sonnet/claude-opus 및 수동 verdict 주입은 더 이상 승인 경로가 아닙니다.
+
+### 실제 실행 구조 (REJECT#3)
+
+`gates codex-review`는 cache miss 시 **실제 Codex CLI를 자동 실행**합니다(수동 주입 아님):
+
+```
+codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> \
+  --sandbox read-only --ephemeral --json -C <repo-root> -
+```
+
+- 실행 전 `codex login status`로 **ChatGPT Plus 인증**을 강제합니다(정확히 `Logged in using ChatGPT`만 허용). API key/미로그인은 차단.
+- Codex subprocess 환경에서 `OPENAI_API_KEY`를 제거합니다(ChatGPT 인증만 사용).
+- timeout=600초. review bundle을 stdin으로 전달하며 raw ACCEPT 코드/nonce는 포함하지 않습니다.
+
+### 무단 실행 금지 + 1회용 실행 허가 (REJECT#5 P0-3, IMP-20260712-DAE1)
+
+**사용자 지시 없이 `gates codex-review`를 실행하지 마십시오. 무단 자동 재실행을 금지합니다.**
+
+- Pipeline Manager는 **사용자가 명시적으로 요청했을 때만** `gates codex-review`를 실행합니다. 이전 REJECT 처리 흐름/컨텍스트 요약/세션 재개만으로는 실제 Codex CLI를 자동 재실행할 근거가 되지 않습니다.
+- epoch 시작 승인(`--start-epoch`, `CODEX_START_EPOCH_USER_CONFIRMED=1`)과 **개별 CLI 실행 승인은 별개**입니다. epoch가 열려 있어도 실제 Codex CLI 호출은 **1회용 실행 허가(run permit)** 없이는 차단됩니다.
+- 실제 CLI 호출 직전, pipeline.py는 `(pipeline_id, review_epoch, pr_head_sha, review_bundle_sha256)`에 묶인 PENDING permit을 요구합니다. 허가가 없거나, 이미 소비되었거나, snapshot(head/bundle)이 바뀌면 CLI를 호출하지 않고 `codex_review_run_not_authorized`로 fail-closed BLOCKED 처리됩니다.
+- 허가 발급은 **사용자 직접 실행 전용**입니다: `CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run`. 발급된 permit은 다음 실제 CLI 호출 1회에만 유효하며 소비 후 재사용할 수 없습니다.
+- **한계 문서화:** 동일 OS 사용자 권한에서는 에이전트도 환경변수/permit 파일을 설정할 수 있으므로, 이 gate는 완전한 행위자 분리(cryptographic provenance)가 아니라 운영 절차(operational ceremony)입니다. 완전한 증명은 로컬 에이전트가 변조/위장할 수 없는 외부 러너/서명자를 요구합니다.
+
+### 모델 증거 필드 (selected / invoked / actual)
+
+- **selected_model/effort**: risk 정책이 선택한 값(gpt-5.6-*).
+- **invoked_model/effort**: `--model`에 실제 전달한 값(= selected_model).
+- **actual_model/effort**: CLI가 `--json`으로 명시 보고한 경우만 기록(아니면 `unknown`, 허위 기록 금지).
+- **model_verification_level**:
+  - `actual_verified`: CLI actual == selected.
+  - `invocation_verified`: CLI actual 미보고이나 명시 인자로 실행 + exit 0 성공.
+  - `unverified`: 증거 불충분.
+- **HIGH/CRITICAL은 최소 `invocation_verified` 이상이면 통과.** 실제 CLI가 gpt-5.6-*를 아직 지원하지 않아 actual을 보고하지 못해도, invocation_verified이면 HIGH/CRITICAL 통과를 허용합니다(정책 불일치는 경고).
+- **`unverified`(invocation 실패 + actual 미보고)이면 HIGH/CRITICAL에서 `model_verification_unverified`로 BLOCKED.** exit 0 + 명시 인자 실행이 모두 확인되면 invocation_verified로 통과합니다.
+
+### 계층형 observe/enforce 동작
+
+- **observe 모드** (LOW/MEDIUM): `model_verification_level`이 낮아도 차단 없이 통과. cache 허용. 전역 전환 없음. 단, 모델/effort 불일치(invoked ≠ selected)는 observe 모드에서도 항상 BLOCKED.
+- **enforce 모드** (HIGH/CRITICAL): `model_verification_level`이 `unverified`이면 BLOCKED. HIGH는 critical 파일 변경 없으면 limited cache 허용. CRITICAL은 항상 cache 금지.
+
+### verdict 스키마 (IMP-20260712-DAE1 MT-13 Finding 4: 7-field findings[] 스키마)
+
+- 승인: `{"verdict": "APPROVE_TO_USER"}`
+- 거절: `REJECT`/`BLOCKED` verdict는 구조화된 `findings[]` 배열이 필수다. 구 4-필드 포맷
+  (`root_cause`/`reproduction`/`required_fix`/`acceptance_criteria`만 있는 형식)은 제거되었다.
+
+```json
+{
+  "schema_version": 6,
+  "verdict": "REJECT",
+  "findings": [
+    {
+      "scope": "IN_SCOPE",
+      "severity": "P0",
+      "root_cause_category": "error_misclassified_as_approved",
+      "evidence": "...",
+      "reproduction": "...",
+      "required_fix": "...",
+      "acceptance_criteria": ["..."]
+    }
+  ],
+  "pipeline_id": "IMP-YYYYMMDD-XXXX",
+  "reviewed_at": "ISO8601",
+  "model_used": "gpt-5.6-sol",
+  "review_id": "UUID"
+}
+```
+
+- `REJECT`/`BLOCKED`인데 `findings`가 없거나(비-list/빈 배열), 각 finding의 7개 필수 필드
+  (`scope`/`severity`/`root_cause_category`/`evidence`/`reproduction`/`required_fix`/`acceptance_criteria`)
+  중 하나라도 누락되거나, `severity`가 `P0/P1/P2/P3` 외 값이면 → `parse_failure`(REJECT 아님).
+- Finding 1: `APPROVE_TO_USER`라도 IN_SCOPE finding(P2/P3 포함)이 하나라도 있으면 `REJECTED`로
+  강제되고 `acceptance_eligible=false`가 된다(reject_count 증가는 P0/P1일 때만).
+- ERROR(usage limit/timeout/network/auth 실패/model unavailable/CLI non-zero/파싱 실패)는 reject_count를 증가시키지 않고 acceptance_eligible=false.
+
+### Plus 사용량 보호 전략
+
+- CRITICAL: 항상 gpt-5.6-sol/max + force_review + cache 금지 → 검토 품질 최대화.
+- HIGH: gpt-5.6-sol/high + enforce + limited cache → 신중 사용.
+- LOW/MEDIUM: luna/terra + observe + cache 허용 → 사용량 절약.
+
+### 다운그레이드 차단
+
+HIGH/CRITICAL risk에서 더 낮은 모델 티어로 다운그레이드 요청 시 BLOCKED (`failure_code=downgrade_blocked`). 이는 trust-chain 변경에 대한 검토 품질을 보장합니다.
+
 ## 역할
 
 Pipeline Manager는 PM Planner로부터 `step_plan.xml`을 받아 파이프라인 전체(Phase 2~8)를 관리합니다.
