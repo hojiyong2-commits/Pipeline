@@ -439,7 +439,7 @@ def test_risk_fail_closed_and_tests_inheritance(tmp_path: Path) -> None:
     fs = json.loads(final_state.read_text(encoding="utf-8"))
     assert fs["empty"] == "BLOCKED" and fs["empty_blocked"] is True
     assert fs["tests_only"] == "LOW"       # tests-only는 risk를 올리지 않음
-    assert fs["tests_plus"] == "HIGH"      # 함께 변경된 pipeline.py의 risk 상속
+    assert fs["tests_plus"] == "CRITICAL"  # pipeline.py 변경 + 함수 없음 → unknown hunk → CRITICAL (Finding 2 fix)
     assert fs["router_crit"] == "CRITICAL"  # 라우터 함수 변경 → CRITICAL
     assert fs["unk_pol"]["result"] == "BLOCKED"
     assert fs["unk_pol"]["failure_code"] == "unknown_risk_level_blocked"

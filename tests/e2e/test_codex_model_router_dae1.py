@@ -3413,18 +3413,20 @@ def test_tc46g_critical_constant_triggers_force_review_and_no_cache() -> None:
     )
 
 
-def test_tc46h_no_functions_no_constants_pipeline_py_is_high() -> None:
-    """REJECT#32 회귀 방지: 함수/상수 변경 없이 pipeline.py만 변경하면 HIGH (CRITICAL 아님).
-    상수 스캔 추가 후 기존 HIGH 분류가 변경되지 않아야 한다.
+def test_tc46h_no_functions_no_constants_pipeline_py_is_critical() -> None:
+    """NON_CONVERGING Finding 2 fix: 함수/상수 없이 pipeline.py만 변경하면 CRITICAL (fail-closed).
+    pipeline.py에는 CODEX_CRITICAL_FUNCTIONS가 포함돼 있으므로, 함수 문맥 없는 unknown hunk는
+    CRITICAL 함수 변경 가능성을 배제할 수 없다 → fail-closed CRITICAL 분류.
     """
     r = pipeline._classify_codex_review_risk(
         ["pipeline.py"],
-        [],   # 함수 없음
+        [],   # 함수 없음 (unknown hunks)
         [],   # 상수 없음
     )
-    assert r["risk_level"] == "HIGH", (
-        f"REJECT#32 회귀: 함수/상수 없이 pipeline.py만 변경하면 HIGH여야 함 — got {r['risk_level']!r}"
+    assert r["risk_level"] == "CRITICAL", (
+        f"NON_CONVERGING Finding 2: 함수/상수 없이 pipeline.py만 변경하면 CRITICAL이어야 함 — got {r['risk_level']!r}"
     )
+    assert r["matched_rule"] == "unknown_hunk_in_critical_function_file"
 
 
 # =========================================================================== #

@@ -8636,6 +8636,21 @@ def _classify_codex_review_risk(
                 "blocked": False,
             }
 
+    # IMP-20260712-DAE1 REJECT#NON_CONVERGING Finding 2 fix (model_effort_mismatch):
+    # pipeline.py는 CODEX_CRITICAL_FUNCTIONS를 포함하는 유일한 파일이다.
+    # pipeline.py가 changed_files에 있지만 changed_functions가 비어 있으면(함수 문맥 없는 unknown hunk),
+    # 어떤 CRITICAL 함수도 변경되지 않았다는 것을 확인할 수 없으므로 CRITICAL fail-closed로 분류한다.
+    # changed_functions가 비어 있지 않은 경우(예: build_parser만 변경)는 기존 HIGH 분류 유지.
+    _CRITICAL_FUNCTION_FILES: frozenset = frozenset({"pipeline.py"})
+    _has_crit_func_file = any(str(f) in _CRITICAL_FUNCTION_FILES for f in _files)
+    if _has_crit_func_file and len(_funcs) == 0:
+        return {
+            "risk_level": "CRITICAL",
+            "matched_rule": "unknown_hunk_in_critical_function_file",
+            "matched_items": [f for f in _files if str(f) in _CRITICAL_FUNCTION_FILES],
+            "blocked": False,
+        }
+
     # IMP-20260712-DAE1 rework(문제5): tests/** 는 risk를 올리지 않는다. 제품 코드 risk를
     #   상속하도록, HIGH/MEDIUM 경로 판정에서 test 파일을 제외한다(tests 자체는 risk 상승 안 함).
     _product_files = [f for f in _files if not _is_codex_test_path(str(f))]
@@ -12694,38 +12709,76 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     if not stdout:
         return None
 
-    # 오른쪽에서 마지막 '}'를 찾고, balanced brace matching으로 대응하는 최외곽 '{'까지 추출한다.
-    #   IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 중첩 object가 있으면 단순
-    #   rfind("{")는 내부 finding brace를 잡아 verdict 키를 놓친다. 중첩 depth를 계산해 최외곽 object를
-    #   추출한다(비중첩 NDJSON 마지막 object 추출 동작은 그대로 보존).
-    end = stdout.rfind("}")
-    if end == -1:
+    # IMP-20260712-DAE1 REJECT#NON_CONVERGING Finding 1 fix (error_misclassified_as_approved):
+    # stdout 전체에서 최상위 JSON object를 모두 스캔하여 verdict 키가 있는 후보를 수집한다.
+    # 두 개 이상의 verdict-bearing JSON이 있으면 상충/모호 → parse_failure(fail-closed).
+    # 단일 verdict JSON만 있으면 그것을 처리 대상으로 확정한다(순서와 무관하게 동작).
+    _vd_candidates: List[Dict[str, Any]] = []
+    _scan_depth = 0
+    _scan_start = -1
+    for _scan_i, _scan_c in enumerate(stdout):
+        if _scan_c == "{":
+            if _scan_depth == 0:
+                _scan_start = _scan_i
+            _scan_depth += 1
+        elif _scan_c == "}":
+            _scan_depth -= 1
+            if _scan_depth == 0 and _scan_start != -1:
+                _cand_str = stdout[_scan_start:_scan_i + 1]
+                try:
+                    _cand_obj = json.loads(_cand_str)
+                    if isinstance(_cand_obj, dict) and "verdict" in _cand_obj:
+                        _vd_candidates.append(_cand_obj)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                _scan_start = -1
+    if len(_vd_candidates) >= 2:
+        # 복수 verdict JSON — 순서 불문 상충/모호 → parse_failure(fail-closed).
         return None
-    _depth = 0
-    start = -1
-    for _i in range(end, -1, -1):
-        _c = stdout[_i]
-        if _c == "}":
-            _depth += 1
-        elif _c == "{":
-            _depth -= 1
-            if _depth == 0:
-                start = _i
-                break
-    if start == -1:
-        return None
+    # 단일 verdict-bearing JSON이 있으면 기존 처리 로직으로 직행한다.
+    if len(_vd_candidates) == 1:
+        obj = _vd_candidates[0]
+        verdict = str(obj.get("verdict", "") or "")
+        reason = str(obj.get("reason", "") or "")
+        # 이하 기존 findings 검증 로직으로 계속 진행 (goto 불가 → 아래 공용 처리 블록으로).
+    else:
+        # verdict JSON이 하나도 없으면 오른쪽에서 마지막 '}'를 찾는 레거시 방식으로 fallback.
+        # (verdict 키 없는 최외곽 JSON 처리 케이스 — 기존 return None 동작 보존)
+        obj = None
+        verdict = ""
+        reason = ""
 
-    json_str = stdout[start:end + 1]
-    try:
-        obj = json.loads(json_str)
-    except (json.JSONDecodeError, ValueError):
-        return None
-
-    if not isinstance(obj, dict):
-        return None
-
-    verdict = str(obj.get("verdict", "") or "")
-    reason = str(obj.get("reason", "") or "")
+    # verdict JSON 미발견: 이하 레거시 rfind 경로 — verdict 없는 JSON에서 None을 반환한다.
+    if obj is None:
+        # 오른쪽에서 마지막 '}'를 찾고, balanced brace matching으로 대응하는 최외곽 '{'까지 추출한다.
+        #   IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 중첩 object가 있으면 단순
+        #   rfind("{")는 내부 finding brace를 잡아 verdict 키를 놓친다. 중첩 depth를 계산해 최외곽 object를
+        #   추출한다(비중첩 NDJSON 마지막 object 추출 동작은 그대로 보존).
+        _end = stdout.rfind("}")
+        if _end == -1:
+            return None
+        _depth = 0
+        _start = -1
+        for _i in range(_end, -1, -1):
+            _c = stdout[_i]
+            if _c == "}":
+                _depth += 1
+            elif _c == "{":
+                _depth -= 1
+                if _depth == 0:
+                    _start = _i
+                    break
+        if _start == -1:
+            return None
+        _json_str = stdout[_start:_end + 1]
+        try:
+            obj = json.loads(_json_str)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        if not isinstance(obj, dict):
+            return None
+        verdict = str(obj.get("verdict", "") or "")
+        reason = str(obj.get("reason", "") or "")
 
     # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 스키마 우선 처리.
     #   findings가 존재하면 scope 분류 결과를 verdict dict에 실어 반환한다. verdict가 APPROVE_TO_USER면
