@@ -1062,20 +1062,25 @@ def test_critical_function_coverage_preserved():
 
 
 def test_non_critical_evidence_can_be_reduced():
-    """중복 제거(dedup)만으로 budget 충족 시 evidence_complete=True, 초과 시 False."""
-    from pipeline import _build_structured_codex_input
-    # 케이스 1: 중복 라인으로 구성된 입력 — dedup으로 budget 이내 → evidence_complete=True
-    big_dup_input = "\n".join(["x" * 100] * 20)  # 2000 chars, but deduped to ~202 chars
-    result, complete = _build_structured_codex_input(big_dup_input, 500)
-    # 중복 제거(lossless)로 budget 충족 → evidence_complete=True
-    assert complete is True, f"dedup lossless reduction should yield complete=True, got {complete}"
-    assert len(result) <= 500
+    """REJECT#5 P0-1: 전역 line dedup 제거 이후 동작.
 
-    # 케이스 2: 중복 없는 고유 라인 — dedup 무효, budget 초과 → evidence_complete=False
+    과거에는 반복 라인 dedup으로 budget을 맞추면 evidence_complete=True였다. 그러나 서로 다른
+    CRITICAL hunk에서 반복되는 동일 코드 줄을 삭제하면 실제 증거가 유실되므로 dedup을 완전히 제거했다.
+    이제 예산을 초과하면 어떤 라인도 삭제하지 않고 원문을 그대로 반환하며 evidence_complete=False다.
+    """
+    from pipeline import _build_structured_codex_input
+    # 케이스 1: 반복 라인 입력 — dedup이 제거되어 더 이상 축소되지 않는다.
+    #   원문(2000 chars)이 예산(500)을 초과 → 원문 그대로 반환 + evidence_complete=False.
+    big_dup_input = "\n".join(["x" * 100] * 20)  # 2000 chars
+    result, complete = _build_structured_codex_input(big_dup_input, 500)
+    assert complete is False, f"dedup 제거 후 over-budget은 complete=False여야 함, got {complete}"
+    assert result == big_dup_input, "어떤 라인도 삭제하지 않고 원문을 그대로 반환해야 함"
+
+    # 케이스 2: 중복 없는 고유 라인 — budget 초과 → evidence_complete=False (원문 보존).
     unique_input = "\n".join([f"unique line {i}" * 10 for i in range(200)])  # ~3000+ chars
     result2, complete2 = _build_structured_codex_input(unique_input, 100)
-    # 섹션 축소 필요(lossy) → evidence_complete=False
-    assert complete2 is False, f"unique over-budget should yield complete=False, got {complete2}"
+    assert complete2 is False, f"unique over-budget은 complete=False여야 함, got {complete2}"
+    assert result2 == unique_input, "어떤 라인도 삭제하지 않고 원문을 그대로 반환해야 함"
 
 
 def test_budget_exceeded_blocks_cli_and_returns_correct_failure_code():
@@ -1127,6 +1132,252 @@ def test_prompt_length_and_sentinel_verified_before_cli_call():
         prompt, safe_chars, evidence_complete=True
     )
     assert valid is True, f"예상 통과, 실패: {failures}"
+
+
+# ================================================================== #
+# REJECT#5 P0 회귀 테스트 (MT-R5-4) — IMP-20260712-DAE1
+#   P0-1: _build_structured_codex_input 전역 line dedup 제거
+#   P0-2: _parse_json_verdict NDJSON 파싱 + JSON 문자열 내부 중괄호 정상 처리
+#   P0-3: 1회용 Codex CLI 실행 허가(run permit) gate
+# ================================================================== #
+
+def _r5_full_finding() -> Dict[str, object]:
+    """REJECT#5 테스트용 7필드 완비 finding."""
+    return {
+        "scope": "IN_SCOPE",
+        "severity": "P1",
+        "root_cause_category": "verdict_parse_failure",
+        "evidence": "evidence text",
+        "reproduction": "repro steps",
+        "required_fix": "fix direction",
+        "acceptance_criteria": ["criterion 1"],
+    }
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-1: 반복되는 동일 코드 줄이 서로 다른 critical hunk에서 모두 보존됨 (P0-1)
+# ------------------------------------------------------------------ #
+def test_r5_dedup_preserves_repeated_lines_in_critical_hunks() -> None:
+    """서로 다른 hunk에서 반복되는 동일 줄(return None 등)이 전역 dedup으로 삭제되지 않는다."""
+    from pipeline import _build_structured_codex_input
+    # 서로 다른 함수 hunk에서 동일한 'return None' / '}' 가 여러 번 등장하는 프롬프트.
+    prompt = "\n".join([
+        "def foo():", "    if x:", "        return None",
+        "def bar():", "    if y:", "        return None",
+        "def baz():", "    if z:", "        return None",
+        "    }", "    }", "    }",
+    ])
+    # 케이스 A: 예산 이내 → 원문 그대로 + evidence_complete=True, 모든 반복 줄 보존.
+    result, complete = _build_structured_codex_input(prompt, 100000)
+    assert complete is True
+    assert result == prompt
+    assert result.count("return None") == 3, "3개의 서로 다른 hunk의 return None이 모두 보존돼야 함"
+    assert result.count("    }") == 3, "반복되는 닫는 괄호가 모두 보존돼야 함"
+
+    # 케이스 B: 예산 초과 → 여전히 어떤 줄도 삭제되지 않는다(dedup 제거).
+    result_b, complete_b = _build_structured_codex_input(prompt, 10)
+    assert complete_b is False, "예산 초과 시 evidence_complete=False (fail-closed)"
+    assert result_b == prompt, "예산 초과여도 반복 줄을 dedup으로 삭제하지 않는다"
+    assert result_b.count("return None") == 3
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-2: critical hunk 축소(예산 초과) 시 evidence_complete=False (P0-1)
+# ------------------------------------------------------------------ #
+def test_r5_missing_critical_hunk_sets_evidence_incomplete() -> None:
+    """예산 초과로 축소가 필요한 상황에서 evidence_complete=False가 되고 원문은 유실되지 않는다."""
+    from pipeline import (
+        _build_structured_codex_input,
+        _validate_post_build_prompt,
+        CODEX_CLI_SAFE_INPUT_CHARS,
+    )
+    critical_marker = "def _cmd_gates_request_accept():  # CRITICAL"
+    prompt = critical_marker + "\n" + ("noise line\n" * 500)
+    # 작은 예산으로 강제 초과 → evidence_complete=False, critical 원문은 result에 그대로 존재.
+    result, complete = _build_structured_codex_input(prompt, 50)
+    assert complete is False, "예산 초과 → evidence_complete=False"
+    assert critical_marker in result, "critical hunk 원문은 삭제되지 않아야 함"
+    # evidence_complete=False면 post-build preflight가 CLI 호출 전에 차단한다.
+    valid, failures = _validate_post_build_prompt(
+        result, CODEX_CLI_SAFE_INPUT_CHARS, evidence_complete=complete
+    )
+    assert valid is False
+    assert any("evidence_complete" in f for f in failures)
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-3: JSON string 내부 중괄호/escaped quote/backslash/한글 정상 파싱 (P0-2)
+# ------------------------------------------------------------------ #
+def test_r5_json_string_braces_parsed_correctly() -> None:
+    """evidence 문자열에 {, }, escaped quote, backslash, 한글이 있어도 REJECT가 정상 파싱된다."""
+    finding = _r5_full_finding()
+    # JSON 문자열 리터럴 내부에 구조 문자처럼 보이는 중괄호/따옴표/역슬래시/한글 포함.
+    finding["evidence"] = 'unmatched brace { and } with "quote" and \\ backslash 그리고 한글'
+    payload = json.dumps({"verdict": "REJECT", "findings": [finding]})
+    result = pipeline._parse_json_verdict(payload)
+    assert result is not None, "JSON 문자열 내부 중괄호 때문에 파싱이 실패해서는 안 됨"
+    assert result["verdict"] == "REJECTED"
+
+    # APPROVE_TO_USER에서도 동일하게 문자열 내부 중괄호가 파싱을 깨지 않는다.
+    approve_payload = json.dumps({
+        "verdict": "APPROVE_TO_USER",
+        "reason": "no issues { found } — 검토 완료 \\o/",
+    })
+    approve = pipeline._parse_json_verdict(approve_payload)
+    assert approve is not None and approve["verdict"] == "APPROVED"
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-4: 복수 terminal verdict → fail-closed (ambiguous_verdict) (P0-2)
+# ------------------------------------------------------------------ #
+def test_r5_ambiguous_verdict_fail_closed() -> None:
+    """두 개 이상의 verdict payload는 상충/동일 여부와 무관하게 parse_failure(None)."""
+    approve = json.dumps({"verdict": "APPROVE_TO_USER"})
+    reject = json.dumps({"verdict": "REJECT", "findings": [_r5_full_finding()]})
+
+    # APPROVE → REJECT
+    assert pipeline._parse_json_verdict(approve + "\n" + reject) is None
+    # REJECT → APPROVE
+    assert pipeline._parse_json_verdict(reject + "\n" + approve) is None
+    # 동일 verdict 2개(APPROVE 2개)
+    assert pipeline._parse_json_verdict(approve + approve) is None
+
+    # NDJSON에서 terminal agent_message가 2개(상충)인 경우도 fail-closed.
+    ndjson = "\n".join([
+        json.dumps({"type": "thread.started"}),
+        json.dumps({"type": "item.completed",
+                    "item": {"type": "agent_message", "text": approve}}),
+        json.dumps({"type": "item.completed",
+                    "item": {"type": "agent_message", "text": reject}}),
+    ])
+    assert pipeline._parse_json_verdict(ndjson) is None
+
+    # 대조군: 단일 verdict는 정상 파싱된다(회귀 방지).
+    assert pipeline._parse_json_verdict(approve)["verdict"] == "APPROVED"
+    single_reject = pipeline._parse_json_verdict(reject)
+    assert single_reject is not None and single_reject["verdict"] == "REJECTED"
+
+    # malformed 이벤트 줄은 조용히 건너뛰고 단일 terminal verdict만 신뢰한다.
+    ndjson_with_garbage = "\n".join([
+        "this is not json at all",
+        json.dumps({"type": "item.completed",
+                    "item": {"type": "agent_message", "text": approve}}),
+        "{broken json",
+    ])
+    ok = pipeline._parse_json_verdict(ndjson_with_garbage)
+    assert ok is not None and ok["verdict"] == "APPROVED"
+
+    # terminal agent_message가 전혀 없으면 None(호출자 fallback 대상).
+    no_terminal = "\n".join([
+        json.dumps({"type": "thread.started"}),
+        json.dumps({"type": "turn.started"}),
+    ])
+    assert pipeline._parse_json_verdict(no_terminal) is None
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-5: 실행 허가 없는 일반 gates codex-review는 CLI 미호출 BLOCKED (P0-3)
+# ------------------------------------------------------------------ #
+def test_r5_run_not_authorized_blocks_cli() -> None:
+    """run permit이 없으면 _check_codex_run_permit이 (False, no_permit)로 fail-closed."""
+    authorized, reason = pipeline._check_codex_run_permit(
+        None,
+        pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="abc123", review_bundle_sha256="bundle_sha",
+    )
+    assert authorized is False
+    assert reason == "no_permit"
+
+    # 실행 허가 개념이 실제 CLI 호출 직전 경로에 배선되어 있는지 소스로 확인(정의만-존재 방지).
+    import inspect
+    src = inspect.getsource(pipeline._cmd_gates_codex_review)
+    assert "_check_codex_run_permit" in src, "run permit 검사가 CLI 경로에 배선돼야 함"
+    assert "codex_review_run_not_authorized" in src
+    # 검사가 실제 CLI 호출(_invoke_codex_exec)보다 먼저 위치해야 한다.
+    assert src.index("_check_codex_run_permit") < src.index("_auto_run = _invoke_codex_exec"), (
+        "run permit 검사는 실제 CLI 호출 이전에 수행돼야 한다(CLI 미호출 BLOCKED)"
+    )
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-6: 허가 snapshot과 현재 head/bundle이 다르면 CLI 미호출 BLOCKED (P0-3)
+# ------------------------------------------------------------------ #
+def test_r5_stale_snapshot_blocks_cli() -> None:
+    """permit이 PENDING이어도 head SHA 또는 bundle SHA가 바뀌면 stale_snapshot으로 차단."""
+    permit = pipeline._make_codex_run_permit_snapshot(
+        _PID, "epoch_1", "head_A", "bundle_A"
+    )
+    permit["status"] = "PENDING"
+
+    # 동일 snapshot → 허가.
+    ok, reason = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_A",
+    )
+    assert ok is True and reason == ""
+
+    # head SHA 변경 → stale.
+    ok2, reason2 = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_B", review_bundle_sha256="bundle_A",
+    )
+    assert ok2 is False and reason2 == "stale_snapshot"
+
+    # bundle SHA 변경 → stale.
+    ok3, reason3 = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_B",
+    )
+    assert ok3 is False and reason3 == "stale_snapshot"
+
+    # review_epoch 변경 → stale.
+    ok4, reason4 = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_2",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_A",
+    )
+    assert ok4 is False and reason4 == "stale_snapshot"
+
+    # 현재 snapshot 구성요소가 비어 있으면 검증 불가 → 허가 없음(fail-closed).
+    ok5, reason5 = pipeline._check_codex_run_permit(
+        permit, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="", review_bundle_sha256="bundle_A",
+    )
+    assert ok5 is False and reason5 == "missing_snapshot_component"
+
+
+# ------------------------------------------------------------------ #
+# 테스트 R5-7: 1회용 허가 재사용 차단 (P0-3)
+# ------------------------------------------------------------------ #
+def test_r5_run_permit_single_use(tmp_path: Path, monkeypatch) -> None:
+    """PENDING permit은 소비 후 CONSUMED가 되어 재사용할 수 없다."""
+    # PIPELINE_STATE_PATH 격리 — 실제 .pipeline을 오염시키지 않는다.
+    state_path = tmp_path / "pipeline_state.json"
+    state_path.write_text(json.dumps({"pipeline_id": _PID}), encoding="utf-8")
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+
+    # 발급 → PENDING.
+    issued = pipeline._issue_codex_run_permit(_PID, "epoch_1", "head_A", "bundle_A")
+    assert issued["status"] == "PENDING"
+
+    # 로드 후 검증 → 허가.
+    loaded = pipeline._load_codex_run_permit()
+    ok, reason = pipeline._check_codex_run_permit(
+        loaded, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_A",
+    )
+    assert ok is True and reason == ""
+
+    # 소비 → CONSUMED.
+    pipeline._consume_codex_run_permit(loaded)
+    reloaded = pipeline._load_codex_run_permit()
+    assert reloaded["status"] == "CONSUMED"
+
+    # 재사용 시도 → consumed로 차단(snapshot이 여전히 일치해도 재사용 불가).
+    ok2, reason2 = pipeline._check_codex_run_permit(
+        reloaded, pipeline_id=_PID, review_epoch="epoch_1",
+        pr_head_sha="head_A", review_bundle_sha256="bundle_A",
+    )
+    assert ok2 is False and reason2 == "consumed"
 
 
 if __name__ == "__main__":

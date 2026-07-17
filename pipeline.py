@@ -8189,6 +8189,176 @@ def _codex_review_blocked_flag_path() -> Path:
     return PIPELINE_CI_DIR / "codex_review_blocked.flag"
 
 
+# [Purpose]: IMP-20260712-DAE1 REJECT#5 P0-3 — epoch 시작 승인과 "개별 Codex CLI 실행 승인"을 분리한다.
+#            CODEX_START_EPOCH_USER_CONFIRMED=1은 --start-epoch(=새 review_epoch 시작)만 보호했다. epoch가
+#            열린 뒤 일반 `gates codex-review`가 무단으로 실제 Codex CLI를 재실행할 수 있었다. 이 결함을
+#            막기 위해 실제 CLI 호출 직전에 (pipeline_id, review_epoch, pr_head_sha, review_bundle_sha256)에
+#            묶인 1회용 실행 허가(run permit)를 요구한다.
+# [Assumptions]: run permit은 `gates codex-review --authorize-run`으로 발급되며(status=PENDING),
+#            CLI 호출 직전에 정확히 한 번 소비되어 CONSUMED로 표시된다. snapshot 4-tuple이 현재 상태와
+#            정확히 일치할 때만 유효하다.
+# [Vulnerability & Risks]: 동일 OS 사용자 권한에서는 에이전트도 permit 파일을 작성할 수 있으므로,
+#            이 gate는 완전한 행위자 분리(cryptographic provenance)가 아니라 운영 절차(operational
+#            ceremony)이다. 완전한 증명은 로컬 에이전트가 변조/위장할 수 없는 외부 러너/서명자를 요구한다.
+#            현재 구현은 (a) 1회용 소비로 "무단 자동 재실행"을, (b) snapshot 바인딩으로 "stale 실행"을 막는다.
+# [Improvement]: permit에 외부 서명자(HSM/CI signer)의 서명을 추가하면 same-OS-user 위장을 차단할 수 있다.
+def _codex_run_permit_path() -> Path:
+    """1회용 Codex CLI 실행 허가(run permit) 파일 경로 (PIPELINE_STATE_PATH 격리 지원).
+
+    Returns:
+        .pipeline/codex_run_permit.json 절대 경로.
+    """
+    env_state = os.environ.get("PIPELINE_STATE_PATH")
+    if env_state:
+        return Path(env_state).resolve().parent / ".pipeline" / "codex_run_permit.json"
+    return PIPELINE_CI_DIR / "codex_run_permit.json"
+
+
+def _make_codex_run_permit_snapshot(
+    pipeline_id: str,
+    review_epoch: str,
+    pr_head_sha: str,
+    review_bundle_sha256: str,
+) -> Dict[str, str]:
+    """run permit이 바인딩하는 snapshot 4-tuple을 표준 dict로 정규화한다.
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID.
+        review_epoch: 현재 review_epoch(contract migration 값).
+        pr_head_sha: 현재 PR head SHA.
+        review_bundle_sha256: 현재 review bundle SHA-256.
+    Returns:
+        4개 키(pipeline_id/review_epoch/pr_head_sha/review_bundle_sha256)를 str로 정규화한 dict.
+    """
+    return {
+        "pipeline_id": str(pipeline_id or ""),
+        "review_epoch": str(review_epoch or ""),
+        "pr_head_sha": str(pr_head_sha or ""),
+        "review_bundle_sha256": str(review_bundle_sha256 or ""),
+    }
+
+
+def _check_codex_run_permit(
+    permit: Optional[Dict[str, Any]],
+    *,
+    pipeline_id: str,
+    review_epoch: str,
+    pr_head_sha: str,
+    review_bundle_sha256: str,
+) -> Tuple[bool, str]:
+    """1회용 Codex CLI 실행 허가를 검증한다(순수 함수 — 파일 I/O 없음).
+
+    검증 순서(fail-closed):
+      1) permit이 None/비dict → 허가 없음(no_permit)
+      2) status가 PENDING이 아님(이미 소비됨) → 재사용 차단(consumed)
+      3) 현재 snapshot 구성요소가 비어 있음 → 검증 불가(missing_snapshot_component)
+      4) permit snapshot이 현재 snapshot과 다름 → stale(stale_snapshot)
+
+    Args:
+        permit: 로드된 permit dict 또는 None.
+        pipeline_id: 현재 파이프라인 ID.
+        review_epoch: 현재 review_epoch.
+        pr_head_sha: 현재 PR head SHA.
+        review_bundle_sha256: 현재 review bundle SHA-256.
+    Returns:
+        (authorized, reason). authorized=True이면 reason="".
+        reason ∈ {"no_permit", "consumed", "missing_snapshot_component", "stale_snapshot"}.
+    """
+    # permit None/비dict 방어 — 허가 없음으로 처리(fail-closed, 예외 대신 명시적 반환).
+    if permit is None or not isinstance(permit, dict):
+        return False, "no_permit"
+    # 이미 소비된(=PENDING 아님) permit → 재사용 차단.
+    if str(permit.get("status", "") or "").upper() != "PENDING":
+        return False, "consumed"
+    _expect = _make_codex_run_permit_snapshot(
+        pipeline_id, review_epoch, pr_head_sha, review_bundle_sha256
+    )
+    for _k, _v in _expect.items():
+        # 현재 snapshot 구성요소가 비어 있으면 바인딩 검증 불가 → 허가 없음(fail-closed).
+        if not _v:
+            return False, "missing_snapshot_component"
+        if str(permit.get(_k, "") or "") != _v:
+            return False, "stale_snapshot"
+    return True, ""
+
+
+def _load_codex_run_permit() -> Optional[Dict[str, Any]]:
+    """codex_run_permit.json을 로드한다. 없거나 파싱 실패면 None(fail-safe).
+
+    Returns:
+        permit dict 또는 None.
+    """
+    _p = _codex_run_permit_path()
+    try:
+        if not _p.exists():
+            return None
+        _obj = json.loads(_p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    return _obj if isinstance(_obj, dict) else None
+
+
+def _issue_codex_run_permit(
+    pipeline_id: str,
+    review_epoch: str,
+    pr_head_sha: str,
+    review_bundle_sha256: str,
+) -> Dict[str, Any]:
+    """1회용 Codex CLI 실행 허가를 발급하고 파일에 기록한다(status=PENDING).
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID.
+        review_epoch: 현재 review_epoch.
+        pr_head_sha: 현재 PR head SHA.
+        review_bundle_sha256: 현재 review bundle SHA-256.
+    Returns:
+        기록된 permit dict.
+    Raises:
+        OSError: permit 파일 쓰기 실패 시.
+    """
+    _permit: Dict[str, Any] = dict(
+        _make_codex_run_permit_snapshot(
+            pipeline_id, review_epoch, pr_head_sha, review_bundle_sha256
+        )
+    )
+    _permit["status"] = "PENDING"
+    _permit["issued_at"] = _now()
+    _p = _codex_run_permit_path()
+    _p.parent.mkdir(parents=True, exist_ok=True)
+    _p.write_text(json.dumps(_permit, ensure_ascii=False, indent=2), encoding="utf-8")
+    return _permit
+
+
+def _consume_codex_run_permit(permit: Dict[str, Any]) -> Dict[str, Any]:
+    """PENDING permit을 CONSUMED로 표시하고 파일에 기록한다(1회용 — 재사용 차단).
+
+    Args:
+        permit: 소비할 PENDING permit dict.
+    Returns:
+        CONSUMED로 표시된 permit dict.
+    Raises:
+        TypeError: permit이 None/비dict인 경우.
+    """
+    if permit is None:
+        raise TypeError("permit must not be None")
+    if not isinstance(permit, dict):
+        raise TypeError(f"permit must be dict, got {type(permit).__name__}")
+    _consumed = dict(permit)
+    _consumed["status"] = "CONSUMED"
+    _consumed["consumed_at"] = _now()
+    try:
+        _p = _codex_run_permit_path()
+        _p.parent.mkdir(parents=True, exist_ok=True)
+        _p.write_text(
+            json.dumps(_consumed, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        # 파일 기록 실패는 무시한다 — 소비 표시 실패 시 다음 check에서 다시 PENDING이 관측되지만,
+        # snapshot 바인딩이 유효한 경우에만 재사용 가능하므로 안전 측면 손실은 제한적이다.
+        pass
+    return _consumed
+
+
 # [Purpose]: BUG-20260702-E69E — Codex Review 입력 bundle(codex_review_bundle.json)의 경로를
 #            producer(_build_codex_review_bundle)와 consumer(_codex_snapshot_identity)가 동일하게
 #            해석하도록 단일 헬퍼로 통일한다. _codex_review_result_path와 동일한 PIPELINE_STATE_PATH
@@ -12688,18 +12858,79 @@ def _classify_codex_findings(findings: Any) -> Dict[str, Any]:
     return out
 
 
-def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
-    """stdout의 마지막 JSON block을 파싱하여 verdict를 추출한다.
+# [Purpose]: IMP-20260712-DAE1 REJECT#5 P0-2 — Codex CLI stdout/agent_message payload에서 verdict를
+#            담은 top-level JSON object를 안전하게 추출한다. 수동 brace counting은 JSON 문자열 내부의
+#            중괄호(`{`, `}`)도 구조 문자로 오계산하여, evidence="unmatched brace { in text" 같은 유효한
+#            단일 verdict JSON도 파싱 실패시키는 결함이 있었다. json.JSONDecoder.raw_decode는 문자열
+#            리터럴 내부의 중괄호/escaped quote/backslash/한글을 정확히 처리하므로 수동 계산이 불필요하다.
+# [Assumptions]: payload는 verdict-bearing JSON object를 0개 이상 포함할 수 있고, 앞뒤로 비-JSON
+#            텍스트가 섞여 있을 수 있다. 각 '{' 위치에서 raw_decode를 시도하여 성공한 object만 수집한다.
+# [Vulnerability & Risks]: verdict 키가 없는 object는 수집하지 않는다. raw_decode가 소비한 구간을
+#            건너뛰어 동일 object를 이중 계수하지 않는다.
+# [Improvement]: scan_once 예외 유형이 늘어나면 except 절을 보강한다.
+def _scan_verdict_objects(
+    payload: str, decoder: "json.JSONDecoder"
+) -> List[Dict[str, Any]]:
+    """payload 문자열에서 verdict 키를 가진 top-level JSON object를 모두 추출한다.
+
+    수동 brace depth 계산 없이 json.JSONDecoder.raw_decode로 각 '{' 위치를 시도한다.
+    JSON 문자열 리터럴 내부의 중괄호/escaped quote/backslash는 raw_decode가 정확히 처리한다.
 
     Args:
-        stdout: Codex CLI 표준 출력 문자열.
+        payload: 스캔 대상 문자열 (verdict JSON + 주변 텍스트 허용).
+        decoder: 재사용할 json.JSONDecoder 인스턴스.
     Returns:
-        {"verdict": "APPROVED"|"REJECTED", "reason": str, "source": "json_protocol"}
-        또는 None (JSON 없음/파싱 실패/알 수 없는 verdict/reason 없는 REJECT).
-        IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 스키마가 있으면
-        findings + scope 분류(in_scope/out_of_scope/environment_untrusted counts + reject_count_delta +
-        diagnostic_only + environment_untrusted)를 함께 반환한다(backward compat: findings 없으면 기존
-        4-필드 스키마 유지).
+        verdict 키를 가진 dict object 목록 (등장 순서 보존). 없으면 빈 리스트.
+    Raises:
+        TypeError: payload가 None/비str인 경우.
+    """
+    if payload is None:
+        raise TypeError("payload must not be None")
+    if not isinstance(payload, str):
+        raise TypeError(f"payload must be str, got {type(payload).__name__}")
+
+    _text = payload.strip()
+    if not _text:
+        return []
+    _results: List[Dict[str, Any]] = []
+    _idx = 0
+    _n = len(_text)
+    while _idx < _n:
+        _brace = _text.find("{", _idx)
+        if _brace == -1:
+            break
+        try:
+            _obj, _end = decoder.raw_decode(_text, _brace)
+        except (json.JSONDecodeError, ValueError):
+            # 이 '{'에서 유효 JSON object가 아님 → 다음 '{' 후보로 이동.
+            _idx = _brace + 1
+            continue
+        if isinstance(_obj, dict) and "verdict" in _obj:
+            _results.append(_obj)
+        # raw_decode가 소비한 지점 다음부터 계속 스캔 (동일 object 이중 계수 방지).
+        _idx = _end if _end > _brace else _brace + 1
+    return _results
+
+
+def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
+    """Codex CLI stdout(NDJSON) 또는 단일 verdict payload를 파싱하여 verdict를 추출한다.
+
+    REJECT#5 P0-2 (수동 brace scanner 제거 → NDJSON 파싱):
+    - `codex exec --json` stdout은 NDJSON 이벤트 스트림이다. 각 줄을 json.loads로 파싱하여
+      terminal `agent_message`(type=item.completed, item.type=agent_message)의 text만 verdict
+      payload 후보로 삼는다.
+    - agent_message 이벤트가 하나도 없으면 stdout 전체를 단일 verdict payload로 간주한다
+      (직접 JSON 출력 또는 이미 추출된 agent_message.text를 넘겨받은 경우).
+    - payload는 json.JSONDecoder.raw_decode로 파싱한다. JSON 문자열 내부의 `{`, `}`,
+      escaped quote, backslash, 한글은 정확히 처리되므로 수동 brace counting을 하지 않는다.
+    - verdict-bearing payload가 2개 이상이면 ambiguous_verdict → parse_failure(fail-closed, None).
+
+    Args:
+        stdout: Codex CLI 표준 출력 문자열(NDJSON) 또는 단일 verdict JSON payload.
+    Returns:
+        {"verdict": "APPROVED"|"REJECTED", "reason": str, ...} 또는 None
+        (JSON 없음/파싱 실패/알 수 없는 verdict/복수 verdict/findings 스키마 위반).
+        findings[] 스키마가 있으면 findings + scope 분류 필드를 함께 반환한다.
     """
     # None/비str 입력 방어 — 명시적 None 반환(예외 대신 fallback 허용).
     if stdout is None:
@@ -12709,76 +12940,62 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     if not stdout:
         return None
 
-    # IMP-20260712-DAE1 REJECT#NON_CONVERGING Finding 1 fix (error_misclassified_as_approved):
-    # stdout 전체에서 최상위 JSON object를 모두 스캔하여 verdict 키가 있는 후보를 수집한다.
-    # 두 개 이상의 verdict-bearing JSON이 있으면 상충/모호 → parse_failure(fail-closed).
-    # 단일 verdict JSON만 있으면 그것을 처리 대상으로 확정한다(순서와 무관하게 동작).
-    _vd_candidates: List[Dict[str, Any]] = []
-    _scan_depth = 0
-    _scan_start = -1
-    for _scan_i, _scan_c in enumerate(stdout):
-        if _scan_c == "{":
-            if _scan_depth == 0:
-                _scan_start = _scan_i
-            _scan_depth += 1
-        elif _scan_c == "}":
-            _scan_depth -= 1
-            if _scan_depth == 0 and _scan_start != -1:
-                _cand_str = stdout[_scan_start:_scan_i + 1]
-                try:
-                    _cand_obj = json.loads(_cand_str)
-                    if isinstance(_cand_obj, dict) and "verdict" in _cand_obj:
-                        _vd_candidates.append(_cand_obj)
-                except (json.JSONDecodeError, ValueError):
-                    pass
-                _scan_start = -1
-    if len(_vd_candidates) >= 2:
-        # 복수 verdict JSON — 순서 불문 상충/모호 → parse_failure(fail-closed).
-        return None
-    # 단일 verdict-bearing JSON이 있으면 기존 처리 로직으로 직행한다.
-    if len(_vd_candidates) == 1:
-        obj = _vd_candidates[0]
-        verdict = str(obj.get("verdict", "") or "")
-        reason = str(obj.get("reason", "") or "")
-        # 이하 기존 findings 검증 로직으로 계속 진행 (goto 불가 → 아래 공용 처리 블록으로).
-    else:
-        # verdict JSON이 하나도 없으면 오른쪽에서 마지막 '}'를 찾는 레거시 방식으로 fallback.
-        # (verdict 키 없는 최외곽 JSON 처리 케이스 — 기존 return None 동작 보존)
-        obj = None
-        verdict = ""
-        reason = ""
-
-    # verdict JSON 미발견: 이하 레거시 rfind 경로 — verdict 없는 JSON에서 None을 반환한다.
-    if obj is None:
-        # 오른쪽에서 마지막 '}'를 찾고, balanced brace matching으로 대응하는 최외곽 '{'까지 추출한다.
-        #   IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 중첩 object가 있으면 단순
-        #   rfind("{")는 내부 finding brace를 잡아 verdict 키를 놓친다. 중첩 depth를 계산해 최외곽 object를
-        #   추출한다(비중첩 NDJSON 마지막 object 추출 동작은 그대로 보존).
-        _end = stdout.rfind("}")
-        if _end == -1:
-            return None
-        _depth = 0
-        _start = -1
-        for _i in range(_end, -1, -1):
-            _c = stdout[_i]
-            if _c == "}":
-                _depth += 1
-            elif _c == "{":
-                _depth -= 1
-                if _depth == 0:
-                    _start = _i
-                    break
-        if _start == -1:
-            return None
-        _json_str = stdout[_start:_end + 1]
+    # REJECT#5 P0-2: NDJSON 이벤트 스트림 파싱 — 각 줄을 json.loads로 파싱한다.
+    #   terminal agent_message(type=item.completed, item.type=agent_message)의 text만 verdict
+    #   payload 후보로 추출한다. malformed 이벤트 줄은 조용히 건너뛴다(fail-safe).
+    _ndjson_payloads: List[str] = []
+    _saw_agent_message = False
+    for _ndjson_line in stdout.splitlines():
+        _ndjson_line = _ndjson_line.strip()
+        if not _ndjson_line:
+            continue
         try:
-            obj = json.loads(_json_str)
+            _evt = json.loads(_ndjson_line)
         except (json.JSONDecodeError, ValueError):
+            continue
+        if (
+            isinstance(_evt, dict)
+            and _evt.get("type") == "item.completed"
+            and isinstance(_evt.get("item"), dict)
+            and _evt["item"].get("type") == "agent_message"
+        ):
+            _saw_agent_message = True
+            _agent_text = str(_evt["item"].get("text", "") or "").strip()
+            if _agent_text:
+                _ndjson_payloads.append(_agent_text)
+
+    # agent_message 이벤트가 있으면 그 텍스트만 신뢰. 없으면 stdout 전체를 단일 payload로 간주한다
+    #   (직접 verdict JSON 출력, 또는 _run_codex_cli_review가 이미 추출한 agent_message.text를
+    #    넘겨받은 경우 모두 지원 — brace counting 없이 raw_decode로 파싱).
+    if _saw_agent_message:
+        # non-whitespace terminal agent_message payload가 2개 이상이면 ambiguous_verdict →
+        #   parse_failure(fail-closed). plaintext("APPROVE_TO_USER")와 JSON verdict가 섞여 있어도
+        #   payload 개수 기준으로 상충으로 간주한다(단일 terminal verdict만 신뢰). 이 경우 호출자
+        #   (_run_codex_cli_review)의 NDJSON fallback이 복수 판정을 재확인하여 parse_failure로 마감한다.
+        if len(_ndjson_payloads) >= 2:
             return None
-        if not isinstance(obj, dict):
-            return None
-        verdict = str(obj.get("verdict", "") or "")
-        reason = str(obj.get("reason", "") or "")
+        _candidate_payloads: List[str] = _ndjson_payloads
+    else:
+        _candidate_payloads = [stdout]
+
+    # 각 payload에서 verdict-bearing JSON object를 raw_decode로 수집한다(수동 brace counting 없음).
+    _decoder = json.JSONDecoder()
+    _vd_candidates: List[Dict[str, Any]] = []
+    for _payload in _candidate_payloads:
+        _vd_candidates.extend(_scan_verdict_objects(_payload, _decoder))
+
+    # non-whitespace verdict payload가 2개 이상 → ambiguous_verdict → parse_failure(fail-closed).
+    #   (APPROVE→REJECT, REJECT→APPROVE, 동일 verdict 2개 모두 여기서 차단된다.)
+    if len(_vd_candidates) >= 2:
+        return None
+    # verdict-bearing payload가 하나도 없음 → 파싱 실패(None).
+    #   (terminal agent_message 없음, plaintext APPROVE_TO_USER 등은 호출자가 fallback 처리한다.)
+    if len(_vd_candidates) == 0:
+        return None
+
+    obj = _vd_candidates[0]
+    verdict = str(obj.get("verdict", "") or "")
+    reason = str(obj.get("reason", "") or "")
 
     # IMP-20260712-DAE1 USER_AUTHORIZED_CONTRACT_MIGRATION: findings[] 스키마 우선 처리.
     #   findings가 존재하면 scope 분류 결과를 verdict dict에 실어 반환한다. verdict가 APPROVE_TO_USER면
@@ -12873,41 +13090,48 @@ def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-# [Purpose]: IMP-20260712-DAE1 REJECT#4 — Codex CLI 입력을 블라인드 절단하지 않고 섹션 우선순위
-#            기반으로 구조화 축소한다. 필수 보존 섹션(findings 7필드 스키마, JSON verdict 출력 규칙,
-#            CRITICAL diff)은 절대 제거하지 않고, non-critical 증거만 우선순위 순으로 축소한다.
-# [Assumptions]: prompt는 _build_codex_prompt_for_review가 만든 문자열이며 반복 라인/중복 설명이
-#            존재할 수 있다. 측정은 char(문자 수) 단위로 통일한다(byte 혼용 금지 — multibyte 오판 방지).
-# [Vulnerability & Risks]: 섹션 마커가 없는 prompt는 중복 제거만으로 safe_chars 이내로 줄지 않을 수
-#            있다. 이 경우 evidence_complete=False로 반환하며, 호출자의 _validate_post_build_prompt가
-#            예산 초과/필수 섹션 유실을 감지해 CLI 호출 전에 fail-closed(BLOCKED)로 차단한다.
-# [Improvement]: 실제 섹션 마커(diff_hunks/tests/oracle)를 JSON 파싱해 우선순위별로 선택 제거하면
-#            evidence 손실을 최소화할 수 있다(현재는 중복 라인 축소 + 예산 판정 위임).
+# [Purpose]: IMP-20260712-DAE1 REJECT#5 P0-1 — Codex CLI 입력을 블라인드 절단하지 않고 예산을
+#            초과하면 fail-closed로 차단한다. REJECT#4의 전역 line dedup은 서로 다른 CRITICAL hunk에서
+#            반복되는 동일 코드 줄(return None, 괄호, 조건문 등)을 "같은 문자열"이라는 이유로 삭제해
+#            실제 코드 증거를 유실시키는 결함이 있었다. 이제 CRITICAL diff는 파일/함수/hunk 단위로
+#            원문 그대로 보존하며, 라인 단위 중복 판정을 절대 수행하지 않는다.
+# [Assumptions]: prompt는 _build_codex_prompt_for_review가 만든 문자열이다. 측정은 char(문자 수)
+#            단위로 통일한다(byte 혼용 금지 — multibyte 오판 방지). CODEX_CLI_SAFE_INPUT_CHARS는
+#            1_000_000 char로 실제 리뷰 prompt가 초과하는 경우는 드물다.
+# [Vulnerability & Risks]: 예산을 초과하는 prompt는 어떤 라인도 삭제하지 않고 원문 그대로 반환하며
+#            evidence_complete=False로 표시한다. 직후 _validate_post_build_prompt가 예산 초과 +
+#            필수 sentinel + CRITICAL 함수/파일 coverage를 재대조하여 CLI 호출 전에 fail-closed(BLOCKED)로
+#            차단한다(원문 CRITICAL hunk 유실 0건 보장). 어떤 hunk도 삭제하지 않으므로 "critical hunk가
+#            사라지는" 경로 자체가 존재하지 않는다.
+# [Improvement]: 실제 섹션 마커(diff_hunks/tests/oracle)를 JSON 파싱해 non-critical/test/oracle 항목만
+#            정의된 summary schema로 변환하고, 축소 후 coverage manifest에서 모든 critical file/function/
+#            hunk ID를 재대조하면 CRITICAL 증거를 100% 보존하면서 예산을 맞출 수 있다(현재는 미구현 —
+#            안전을 위해 예산 초과 시 어떤 것도 삭제하지 않고 fail-closed로 위임).
 def _build_structured_codex_input(prompt: str, safe_chars: int) -> Tuple[str, bool]:
-    """섹션 우선순위 기반으로 Codex 입력을 구조화하여 안전 크기 이내로 만든다.
+    """Codex 입력이 안전 예산(char) 이내이면 원문을 그대로 반환하고, 초과하면 fail-closed 표시한다.
 
     필수 보존 섹션 (절대 제거 불가):
     - pipeline/snapshot 식별자 및 head SHA
-    - CRITICAL 함수 diff (전체)
+    - CRITICAL 함수/파일 diff (전체, 원문 그대로)
     - contract/threat model
     - findings 7필드 스키마
     - 허용 root_cause_category 목록
     - JSON verdict 출력 규칙
 
-    우선순위 기반 축소 순서 (공간 부족 시 순서대로 축소):
-    1. 중복 설명 제거 (반복 라인 2회 이상은 1회로 축소)
-    2. 테스트 원문 → 테스트명/assert 요약/SHA 교체
-    3. oracle 원문 → case/SHA/PASS 요약 교체
-    4. non-critical diff → 함수별 1줄 요약 교체
-
-    절대 절단 불가:
-    - CRITICAL 함수/파일 diff 내용
-    - verdict 계약 (7필드 스키마, JSON 출력 규칙)
+    REJECT#5 P0-1 정책 (전역 line dedup 완전 제거):
+    - 프롬프트 완성 문자열에서 라인 단위 중복 판정을 절대 수행하지 않는다.
+    - 서로 다른 CRITICAL hunk에서 반복되는 동일 코드 줄(return None, 괄호, 조건문 등)을
+      "같은 문자열"이라는 이유로 삭제하지 않는다.
+    - 예산 초과 시: 어떤 라인도 삭제하지 않고 원문(prompt)을 그대로 반환하며
+      evidence_complete=False로 표시한다. 이후 _validate_post_build_prompt가 예산/필수 sentinel/
+      CRITICAL coverage를 재대조하여 CLI 호출 전에 BLOCKED로 차단한다.
+    - 어떤 hunk도 삭제하지 않으므로, "원문 critical hunk가 사라지면 evidence_complete=False"라는
+      불변식이 강한 형태(어떤 것도 사라지지 않음)로 항상 성립한다.
 
     Returns:
         (result_prompt, evidence_complete) 튜플.
-        - result_prompt: 구조화 및 축소 후 prompt 문자열.
-        - evidence_complete: 축소 없이 그대로면 True, 어느 섹션이라도 축소/제거했으면 False.
+        - result_prompt: 예산 이내면 원문, 초과해도 원문(삭제 없음). 항상 원문과 동일하다.
+        - evidence_complete: 예산 이내면 True, 예산 초과면 False(fail-closed).
     Raises:
         TypeError: prompt가 None/비str이거나 safe_chars가 None/비int인 경우.
         ValueError: safe_chars가 0 이하인 경우.
@@ -12929,34 +13153,24 @@ def _build_structured_codex_input(prompt: str, safe_chars: int) -> Tuple[str, bo
     if len(prompt) <= safe_chars:
         return prompt, True
 
-    result = prompt
-
-    # 단계 1: 중복 라인 제거 (3회 이상 반복 라인 → 1회)
-    # 중복 제거는 동일 내용을 반복 포함하는 것이므로 정보 손실이 아니다.
-    # dedup만으로 safe_chars 이내가 되면 evidence_complete=True를 반환한다.
-    lines = result.split("\n")
-    seen_counts: Dict[str, int] = {}
-    deduped: List[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped:
-            cnt = seen_counts.get(stripped, 0)
-            seen_counts[stripped] = cnt + 1
-            if cnt >= 2:  # 3번째 이상은 제거
-                continue
-        deduped.append(line)
-    result = "\n".join(deduped)
-    if len(result) <= safe_chars:
-        # 중복 제거만으로 budget 충족 → 내용 손실 없음(evidence_complete=True)
-        return result, True
-
-    # dedup 후에도 budget 초과 → 이 아래부터는 내용 손실(evidence_complete=False)
-    evidence_complete = False
-
-    # 단계 2-4: 섹션 마커 기반 축소는 마커가 없는 경우 safe budget 초과로 처리
-    # (실제 섹션 마커 파싱은 _build_codex_prompt_for_review의 구조에 의존하므로
-    # 마커가 없으면 budget 초과로 처리하여 _validate_post_build_prompt가 차단)
-    return result, evidence_complete
+    # REJECT#5 P0-1: 전역 line dedup 완전 제거.
+    #   과거(REJECT#4)에는 여기서 3회 이상 반복되는 동일 문자열 줄을 삭제했다. 그러나 서로 다른
+    #   CRITICAL hunk에서 동일한 코드 줄(예: `return None`, 닫는 괄호 `}`, 동일 조건문)이
+    #   반복되는 것은 정상이며, 이를 "같은 문자열"이라는 이유로 삭제하면 실제 코드 증거가 유실된다.
+    #   그럼에도 evidence_complete=True로 기록되어 Codex가 불완전한 diff를 검토하게 되는 결함이 있었다.
+    #
+    #   이제 CRITICAL diff는 파일/함수/hunk 단위로 원문 그대로 보존한다. 라인 단위 중복 판정을 절대
+    #   수행하지 않으며, 예산을 초과해도 어떤 라인도 삭제하지 않고 원문(prompt)을 그대로 반환한다.
+    #   대신 evidence_complete=False로 표시하여, 직후 _validate_post_build_prompt가 예산 초과 +
+    #   필수 sentinel + CRITICAL 함수/파일 coverage를 재대조하고 CLI 호출 전에 fail-closed(BLOCKED)로
+    #   차단하도록 위임한다.
+    #
+    #   coverage 재대조 관점: 이 함수는 어떤 hunk도 제거하지 않으므로, 반환된 result는 항상 원문과
+    #   동일(글자 단위 일치)하다. 따라서 "원문 critical hunk가 하나라도 사라지면 evidence_complete=False"
+    #   불변식이 강한 형태(어떤 것도 사라지지 않음 + evidence_complete=False)로 항상 성립한다.
+    #   테스트/oracle/non-critical 항목만 정의된 summary schema로 변환하는 축소는 아직 미구현이므로,
+    #   안전을 위해 예산 초과 시 원문 보존 + fail-closed로만 처리한다(silent truncation 금지).
+    return prompt, False
 
 
 # [Purpose]: IMP-20260712-DAE1 REJECT#4 — 최종 prompt 생성/구조화 후 Codex CLI 호출 전에 실행하는
@@ -27826,6 +28040,72 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         print("  새 epoch에서 circuit breaker가 초기화됩니다.")
         sys.exit(0)
 
+    # REJECT#5 P0-3(IMP-20260712-DAE1): --authorize-run — 1회용 Codex CLI 실행 허가(run permit) 발급.
+    #   epoch 시작 승인(--start-epoch)과 개별 CLI 실행 승인을 분리한다. epoch가 열린 뒤에도 일반
+    #   `gates codex-review`가 무단으로 실제 Codex CLI를 재실행하지 못하도록, 실제 CLI 호출 직전에
+    #   (pipeline_id, review_epoch, pr_head_sha, review_bundle_sha256)에 묶인 1회용 permit을 요구한다.
+    #   이 발급 경로는 --start-epoch과 동일하게 사용자 직접 실행만 허용된다(CODEX_RUN_AUTHORIZED=1 ceremony).
+    #   동일 OS 사용자 환경에서는 에이전트도 이 env를 설정할 수 있으므로 완전한 행위자 분리가 아니라
+    #   운영 절차(operational ceremony)이다.
+    if bool(getattr(args, "authorize_run", False)):
+        _run_auth_env = str(os.environ.get("CODEX_RUN_AUTHORIZED", "") or "").strip()
+        if _run_auth_env != "1":
+            _die(
+                "[BLOCKED] failure_code=codex_run_authorize_not_confirmed\n"
+                "  --authorize-run은 사용자 직접 실행만 허용됩니다.\n"
+                "  에이전트/자동 흐름의 실행은 차단됩니다 (fail-closed).\n"
+                "  사용자가 직접 실행하려면 환경변수를 설정한 뒤 실행하세요:\n"
+                "  CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
+            )
+        # 현재 review_epoch (contract migration 값). 비어 있으면 permit 발급 불가(먼저 --start-epoch 필요).
+        _perm_mig = state.get("codex_review_contract_migration") if isinstance(state, dict) else None
+        _perm_epoch = str(_perm_mig.get("review_epoch", "") or "") if isinstance(_perm_mig, dict) else ""
+        if not _perm_epoch:
+            _die(
+                "[BLOCKED] failure_code=codex_run_authorize_epoch_missing\n"
+                "  review_epoch가 없어 run permit을 발급할 수 없습니다.\n"
+                "  먼저 'gates codex-review --start-epoch <이유>'로 epoch를 시작하세요 (fail-closed)."
+            )
+        # 현재 PR head SHA 수집 — 실패 시 발급 불가(snapshot 바인딩 불가).
+        try:
+            _perm_hd_r = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            _perm_head_sha = _perm_hd_r.stdout.strip() if _perm_hd_r.returncode == 0 else ""
+        except Exception:  # noqa: BLE001
+            _perm_head_sha = ""
+        if not _perm_head_sha:
+            _die(
+                "[BLOCKED] failure_code=codex_run_authorize_head_sha_missing\n"
+                "  현재 HEAD SHA 수집 실패 — run permit을 발급할 수 없습니다 (fail-closed)."
+            )
+        # 현재 review bundle SHA 계산 — 실행 시점 review 대상과 동일한 bundle에 permit을 바인딩한다.
+        _perm_bundle_sha, _ = _build_codex_review_bundle(state, pipeline_id)
+        if not _perm_bundle_sha:
+            _die(
+                "[BLOCKED] failure_code=codex_run_authorize_bundle_sha_missing\n"
+                "  review bundle SHA 계산 실패 — run permit을 발급할 수 없습니다 (fail-closed)."
+            )
+        try:
+            _issued = _issue_codex_run_permit(
+                pipeline_id, _perm_epoch, _perm_head_sha, _perm_bundle_sha,
+            )
+        except OSError as _perm_exc:
+            _die(
+                "[BLOCKED] failure_code=codex_run_authorize_write_failed\n"
+                f"  run permit 파일 쓰기 실패: {_perm_exc} (fail-closed)."
+            )
+        print("[CODEX REVIEW] 1회용 실행 허가(run permit) 발급 완료")
+        print(f"  pipeline_id={pipeline_id}")
+        print(f"  review_epoch={_perm_epoch}")
+        print(f"  pr_head_sha={_perm_head_sha}")
+        print(f"  review_bundle_sha256={_perm_bundle_sha}")
+        print("  이 허가는 다음 실제 Codex CLI 호출 1회에만 유효하며, 소비 후 재사용할 수 없습니다.")
+        print("  snapshot(head/bundle)이 바뀌면 무효화됩니다 — 변경 후에는 --authorize-run을 재실행하세요.")
+        sys.exit(0)
+
     # Defect 1: review_epoch 비어있으면 Codex CLI 미호출 - codex_review_epoch_missing BLOCKED.
     #   단, explicit 주입(--verdict/--codex-cli-*)과 PIPELINE_TEST_MODE는 실제 Codex CLI를 호출하지
     #   않고 주입/모의 결과를 사용하므로 epoch 요구 대상이 아니다. 이 exemption은 evidence_complete
@@ -28584,6 +28864,43 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     f"  post-build preflight 실패: {_failure_detail}\n"
                     "  어떤 섹션이 예산을 초과했는지 확인하세요."
                 )
+            # REJECT#5 P0-3(IMP-20260712-DAE1): 실제 Codex CLI 호출 직전, 1회용 실행 허가(run permit)를
+            #   요구한다. CODEX_START_EPOCH_USER_CONFIRMED는 --start-epoch만 보호했고, epoch가 열린 뒤
+            #   일반 `gates codex-review`는 무단으로 실제 CLI를 재실행할 수 있었다. 이 gate는 CLI 호출 전에
+            #   (pipeline_id, review_epoch, pr_head_sha, review_bundle_sha256)에 묶인 permit이 PENDING
+            #   상태로 존재하고 현재 snapshot과 정확히 일치할 때만 진행을 허용한다. 허가 없음/소비됨/
+            #   snapshot 변경이면 CLI를 호출하지 않고 codex_review_run_not_authorized로 fail-closed BLOCKED.
+            #   permit은 통과 즉시 CONSUMED로 표시되어 재사용할 수 없다(1회용).
+            #   테스트 seam(_fake_codex_bin=CODEX_REVIEW_FAKE_BIN)에서는 이 gate를 면제한다 —
+            #   production은 CODEX_REVIEW_FAKE_BIN을 설정하지 않으므로 실제 CLI 경로는 항상 gate된다.
+            if not _fake_codex_bin:
+                _run_permit = _load_codex_run_permit()
+                _permit_ok, _permit_reason = _check_codex_run_permit(
+                    _run_permit,
+                    pipeline_id=pipeline_id,
+                    review_epoch=_current_epoch,
+                    pr_head_sha=_pre_cli_head_sha,
+                    review_bundle_sha256=_review_bundle_sha256,
+                )
+                if not _permit_ok:
+                    _write_codex_review_blocked_invalidation(
+                        pipeline_id, "codex_review_run_not_authorized",
+                        prev_reject_count, prev_cli_error_count,
+                        _review_bundle_sha256, _risk_level_str, _model_policy,
+                    )
+                    _log_event(
+                        state,
+                        f"codex_review_run_not_authorized: reason={_permit_reason}",
+                    )
+                    _die(
+                        "[BLOCKED] failure_code=codex_review_run_not_authorized\n"
+                        f"  실제 Codex CLI 실행 허가가 없습니다 (사유: {_permit_reason}).\n"
+                        "  Codex CLI를 호출하지 않았습니다 (fail-closed).\n"
+                        "  사용자가 직접 아래 명령으로 1회용 실행 허가를 발급한 뒤 재실행하세요:\n"
+                        "  CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run"
+                    )
+                # 허가 통과 → 즉시 소비(CONSUMED)하여 재사용을 차단한다.
+                _consume_codex_run_permit(_run_permit)
             # REJECT#31 AC#2: wrapper 체인이면 검증된 node + codex.js를 exec 실행 파일로 고정한다.
             _auto_run = _invoke_codex_exec(
                 _selected_model_now,
@@ -36201,6 +36518,17 @@ def build_parser() -> argparse.ArgumentParser:
             "사용자 결정에 의한 contract migration: 새 review_epoch를 시작합니다. "
             "circuit breaker NON_CONVERGING 후 사용자가 전략적 재설계를 결정했을 때 실행. "
             "REASON에 migration 사유를 전달하세요 (예: '바이너리 검증 전략 재설계')."
+        ),
+    )
+    # REJECT#5 P0-3(IMP-20260712-DAE1): 1회용 Codex CLI 실행 허가(run permit) 발급.
+    #   epoch 시작 승인과 개별 CLI 실행 승인을 분리한다. 사용자 직접 실행만 허용
+    #   (CODEX_RUN_AUTHORIZED=1 ceremony). 발급된 permit은 다음 실제 CLI 호출 1회에만 유효하다.
+    p_gate_codex.add_argument(
+        "--authorize-run", dest="authorize_run", action="store_true", default=False,
+        help=(
+            "1회용 Codex CLI 실행 허가(run permit)를 발급합니다. 현재 review_epoch/PR head SHA/"
+            "review bundle SHA에 묶이며, 다음 실제 Codex CLI 호출 1회에만 유효합니다. "
+            "CODEX_RUN_AUTHORIZED=1 환경변수를 설정하고 사용자가 직접 실행해야 합니다."
         ),
     )
 

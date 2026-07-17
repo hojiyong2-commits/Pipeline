@@ -47,6 +47,16 @@ codex exec --model <selected_model> -c model_reasoning_effort=<selected_effort> 
 - Codex subprocess 환경에서 `OPENAI_API_KEY`를 제거합니다(ChatGPT 인증만 사용).
 - timeout=600초. review bundle을 stdin으로 전달하며 raw ACCEPT 코드/nonce는 포함하지 않습니다.
 
+### 무단 실행 금지 + 1회용 실행 허가 (REJECT#5 P0-3, IMP-20260712-DAE1)
+
+**사용자 지시 없이 `gates codex-review`를 실행하지 마십시오. 무단 자동 재실행을 금지합니다.**
+
+- Pipeline Manager는 **사용자가 명시적으로 요청했을 때만** `gates codex-review`를 실행합니다. 이전 REJECT 처리 흐름/컨텍스트 요약/세션 재개만으로는 실제 Codex CLI를 자동 재실행할 근거가 되지 않습니다.
+- epoch 시작 승인(`--start-epoch`, `CODEX_START_EPOCH_USER_CONFIRMED=1`)과 **개별 CLI 실행 승인은 별개**입니다. epoch가 열려 있어도 실제 Codex CLI 호출은 **1회용 실행 허가(run permit)** 없이는 차단됩니다.
+- 실제 CLI 호출 직전, pipeline.py는 `(pipeline_id, review_epoch, pr_head_sha, review_bundle_sha256)`에 묶인 PENDING permit을 요구합니다. 허가가 없거나, 이미 소비되었거나, snapshot(head/bundle)이 바뀌면 CLI를 호출하지 않고 `codex_review_run_not_authorized`로 fail-closed BLOCKED 처리됩니다.
+- 허가 발급은 **사용자 직접 실행 전용**입니다: `CODEX_RUN_AUTHORIZED=1 python pipeline.py gates codex-review --authorize-run`. 발급된 permit은 다음 실제 CLI 호출 1회에만 유효하며 소비 후 재사용할 수 없습니다.
+- **한계 문서화:** 동일 OS 사용자 권한에서는 에이전트도 환경변수/permit 파일을 설정할 수 있으므로, 이 gate는 완전한 행위자 분리(cryptographic provenance)가 아니라 운영 절차(operational ceremony)입니다. 완전한 증명은 로컬 에이전트가 변조/위장할 수 없는 외부 러너/서명자를 요구합니다.
+
 ### 모델 증거 필드 (selected / invoked / actual)
 
 - **selected_model/effort**: risk 정책이 선택한 값(gpt-5.6-*).
