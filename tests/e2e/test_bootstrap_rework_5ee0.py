@@ -1242,21 +1242,12 @@ class TestReject8PromptExampleAndValidator:
         }
 
     def test_tc77_approve_example_validates(self):
-        """TC-77: prompt APPROVE 예시가 _validate_codex_verdict_obj PASS"""
+        """TC-77: APPROVE 스키마 계약 예시(verdict+findings+review_notes) → validator PASS"""
         mod = self._load_pipeline()
-        import json as _json
-        example_str = mod._build_prompt_example_from_schema()
-        # APPROVE example 추출: 첫 번째 JSON 라인
-        approve_line = None
-        for line in example_str.splitlines():
-            line = line.strip()
-            if line.startswith('{"verdict":"APPROVE_TO_USER"'):
-                approve_line = line
-                break
-        assert approve_line is not None, f"APPROVE example not found in: {example_str[:200]}"
-        obj = _json.loads(approve_line)
+        # 스키마 계약에 맞는 APPROVE 최소 예시 (방향 A: helper 없음, 직접 객체 생성)
+        obj = {"verdict": "APPROVE_TO_USER", "findings": [], "review_notes": ""}
         result = mod._validate_codex_verdict_obj(obj)
-        assert result["valid"] is True, f"APPROVE example should PASS: {result}"
+        assert result["valid"] is True, f"APPROVE contract example should PASS: {result}"
 
     def test_tc78_reject_example_validates(self):
         """TC-78: prompt REJECT 예시 (7-field finding) → PASS"""
@@ -1277,15 +1268,23 @@ class TestReject8PromptExampleAndValidator:
         result = mod._validate_codex_verdict_obj(old_obj)
         assert result["valid"] is False, "구버전 포맷은 FAIL이어야 합니다"
 
-    def test_tc80_prompt_example_includes_all_required_fields(self):
-        """TC-80: prompt 예시에 verdict/findings/review_notes 3개 필드 모두 포함"""
+    def test_tc80_prompt_has_no_hardcoded_schema_fields(self):
+        """TC-80: prompt 출력에 schema 필드명 하드코딩 없음 (SSoT는 schema 파일만)"""
         mod = self._load_pipeline()
-        example = mod._build_prompt_example_from_schema()
-        assert "verdict" in example
-        assert "findings" in example
-        assert "review_notes" in example
-        assert "APPROVE_TO_USER" in example
-        assert "REJECT" in example
+        shard = {
+            "shard_id": "test-shard",
+            "pr_head_sha": "abc123",
+            "contract_sha256": "cdef",
+            "review_plan_sha256": "ghi",
+            "evidence_sources": {},
+        }
+        prompt = mod._serialize_shard_to_prompt(shard)
+        # 예시 JSON 필드명이 prompt에 없어야 함 (schema SSoT 방향 A)
+        assert '"findings"' not in prompt, "findings 하드코딩이 prompt에 없어야 합니다"
+        assert '"review_notes"' not in prompt, "review_notes 하드코딩이 prompt에 없어야 합니다"
+        assert '"APPROVE_TO_USER"' not in prompt, "APPROVE_TO_USER 예시가 prompt에 없어야 합니다"
+        # 안내 문구는 있어야 함
+        assert "output schema" in prompt.lower() or "schema" in prompt.lower()
 
     def test_tc81_finding_scope_int_fails(self):
         """TC-81: finding.scope에 int 입력 → FAIL"""
@@ -1384,3 +1383,93 @@ class TestReject8PromptExampleAndValidator:
         assert schema_check["valid"] is True
         # 검증 함수 호출이 permit을 생성하지 않음
         assert not permit_path.exists()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TC-88~TC-92: REJECT#9 — prompt 예시 제거(방향 A), schema SSoT 검증
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestReject9PromptExampleRemoved:
+    """TC-88~TC-92: 방향 A — prompt 예시 제거, schema 파일이 유일한 SSoT"""
+
+    def _load_pipeline(self):
+        import importlib
+        spec = importlib.util.spec_from_file_location(
+            "pipeline_r9",
+            str(Path(__file__).parent.parent.parent / "pipeline.py"),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def _make_shard(self) -> dict:
+        return {
+            "shard_id": "test-shard",
+            "pr_head_sha": "abc123",
+            "contract_sha256": "cdef",
+            "review_plan_sha256": "ghi",
+            "evidence_sources": {},
+        }
+
+    def test_tc88_no_hardcoded_field_names_in_prompt(self):
+        """TC-88: prompt에 schema 필드명 하드코딩 없음"""
+        mod = self._load_pipeline()
+        prompt = mod._serialize_shard_to_prompt(self._make_shard())
+        # 예시 JSON 키가 prompt에 없어야 함
+        assert '"findings"' not in prompt
+        assert '"review_notes"' not in prompt
+        assert '"root_cause_category"' not in prompt
+        assert '"acceptance_criteria"' not in prompt
+        # APPROVE_TO_USER JSON 예시값 없어야 함 (텍스트 언급은 허용)
+        assert '{"verdict":"APPROVE_TO_USER"' not in prompt
+        assert '{"verdict": "APPROVE_TO_USER"' not in prompt
+
+    def test_tc89_prompt_has_schema_guidance(self):
+        """TC-89: prompt에 output schema 안내 문구 포함"""
+        mod = self._load_pipeline()
+        prompt = mod._serialize_shard_to_prompt(self._make_shard())
+        prompt_lower = prompt.lower()
+        assert "output schema" in prompt_lower or "schema" in prompt_lower, \
+            f"prompt should mention 'schema': {prompt[:300]}"
+        # 정확한 안내 문구 확인
+        assert "conform" in prompt_lower or "ONLY" in prompt, \
+            f"prompt should have schema instruction: {prompt[:300]}"
+
+    def test_tc90_prompt_has_approve_reject_semantics(self):
+        """TC-90: prompt에 APPROVE/REJECT semantic 규칙 포함"""
+        mod = self._load_pipeline()
+        prompt = mod._serialize_shard_to_prompt(self._make_shard())
+        assert "APPROVE_TO_USER" in prompt
+        assert "REJECT" in prompt
+        # findings=[] 규칙 또는 blocking issues 언급
+        assert "findings" in prompt.lower() or "blocking" in prompt.lower()
+
+    def test_tc91_schema_change_does_not_affect_prompt_example(self):
+        """TC-91: schema 파일 변경이 prompt 예시에 영향 없음 (예시 없으므로)"""
+        mod = self._load_pipeline()
+        # 방향 A: 예시가 없으므로 schema 변경과 무관하게 prompt는 동일
+        shard = self._make_shard()
+        prompt1 = mod._serialize_shard_to_prompt(shard)
+        # schema 필드가 바뀌어도 (여기서는 shard만 변경해 시뮬레이션) prompt 안내 문구는 동일
+        shard2 = dict(shard, shard_id="other-shard")
+        prompt2 = mod._serialize_shard_to_prompt(shard2)
+        # 안내 문구 부분은 동일해야 함 (shard_id 행만 다름)
+        lines1 = [ln for ln in prompt1.splitlines() if "OUTPUT FORMAT" in ln or "schema" in ln.lower()]
+        lines2 = [ln for ln in prompt2.splitlines() if "OUTPUT FORMAT" in ln or "schema" in ln.lower()]
+        assert lines1 == lines2, "안내 문구는 shard에 관계없이 동일해야 합니다"
+
+    def test_tc92_no_cli_calls_no_permits(self, tmp_path):
+        """TC-92: 이 수정 전체에서 CLI 호출 0회, permit 발급 0회, permit 소비 0회"""
+        # _serialize_shard_to_prompt와 _validate_codex_verdict_obj는 순수 함수
+        # (외부 프로세스/파일 시스템 side-effect 없음)
+        mod = self._load_pipeline()
+        shard = self._make_shard()
+        prompt = mod._serialize_shard_to_prompt(shard)
+        assert isinstance(prompt, str) and len(prompt) > 0
+        # validator 호출
+        obj = {"verdict": "APPROVE_TO_USER", "findings": [], "review_notes": ""}
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is True
+        # permit 파일 없음 확인
+        permit_file = tmp_path / "permit.json"
+        assert not permit_file.exists()

@@ -25164,46 +25164,6 @@ def _verify_permit_before_cli(
     return {"status": "OK", "live_head_sha": live_head}
 
 
-# [Purpose]: IMP-20260717-5EE0 REJECT#8 — codex_verdict_schema.json을 읽어 prompt 예시 JSON을 생성한다.
-#            하드코딩 예시를 제거하고 스키마가 SSoT가 되도록 한다.
-# [Assumptions]: schema 파일이 _codex_verdict_schema_path()에 있다.
-# [Vulnerability & Risks]: schema 로드 실패 시 내장 fallback 예시로 대체(prompt 생성은 non-critical).
-# [Improvement]: 스키마 진화 시 이 함수 하나만 업데이트하면 모든 prompt 예시가 자동 업데이트된다.
-def _build_prompt_example_from_schema() -> str:
-    """codex_verdict_schema.json에서 읽어 prompt용 예시 JSON 텍스트를 생성한다.
-
-    Returns:
-        APPROVE 예시와 REJECT 예시를 포함한 문자열.
-    """
-    # APPROVE 예시: verdict+findings(빈 배열)+review_notes (schema의 required 3개 필드)
-    approve_ex = json.dumps(
-        {"verdict": "APPROVE_TO_USER", "findings": [], "review_notes": ""},
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    # REJECT 예시: finding 7개 필드 전부 포함
-    reject_ex = json.dumps(
-        {
-            "verdict": "REJECT",
-            "findings": [
-                {
-                    "scope": "<affected function or file>",
-                    "severity": "CRITICAL",
-                    "root_cause_category": "<e.g. missing_validation>",
-                    "evidence": "<exact line/snippet from diff>",
-                    "reproduction": "<how to trigger>",
-                    "required_fix": "<what must change>",
-                    "acceptance_criteria": ["<verifiable condition 1>"],
-                }
-            ],
-            "review_notes": "<overall review summary>",
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    return f"APPROVE example:\n{approve_ex}\n\nREJECT example:\n{reject_ex}"
-
-
 # [Purpose]: IMP-20260717-5EE0 MT-10 — shard dict를 Codex CLI로 넘길 prompt 텍스트로 직렬화한다.
 #            전체 파일이 아닌 shard에 실린 changed-symbol source만 포함한다.
 # [Assumptions]: shard에 evidence_sources(선택), shard_id/pr_head_sha 등이 있다.
@@ -25239,10 +25199,10 @@ def _serialize_shard_to_prompt(shard: Dict[str, Any]) -> str:
             lines.append(str(source) if source else "(empty)")
             lines.append("")
     lines += [
-        "=== Required output format (codex_verdict_schema.json 계약) ===",
-        _build_prompt_example_from_schema(),
-        "",
-        "Review the above evidence and return a verdict JSON object matching the schema above.",
+        "OUTPUT FORMAT: Respond ONLY with a JSON object conforming exactly to the provided output schema.",
+        "- If no blocking issues: verdict=APPROVE_TO_USER, findings=[], review_notes=<summary>",
+        "- If blocking issues found: verdict=REJECT, findings=[<one object per issue>], review_notes=<summary>",
+        "- Each finding must include all required fields as specified in the output schema.",
     ]
     return "\n".join(lines)
 
