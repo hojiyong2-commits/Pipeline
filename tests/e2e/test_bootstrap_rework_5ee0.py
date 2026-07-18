@@ -132,10 +132,8 @@ def test_tc25b_no_mock_returns_error(pipe, monkeypatch):
 # ---------------------------------------------------------------------------
 import hashlib
 import json
-import os
 import threading
 import time
-import tempfile
 
 
 # ---------------------------------------------------------------------------
@@ -329,12 +327,6 @@ def test_r4_tc41_frozen_plan_reuse_e2e(pipe, tmp_path, monkeypatch):
 def test_r4_tc42_output_schema_in_cmd(pipe, tmp_path, monkeypatch):
     """_call_codex_cli_for_shard가 codex_verdict_schema.json 존재 시 --output-schema를 cmd에 포함한다."""
     monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "state.json"))
-
-    # codex_verdict_schema.json 생성 (schema 파일 존재 시뮬레이션)
-    schema_path = pipe.BASE_DIR / "codex_verdict_schema.json"
-    schema_exists = schema_path.exists()
-
-    captured_cmds = []
 
     def _fake_cli(shard, permit_arg):
         # cmd를 캡처하지 않고 실제 cmd는 CLI factory에서만 확인 가능
