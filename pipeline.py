@@ -24452,6 +24452,56 @@ def _aggregate_shard_verdicts(
         result_ids.add(str(shard.get("shard_id", "") or ""))
         head_shas.add(str(shard.get("pr_head_sha", "") or ""))
 
+        # REJECT#5 P0-2: shard result의 SHA 필드 검증.
+        #   _call_codex_cli_for_shard가 기록한 호출자 메타데이터와 기대 값을 비교한다.
+        #   문서화된 계약("shard에 기록된 경우")대로, SHA 필드가 shard에 "기록되어 있을 때"만
+        #   기대 값과 대조한다(key 존재 기준). 프로덕션 shard(_call_codex_cli_for_shard)는 세 SHA를
+        #   항상 기록하므로 검증이 항상 수행되고, SHA를 기록하지 않는 레거시/합성 aggregate 호출은
+        #   하위 호환된다.
+        _shard_rp_sha = str(shard.get("review_plan_sha256", "") or "")
+        _shard_contract_sha = str(shard.get("contract_sha256", "") or "")
+        _shard_prompt_sha = str(shard.get("prompt_sha256", "") or "")
+        if review_plan_sha and ("review_plan_sha256" in shard) and _shard_rp_sha != review_plan_sha:
+            return {
+                "verdict": "ERROR",
+                "total_shards": total,
+                "approved_shards": 0,
+                "rejected_shards": 0,
+                "error_shards": total,
+                "stale_shards": 0,
+                "findings": [],
+                "missing_shard_ids": list(required_shard_ids or []),
+                "failure_reason": f"shard {shard.get('shard_id')}: review_plan_sha256 mismatch or missing",
+                "aggregated_at": _now(),
+            }
+        if contract_sha and ("contract_sha256" in shard) and _shard_contract_sha != contract_sha:
+            return {
+                "verdict": "ERROR",
+                "total_shards": total,
+                "approved_shards": 0,
+                "rejected_shards": 0,
+                "error_shards": total,
+                "stale_shards": 0,
+                "findings": [],
+                "missing_shard_ids": list(required_shard_ids or []),
+                "failure_reason": f"shard {shard.get('shard_id')}: contract_sha256 mismatch or missing",
+                "aggregated_at": _now(),
+            }
+        # prompt_sha256가 기록되어 있는데 빈 값이면 CLI 경로가 손상된 것으로 간주하여 ERROR.
+        if ("prompt_sha256" in shard) and not _shard_prompt_sha:
+            return {
+                "verdict": "ERROR",
+                "total_shards": total,
+                "approved_shards": 0,
+                "rejected_shards": 0,
+                "error_shards": total,
+                "stale_shards": 0,
+                "findings": [],
+                "missing_shard_ids": list(required_shard_ids or []),
+                "failure_reason": f"shard {shard.get('shard_id')}: prompt_sha256 missing",
+                "aggregated_at": _now(),
+            }
+
         # 조건 6: findings schema 검증(list이며 각 항목 dict).
         shard_findings = shard.get("findings", [])
         if not isinstance(shard_findings, list) or any(
@@ -24888,10 +24938,150 @@ _FROZEN_PLAN_EXCLUDE_KEYS: frozenset = frozenset({"generated_at", "saved_at", "r
 def _find_codex_bin() -> Optional[str]:
     """Codex CLI 실행 파일 경로를 반환한다(없으면 None).
 
+    테스트 격리용 CODEX_CLI_PATH 환경변수를 우선 사용한다.
     Returns:
         codex 실행 파일 절대 경로 또는 None.
     """
+    _cli_override = os.environ.get("CODEX_CLI_PATH", "")
+    if _cli_override:
+        _p = Path(_cli_override)
+        if _p.exists():
+            return str(_p)
     return shutil.which("codex")
+
+
+# [Purpose]: IMP-20260717-5EE0 REJECT#5 P0-1 — Codex CLI 호출 직전 permit/frozen/live 3자 비교용
+#            live 값 조회 헬퍼. frozen plan(메모리)에서 읽지 않고 git/파일에서 live로 재계산한다.
+# [Assumptions]: git이 PATH에 있고 현재 디렉토리가 리포지토리 루트다. 실패는 빈 문자열로 fail-closed.
+# [Vulnerability & Risks]: git 미설치/detached HEAD면 빈 문자열을 반환하고, 상위가 live 검사를 생략한다
+#            (빈 live 값은 stale 판정에서 skip — 상위 로직이 명시적으로 처리). 파일 부재도 빈 문자열.
+# [Improvement]: origin/main과의 merge-base를 추가 검증하면 rebase drift도 잡을 수 있다.
+def _get_live_pr_head_sha() -> str:
+    """현재 HEAD의 커밋 SHA를 git에서 live로 조회한다(실패 시 빈 문자열).
+
+    Returns:
+        40자 16진수 SHA 또는 빈 문자열.
+    """
+    return _git_rev_parse_or_empty("HEAD")
+
+
+def _get_live_contract_sha(pipeline_id: str) -> str:
+    """task_contract.json의 raw-byte SHA256을 계산한다(파일 없으면 빈 문자열).
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID.
+    Returns:
+        SHA256 hex digest 또는 빈 문자열.
+    """
+    if not isinstance(pipeline_id, str) or not pipeline_id:
+        return ""
+    contract_path = BASE_DIR / "pipeline_contracts" / pipeline_id / "task_contract.json"
+    if not contract_path.exists():
+        return ""
+    try:
+        return hashlib.sha256(contract_path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+# [Purpose]: IMP-20260717-5EE0 REJECT#5 P0-1 — Codex CLI 호출 직전 permit / frozen_plan / live 값을
+#            3자 비교한다. frozen 값끼리 자기비교를 방지하고 live PR head/contract/frozen plan SHA로
+#            stale을 탐지하며 working tree dirty도 재확인한다(fail-closed BLOCKED).
+# [Assumptions]: permit/frozen_plan은 dict이며 pr_head_sha/contract_sha/review_plan_sha 키를 가진다.
+#            frozen plan 파일이 디스크에 존재한다(authorize-run이 저장). git이 PATH에 있다.
+# [Vulnerability & Risks]: live 값이 빈 문자열이면(git 미설치 등) 해당 live 검사만 skip한다 — frozen
+#            대칭 검사는 항상 수행한다. frozen plan 파일 부재/읽기 실패는 즉시 BLOCKED.
+# [Improvement]: 검사 결과를 감사 로그로 남기면 stale drift 원인 추적이 쉬워진다.
+def _verify_permit_before_cli(
+    permit: Dict[str, Any],
+    frozen_plan: Dict[str, Any],
+    pipeline_id: str,
+) -> Dict[str, Any]:
+    """Codex CLI 호출 직전 permit / frozen_plan / live 값을 3자 비교한다(fail-closed).
+
+    REJECT#5 P0-1: frozen 값끼리 자기비교를 방지하고 live 값으로 stale을 탐지한다.
+
+    Args:
+        permit: 소비된 permit dict.
+        frozen_plan: authorize-run이 저장한 frozen review plan dict.
+        pipeline_id: 활성 파이프라인 ID.
+    Returns:
+        {"status": "OK", "live_head_sha": str} 또는
+        {"status": "BLOCKED", "failure_code": str, "message": str}.
+    """
+    # live 값 계산 (frozen plan에서 읽지 않음)
+    live_head = _get_live_pr_head_sha()
+    live_contract = _get_live_contract_sha(pipeline_id)
+    live_frozen_sha = ""
+    _frozen_path = _shard_review_frozen_plan_path()
+    if _frozen_path.exists():
+        try:
+            live_frozen_sha = hashlib.sha256(_frozen_path.read_bytes()).hexdigest()
+        except OSError:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "frozen_plan_read_error",
+                "message": "frozen plan 파일 읽기 실패 — --authorize-run을 재실행하세요.",
+            }
+    else:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "frozen_plan_missing",
+            "message": "frozen plan 파일 없음 — --authorize-run을 재실행하세요.",
+        }
+
+    # working tree 재확인 (live)
+    try:
+        _wt_proc = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=30,
+        )
+        if _wt_proc.returncode != 0 or _wt_proc.stdout.strip():
+            _changed = [f.strip() for f in _wt_proc.stdout.splitlines() if f.strip()]
+            return {
+                "status": "BLOCKED",
+                "failure_code": "working_tree_dirty",
+                "message": f"tracked 소스 파일이 HEAD와 다릅니다: {_changed}",
+            }
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as _wt_exc:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "working_tree_dirty",
+            "message": f"git working tree 확인 실패: {_wt_exc}",
+        }
+
+    permit_head = str(permit.get("pr_head_sha", "") or "")
+    frozen_head = str(frozen_plan.get("pr_head_sha", "") or "")
+    permit_contract = str(permit.get("contract_sha", "") or "")
+    permit_rp_sha = str(permit.get("review_plan_sha", "") or "")
+
+    # 3자 비교
+    if permit_head != frozen_head:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "permit_frozen_head_mismatch",
+            "message": f"permit head({permit_head[:12]}) != frozen plan head({frozen_head[:12]}) — --authorize-run으로 재발급.",
+        }
+    if live_head and permit_head != live_head:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "permit_stale",
+            "message": f"PR head가 변경됨 — permit({permit_head[:12]}) != live({live_head[:12]}). --authorize-run으로 재발급.",
+        }
+    if live_contract and permit_contract != live_contract:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "permit_contract_stale",
+            "message": f"contract SHA 변경 — permit({permit_contract[:12]}) != live({live_contract[:12]}). --authorize-run으로 재발급.",
+        }
+    if permit_rp_sha != live_frozen_sha:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "permit_review_plan_stale",
+            "message": f"frozen plan 파일이 변경됨 — permit({permit_rp_sha[:12]}) != file({live_frozen_sha[:12]}). --authorize-run으로 재발급.",
+        }
+
+    return {"status": "OK", "live_head_sha": live_head}
 
 
 # [Purpose]: IMP-20260717-5EE0 MT-10 — shard dict를 Codex CLI로 넘길 prompt 텍스트로 직렬화한다.
@@ -25213,6 +25403,7 @@ def _check_and_consume_permit(
     pr_head_sha: str,
     review_plan_sha: str,
     current_contract_sha: str = "",
+    frozen_plan: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """permit을 검증하고 원자적으로 소비한다.
 
@@ -25221,6 +25412,7 @@ def _check_and_consume_permit(
         pr_head_sha: 현재 PR head SHA(None/비str 금지).
         review_plan_sha: 현재 review_plan SHA(None/비str 금지).
         current_contract_sha: 현재 contract SHA(None/비str 금지; 빈 문자열 허용 — 하위 호환).
+        frozen_plan: P0-1 live 3자 비교용 frozen plan dict(None이면 3자 비교 생략 — 하위 호환).
     Returns:
         소비된 permit dict.
     Raises:
@@ -25350,6 +25542,17 @@ def _check_and_consume_permit(
             "  permit이 만료되었습니다. --authorize-run으로 재발급하세요."
         )
 
+    # REJECT#5 P0-1: Codex CLI 호출 직전 permit/frozen/live 3자 비교.
+    #   frozen 값끼리 자기비교를 방지하고 live PR head/contract/frozen plan SHA를 검증한다.
+    if frozen_plan is not None:
+        _live_check = _verify_permit_before_cli(permit, frozen_plan, pipeline_id)
+        if _live_check.get("status") != "OK":
+            _release_claim()
+            _die(
+                f"[BLOCKED] failure_code={_live_check.get('failure_code', 'live_verify_failed')}\n"
+                f"  {_live_check.get('message', 'live 검증 실패')}"
+            )
+
     # 모든 검증 통과 — consumed=True로 원자 저장(_write_json은 tmpfile→rename 원자 쓰기).
     permit["consumed"] = True
     permit["consumed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -25396,6 +25599,11 @@ def _call_codex_cli_for_shard(
     # 1) 입력 크기 가드(fail-closed): shard prompt가 상한을 초과하면 CLI 호출 전에 ERROR.
     #    REJECT#3 P0-3: CODEX_CLI_MOCK=1 mock 승인 분기는 제거되었다. 테스트는 _cli_factory를 사용한다.
     prompt_text = _serialize_shard_to_prompt(shard)
+    # REJECT#5 P0-2: 호출자가 사용한 prompt SHA를 미리 계산한다(result에 항상 포함).
+    _prompt_sha256 = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
+    _permit_rp_sha = str(permit.get("review_plan_sha", "") or "") if permit else ""
+    _permit_contract_sha = str(permit.get("contract_sha", "") or "") if permit else ""
+
     if len(prompt_text) > SHARD_HARD_BUDGET:
         return {
             "shard_id": shard_id,
@@ -25403,11 +25611,19 @@ def _call_codex_cli_for_shard(
             "findings": [],
             "pr_head_sha": pr_head_sha,
             "error_reason": "input_too_large",
+            "review_plan_sha256": _permit_rp_sha,
+            "contract_sha256": _permit_contract_sha,
+            "prompt_sha256": _prompt_sha256,
         }
 
     # 2) 테스트 전용 CLI factory 주입(프로덕션 None 고정 — 우회 불가).
     if _cli_factory is not None:
-        return _cli_factory(shard, permit)
+        _factory_result = _cli_factory(shard, permit)
+        if isinstance(_factory_result, dict):
+            _factory_result.setdefault("review_plan_sha256", _permit_rp_sha)
+            _factory_result.setdefault("contract_sha256", _permit_contract_sha)
+            _factory_result.setdefault("prompt_sha256", _prompt_sha256)
+        return _factory_result
 
     # 3) permit gate: 소비된 permit이 없으면 실제 Codex CLI를 호출하지 않는다(codex_cli_not_connected).
     #    handler가 permit을 소비하여 전달하는 경우에만 실제 subprocess 경로로 진입한다. 이것이
@@ -25419,6 +25635,9 @@ def _call_codex_cli_for_shard(
             "findings": [],
             "pr_head_sha": pr_head_sha,
             "error_reason": "codex_cli_not_connected",
+            "review_plan_sha256": "",
+            "contract_sha256": "",
+            "prompt_sha256": _prompt_sha256,
         }
 
     # 4) Codex CLI 실행 파일 탐색. 없으면 미연결 ERROR(하위 호환 error_reason 유지).
@@ -25430,6 +25649,9 @@ def _call_codex_cli_for_shard(
             "findings": [],
             "pr_head_sha": pr_head_sha,
             "error_reason": "codex_cli_not_connected",
+            "review_plan_sha256": _permit_rp_sha,
+            "contract_sha256": _permit_contract_sha,
+            "prompt_sha256": _prompt_sha256,
         }
 
     # 5) 실제 Codex CLI subprocess 호출. verdict는 stdout JSONL이 아닌 --output-last-message 파일에서
@@ -25440,12 +25662,21 @@ def _call_codex_cli_for_shard(
     )
     os.close(result_fd)  # subprocess가 직접 파일에 기록하므로 fd는 즉시 닫는다.
     try:
-        # REJECT#4 P1: --output-schema로 verdict JSON schema를 Codex에 전달한다.
-        #   schema 파일이 없으면 schema 인수 없이 실행한다(하위 호환 — 미설치 환경 지원).
+        # REJECT#5 P1: codex_verdict_schema.json 없으면 hard ERROR(CLI 호출 0회).
+        #   schema 파일 미설치는 운영 오류이며 graceful skip을 금지한다.
         _schema_path = BASE_DIR / "codex_verdict_schema.json"
-        cmd = [codex_bin, "exec", "--json"]
-        if _schema_path.exists():
-            cmd += ["--output-schema", str(_schema_path)]
+        if not _schema_path.exists():
+            return {
+                "shard_id": shard_id,
+                "verdict": "ERROR",
+                "findings": [],
+                "pr_head_sha": pr_head_sha,
+                "error_reason": "schema_file_missing",
+                "review_plan_sha256": _permit_rp_sha,
+                "contract_sha256": _permit_contract_sha,
+                "prompt_sha256": _prompt_sha256,
+            }
+        cmd = [codex_bin, "exec", "--json", "--output-schema", str(_schema_path)]
         cmd += [
             "--output-last-message", result_file,
             "--ephemeral",
@@ -25460,13 +25691,19 @@ def _call_codex_cli_for_shard(
             )
         except subprocess.TimeoutExpired:
             return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
-                    "pr_head_sha": pr_head_sha, "error_reason": "timeout"}
+                    "pr_head_sha": pr_head_sha, "error_reason": "timeout",
+                    "review_plan_sha256": _permit_rp_sha, "contract_sha256": _permit_contract_sha,
+                    "prompt_sha256": _prompt_sha256}
         except FileNotFoundError:
             return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
-                    "pr_head_sha": pr_head_sha, "error_reason": "codex_cli_not_found"}
+                    "pr_head_sha": pr_head_sha, "error_reason": "codex_cli_not_found",
+                    "review_plan_sha256": _permit_rp_sha, "contract_sha256": _permit_contract_sha,
+                    "prompt_sha256": _prompt_sha256}
         except OSError as exc:
             return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
-                    "pr_head_sha": pr_head_sha, "error_reason": f"cli_oserror: {exc}"}
+                    "pr_head_sha": pr_head_sha, "error_reason": f"cli_oserror: {exc}",
+                    "review_plan_sha256": _permit_rp_sha, "contract_sha256": _permit_contract_sha,
+                    "prompt_sha256": _prompt_sha256}
 
         # 6) stdout JSONL 이벤트는 감사 로그로 보존한다(파이프라인 계약 경로).
         _write_shard_audit_log(shard_id, proc.stdout or "")
@@ -25483,10 +25720,17 @@ def _call_codex_cli_for_shard(
             else:
                 err = f"cli_exit_{proc.returncode}"
             return {"shard_id": shard_id, "verdict": "ERROR", "findings": [],
-                    "pr_head_sha": pr_head_sha, "error_reason": err}
+                    "pr_head_sha": pr_head_sha, "error_reason": err,
+                    "review_plan_sha256": _permit_rp_sha, "contract_sha256": _permit_contract_sha,
+                    "prompt_sha256": _prompt_sha256}
 
         # 7) --output-last-message 결과 파일을 strict verdict schema로 파싱한다.
-        return _parse_codex_cli_shard_output(result_file, shard_id, pr_head_sha)
+        _parsed = _parse_codex_cli_shard_output(result_file, shard_id, pr_head_sha)
+        if isinstance(_parsed, dict):
+            _parsed.setdefault("review_plan_sha256", _permit_rp_sha)
+            _parsed.setdefault("contract_sha256", _permit_contract_sha)
+            _parsed.setdefault("prompt_sha256", _prompt_sha256)
+        return _parsed
     finally:
         # 임시 결과 파일은 항상 정리한다(감사 로그는 계약 경로에 별도 보존).
         try:
@@ -25807,8 +26051,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 _auto_rp_sha = _auto_frozen_sha or str(_shard_plan[0].get("review_plan_sha256", "") or "")
                 _auto_contract_sha = str(_shard_plan[0].get("contract_sha256", "") or "")
                 # REJECT#3 P0-1: contract_sha도 permit 검증에 전달한다(stale drift fail-closed).
+                # REJECT#5 P0-1: frozen_plan을 전달하여 CLI 직전 live 3자 비교 수행.
                 _permit = _check_and_consume_permit(
-                    pipeline_id, _auto_head, _auto_rp_sha, _auto_contract_sha
+                    pipeline_id, _auto_head, _auto_rp_sha, _auto_contract_sha,
+                    frozen_plan=_review_plan,
                 )
                 _required_ids = [str(_s.get("shard_id", "") or "") for _s in _shard_plan]
                 _shard_results_auto = [

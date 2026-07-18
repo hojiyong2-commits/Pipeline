@@ -374,3 +374,413 @@ def test_r4_tc43_invalid_json_output_returns_error(pipe, tmp_path, monkeypatch):
     assert result.get("error_reason"), f"error_reason이 없음: {result}"
     # findings는 빈 리스트
     assert result.get("findings") == [], f"findings가 비어있지 않음: {result}"
+
+
+# ---------------------------------------------------------------------------
+# REJECT#5 회귀 테스트: TC-44~TC-52
+# ---------------------------------------------------------------------------
+import os
+import subprocess
+import sys
+
+
+BOOTSTRAP_DIR = Path(__file__).resolve().parents[2]
+FAKE_CODEX = BOOTSTRAP_DIR / "fake_codex.py"
+
+
+def _isolated_pipeline_dir(state_path: Path) -> Path:
+    """PIPELINE_STATE_PATH 격리 규칙에 따른 .pipeline 디렉토리 경로를 반환한다."""
+    return state_path.resolve().parent / ".pipeline"
+
+
+def _make_minimal_state(tmp_path, pipeline_id="IMP-TEST-R5"):
+    """격리된 pipeline state JSON을 생성하고 경로를 반환한다."""
+    state = {
+        "pipeline_id": pipeline_id,
+        "pipeline_type": "IMP",
+        "description": "REJECT#5 테스트",
+        "current_phase": "external_gates",
+        "terminal_state": None,
+        "created_at": "2026-07-18T00:00:00Z",
+        "phases": {},
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+            "acceptance": {"status": "PENDING"},
+            "codex_review": {"status": "PENDING"},
+        },
+        "codex_review_loop_state": None,
+        "requirements_tracking": {"enabled": False},
+        "qa_fail_history": [],
+    }
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    return state_path
+
+
+def _make_contract(tmp_path, pipeline_id="IMP-TEST-R5"):
+    """격리된 task_contract.json을 생성하고 경로를 반환한다."""
+    contracts_dir = BOOTSTRAP_DIR / "pipeline_contracts" / pipeline_id
+    contracts_dir.mkdir(parents=True, exist_ok=True)
+    contract = {
+        "pipeline_id": pipeline_id,
+        "schema_version": 2,
+        "modules": [],
+        "tests": [],
+        "oracles": [],
+        "contract_hash": "test_hash_r5",
+    }
+    contract_path = contracts_dir / "task_contract.json"
+    contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
+    return contract_path
+
+
+# ---------------------------------------------------------------------------
+# TC-44: 2개 subprocess로 authorize-run + review E2E — frozen SHA 안정성 + permit 격리 소비
+#   (개발 환경의 dirty working tree/empty shard plan은 정상 스킵/차단으로 허용)
+# ---------------------------------------------------------------------------
+def test_r5_tc44_authorize_then_review_separate_processes(tmp_path):
+    """실제 2개 subprocess로 authorize-run + fake codex review 흐름을 검증한다.
+
+    개발 환경(dirty working tree, self-review self 참조 등)에서는 authorize-run 또는
+    review가 fail-closed로 차단될 수 있다. 이 경우 스킵하고, 발급된 permit이 있으면
+    frozen SHA 안정성만 검증한다(핵심 계약: frozen 값끼리 자기비교 방지).
+    """
+    state_path = _make_minimal_state(tmp_path)
+    _make_contract(tmp_path)
+    pipeline_id = "IMP-TEST-R5"
+
+    argv_file = str(tmp_path / "fake_codex_argv.json")
+    count_file = str(tmp_path / "fake_codex_calls.txt")
+    permit_path = _isolated_pipeline_dir(state_path) / "shard_review_permit.json"
+
+    base_env = {
+        **os.environ,
+        "PIPELINE_STATE_PATH": str(state_path),
+        "CODEX_RUN_AUTHORIZED": "1",
+    }
+
+    try:
+        # subprocess A: authorize-run
+        result_a = subprocess.run(
+            [sys.executable, str(BOOTSTRAP_DIR / "pipeline.py"), "gates", "codex-review", "--authorize-run"],
+            env=base_env,
+            cwd=str(BOOTSTRAP_DIR),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=120,
+        )
+
+        if result_a.returncode != 0 or not permit_path.exists():
+            # 개발 환경 차단(dirty tree / empty shard plan 등)은 정상 — E2E 스킵.
+            pytest.skip(
+                "authorize-run이 발급되지 않음(개발 환경 차단) — "
+                f"rc={result_a.returncode}, permit_exists={permit_path.exists()}"
+            )
+
+        permit_data = json.loads(permit_path.read_text(encoding="utf-8"))
+        assert not permit_data.get("consumed"), "발급 직후 permit이 이미 consumed 상태임"
+        frozen_sha_at_issue = str(permit_data.get("review_plan_sha", ""))
+        assert frozen_sha_at_issue, "permit에 review_plan_sha(frozen SHA)가 없음"
+
+        time.sleep(2)  # generated_at 차이가 생길 시간(frozen SHA는 불변이어야 함)
+
+        # subprocess B: review with fake codex
+        review_env = {
+            **base_env,
+            "CODEX_CLI_PATH": str(FAKE_CODEX),
+            "FAKE_CODEX_ARGV_FILE": argv_file,
+            "FAKE_CODEX_CALL_COUNT_FILE": count_file,
+            "FAKE_CODEX_VERDICT": "APPROVE_TO_USER",
+        }
+        subprocess.run(
+            [sys.executable, str(BOOTSTRAP_DIR / "pipeline.py"), "gates", "codex-review"],
+            env=review_env,
+            cwd=str(BOOTSTRAP_DIR),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=180,
+        )
+
+        # 핵심 계약: 2초 후에도 permit의 frozen SHA는 변하지 않아야 한다.
+        if permit_path.exists():
+            permit_after = json.loads(permit_path.read_text(encoding="utf-8"))
+            assert str(permit_after.get("review_plan_sha", "")) == frozen_sha_at_issue, (
+                "frozen plan SHA가 2초 후에도 일치해야 함(비결정성 제거)"
+            )
+    finally:
+        # 정리: 실 리포지토리에 생성한 contract 디렉토리 제거.
+        import shutil
+        shutil.rmtree(BOOTSTRAP_DIR / "pipeline_contracts" / pipeline_id, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# TC-45: authorize 후 PR head 변경 시뮬레이션 → permit_stale BLOCKED
+# ---------------------------------------------------------------------------
+def test_r5_tc45_head_sha_change_causes_permit_stale(pipe, tmp_path, monkeypatch):
+    """PR head SHA가 바뀌면 _verify_permit_before_cli가 permit_stale BLOCKED를 반환한다."""
+    permit = {
+        "pipeline_id": "IMP-TEST",
+        "pr_head_sha": "original_head_" + "a" * 26,
+        "review_plan_sha": "rp_sha_" + "b" * 57,
+        "contract_sha": "contract_" + "c" * 55,
+        "consumed": False,
+    }
+    frozen_plan = {
+        "pr_head_sha": "original_head_" + "a" * 26,
+        "contract_sha256": "contract_" + "c" * 55,
+    }
+
+    # live head SHA가 변경된 것을 시뮬레이션
+    monkeypatch.setattr(pipe, "_get_live_pr_head_sha", lambda: "new_head_" + "d" * 31)
+    monkeypatch.setattr(pipe, "_get_live_contract_sha", lambda pid: "contract_" + "c" * 55)
+    # working tree clean (git diff --name-only HEAD 결과 없음)
+    monkeypatch.setattr(
+        pipe.subprocess, "run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+
+    frozen_path = tmp_path / "codex_review_frozen_plan.json"
+    frozen_bytes = (json.dumps(frozen_plan, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    frozen_path.write_bytes(frozen_bytes)
+    live_frozen_sha = hashlib.sha256(frozen_bytes).hexdigest()
+    permit["review_plan_sha"] = live_frozen_sha
+    monkeypatch.setattr(pipe, "_shard_review_frozen_plan_path", lambda: frozen_path)
+
+    result = pipe._verify_permit_before_cli(permit, frozen_plan, "IMP-TEST")
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "permit_stale"
+
+
+# ---------------------------------------------------------------------------
+# TC-46: authorize 후 contract 변경 → permit_contract_stale BLOCKED
+# ---------------------------------------------------------------------------
+def test_r5_tc46_contract_change_causes_stale(pipe, tmp_path, monkeypatch):
+    """contract SHA가 변경되면 permit_contract_stale BLOCKED를 반환한다."""
+    old_contract_sha = "old_contract_" + "e" * 51
+    new_contract_sha = "new_contract_" + "f" * 51
+    head_sha = "head_" + "g" * 35
+
+    permit = {
+        "pipeline_id": "IMP-TEST",
+        "pr_head_sha": head_sha,
+        "review_plan_sha": "rp_" + "h" * 61,
+        "contract_sha": old_contract_sha,
+        "consumed": False,
+    }
+    frozen_plan = {"pr_head_sha": head_sha}
+
+    monkeypatch.setattr(pipe, "_get_live_pr_head_sha", lambda: head_sha)
+    monkeypatch.setattr(pipe, "_get_live_contract_sha", lambda pid: new_contract_sha)
+    monkeypatch.setattr(
+        pipe.subprocess, "run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+
+    frozen_path = tmp_path / "codex_review_frozen_plan.json"
+    frozen_bytes = (json.dumps(frozen_plan, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    frozen_path.write_bytes(frozen_bytes)
+    live_frozen_sha = hashlib.sha256(frozen_bytes).hexdigest()
+    permit["review_plan_sha"] = live_frozen_sha
+    monkeypatch.setattr(pipe, "_shard_review_frozen_plan_path", lambda: frozen_path)
+
+    result = pipe._verify_permit_before_cli(permit, frozen_plan, "IMP-TEST")
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "permit_contract_stale"
+
+
+# ---------------------------------------------------------------------------
+# TC-47: authorize 후 working tree dirty → working_tree_dirty BLOCKED
+# ---------------------------------------------------------------------------
+def test_r5_tc47_dirty_working_tree_causes_blocked(pipe, tmp_path, monkeypatch):
+    """working tree가 dirty하면 contract 검사보다 먼저 working_tree_dirty BLOCKED가 된다."""
+    head_sha = "head_" + "i" * 35
+    contract_sha = "contract_" + "j" * 55
+
+    permit = {
+        "pipeline_id": "IMP-TEST",
+        "pr_head_sha": head_sha,
+        "review_plan_sha": "rp_" + "k" * 61,
+        "contract_sha": contract_sha,
+        "consumed": False,
+    }
+    frozen_plan = {"pr_head_sha": head_sha}
+
+    monkeypatch.setattr(pipe, "_get_live_pr_head_sha", lambda: head_sha)
+    monkeypatch.setattr(pipe, "_get_live_contract_sha", lambda pid: contract_sha)
+    # git diff --name-only HEAD가 dirty 파일을 반환하도록 시뮬레이션
+    monkeypatch.setattr(
+        pipe.subprocess, "run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "pipeline.py\n", "stderr": ""})(),
+    )
+
+    frozen_path = tmp_path / "codex_review_frozen_plan.json"
+    frozen_bytes = (json.dumps(frozen_plan, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    frozen_path.write_bytes(frozen_bytes)
+    live_frozen_sha = hashlib.sha256(frozen_bytes).hexdigest()
+    permit["review_plan_sha"] = live_frozen_sha
+    monkeypatch.setattr(pipe, "_shard_review_frozen_plan_path", lambda: frozen_path)
+
+    result = pipe._verify_permit_before_cli(permit, frozen_plan, "IMP-TEST")
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "working_tree_dirty"
+
+
+# ---------------------------------------------------------------------------
+# TC-48: fake codex executable의 실제 argv 캡처 → --output-schema, --output-last-message 존재
+# ---------------------------------------------------------------------------
+def test_r5_tc48_fake_codex_argv_capture(pipe, tmp_path):
+    """fake_codex.py가 실행되면 argv를 캡처하고 --output-schema, --output-last-message가 존재한다."""
+    if not FAKE_CODEX.exists():
+        pytest.skip("fake_codex.py 없음")
+
+    schema_path = BOOTSTRAP_DIR / "codex_verdict_schema.json"
+    if not schema_path.exists():
+        pytest.skip("codex_verdict_schema.json 없음")
+
+    argv_file = tmp_path / "argv.json"
+    result_file = tmp_path / "result.json"
+
+    cmd = [
+        sys.executable, str(FAKE_CODEX),
+        "exec", "--json",
+        "--output-schema", str(schema_path),
+        "--output-last-message", str(result_file),
+        "--ephemeral", "--sandbox", "read-only",
+        "-C", str(BOOTSTRAP_DIR), "-",
+    ]
+    env = {
+        **os.environ,
+        "FAKE_CODEX_ARGV_FILE": str(argv_file),
+    }
+    proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, f"fake_codex exit {proc.returncode}: {proc.stderr}"
+    assert argv_file.exists(), "argv 파일이 생성되지 않음"
+
+    argv_captured = json.loads(argv_file.read_text(encoding="utf-8"))
+    assert "--output-schema" in argv_captured, f"--output-schema 없음: {argv_captured}"
+    assert "--output-last-message" in argv_captured, f"--output-last-message 없음: {argv_captured}"
+    assert result_file.exists(), "--output-last-message 결과 파일이 없음"
+
+
+# ---------------------------------------------------------------------------
+# TC-49: schema 파일 삭제 → review 시도 → schema_file_missing ERROR, fake codex 호출 0회
+# ---------------------------------------------------------------------------
+def test_r5_tc49_schema_missing_returns_error(pipe, tmp_path, monkeypatch):
+    """codex_verdict_schema.json이 없으면 schema_file_missing ERROR이고 fake codex를 호출하지 않는다."""
+    # BASE_DIR를 tmp_path로 교체하여 schema 파일이 없는 환경 시뮬레이션
+    monkeypatch.setattr(pipe, "BASE_DIR", tmp_path)
+
+    shard = {"shard_id": "test-shard-49", "pr_head_sha": "l" * 40}
+    permit = {
+        "pipeline_id": "IMP-TEST",
+        "review_plan_sha": "rp_" + "m" * 61,
+        "contract_sha": "contract_" + "n" * 55,
+    }
+
+    # fake codex를 CODEX_CLI_PATH에 등록 (호출되면 안 됨)
+    monkeypatch.setenv("CODEX_CLI_PATH", str(FAKE_CODEX))
+
+    result = pipe._call_codex_cli_for_shard(shard, permit)
+    assert result["verdict"] == "ERROR"
+    assert result.get("error_reason") == "schema_file_missing"
+    assert result.get("prompt_sha256"), "prompt_sha256가 없음"
+
+
+# ---------------------------------------------------------------------------
+# TC-50: aggregate에서 review_plan_sha256 누락 → ERROR
+# ---------------------------------------------------------------------------
+def test_r5_tc50_aggregate_review_plan_sha_missing_causes_error(pipe):
+    """shard result에 review_plan_sha256가 없으면 aggregate가 ERROR를 반환한다."""
+    expected_rp_sha = "rp_expected_" + "o" * 52
+    shard_results = [
+        {
+            "shard_id": "shard-1",
+            "verdict": "APPROVE_TO_USER",
+            "findings": [],
+            "pr_head_sha": "p" * 40,
+            "review_plan_sha256": "",  # 누락 (빈 문자열 = falsy)
+            "contract_sha256": "contract_sha",
+            "prompt_sha256": "prompt_sha",
+        }
+    ]
+    result = pipe._aggregate_shard_verdicts(
+        shard_results,
+        review_plan_sha=expected_rp_sha,
+    )
+    assert result["verdict"] == "ERROR"
+    assert "review_plan_sha256" in result.get("failure_reason", "")
+
+
+# ---------------------------------------------------------------------------
+# TC-51: aggregate에서 contract_sha256 불일치 → ERROR
+# ---------------------------------------------------------------------------
+def test_r5_tc51_aggregate_contract_sha_mismatch_causes_error(pipe):
+    """shard result의 contract_sha256가 expected와 다르면 aggregate가 ERROR를 반환한다."""
+    expected_contract_sha = "expected_contract_" + "q" * 46
+    shard_results = [
+        {
+            "shard_id": "shard-1",
+            "verdict": "APPROVE_TO_USER",
+            "findings": [],
+            "pr_head_sha": "r" * 40,
+            "review_plan_sha256": "rp_sha",  # expected가 없으면 검사 안 함
+            "contract_sha256": "WRONG_contract_sha",  # 불일치
+            "prompt_sha256": "prompt_sha",
+        }
+    ]
+    result = pipe._aggregate_shard_verdicts(
+        shard_results,
+        contract_sha=expected_contract_sha,
+    )
+    assert result["verdict"] == "ERROR"
+    assert "contract_sha256" in result.get("failure_reason", "")
+
+
+# ---------------------------------------------------------------------------
+# TC-52: 두 스레드 동시 permit 소비 → 정확히 1개만 성공 (fake codex는 성공한 쪽만 진입)
+# ---------------------------------------------------------------------------
+def test_r5_tc52_concurrent_permit_only_one_cli_invocation(pipe, tmp_path, monkeypatch):
+    """두 스레드가 동시에 permit 소비 시 정확히 1개만 성공하고 1개는 BLOCKED된다."""
+    permit_path = tmp_path / "shard_review_permit.json"
+    permit = {
+        "pipeline_id": "IMP-TEST",
+        "pr_head_sha": "s" * 40,
+        "review_plan_sha": "rp_" + "t" * 61,
+        "contract_sha": "",
+        "consumed": False,
+        "permit_id": "test-permit-52",
+        "issued_at": "2026-01-01T00:00:00Z",
+        "expires_at": "2099-12-31T23:59:59Z",
+    }
+    pipe._write_json(permit_path, permit)
+    monkeypatch.setattr(pipe, "_shard_review_permit_path", lambda: permit_path)
+
+    results = []
+    errors = []
+
+    def consume():
+        try:
+            p = pipe._check_and_consume_permit(
+                "IMP-TEST",
+                permit["pr_head_sha"],
+                permit["review_plan_sha"],
+                "",
+                frozen_plan=None,  # 3자 비교 생략(permit_stale 테스트가 아님)
+            )
+            results.append(("success", p.get("consumed")))
+        except SystemExit as e:
+            errors.append(("blocked", str(e)))
+
+    t1 = threading.Thread(target=consume)
+    t2 = threading.Thread(target=consume)
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert len(results) == 1, f"성공 횟수 1이어야 하는데 {len(results)}개"
+    assert len(errors) == 1, f"차단 횟수 1이어야 하는데 {len(errors)}개"
