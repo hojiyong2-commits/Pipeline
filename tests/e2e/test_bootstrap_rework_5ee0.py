@@ -521,7 +521,11 @@ def test_r5_tc44_authorize_then_review_separate_processes(tmp_path):
 # TC-45: authorize 후 PR head 변경 시뮬레이션 → permit_stale BLOCKED
 # ---------------------------------------------------------------------------
 def test_r5_tc45_head_sha_change_causes_permit_stale(pipe, tmp_path, monkeypatch):
-    """PR head SHA가 바뀌면 _verify_permit_before_cli가 permit_stale BLOCKED를 반환한다."""
+    """PR head SHA가 바뀌면 _verify_permit_before_cli가 permit_stale_github BLOCKED를 반환한다.
+
+    REJECT#6 P0-2: live head는 이제 GitHub PR head(gh CLI)를 의미하며 failure_code가
+    permit_stale_github로 명시된다.
+    """
     permit = {
         "pipeline_id": "IMP-TEST",
         "pr_head_sha": "original_head_" + "a" * 26,
@@ -552,7 +556,7 @@ def test_r5_tc45_head_sha_change_causes_permit_stale(pipe, tmp_path, monkeypatch
 
     result = pipe._verify_permit_before_cli(permit, frozen_plan, "IMP-TEST")
     assert result["status"] == "BLOCKED"
-    assert result["failure_code"] == "permit_stale"
+    assert result["failure_code"] == "permit_stale_github"
 
 
 # ---------------------------------------------------------------------------
@@ -574,6 +578,8 @@ def test_r5_tc46_contract_change_causes_stale(pipe, tmp_path, monkeypatch):
     frozen_plan = {"pr_head_sha": head_sha}
 
     monkeypatch.setattr(pipe, "_get_live_pr_head_sha", lambda: head_sha)
+    # REJECT#6 P0-2: 4-way 비교 통과를 위해 로컬 HEAD도 GitHub PR head와 동일하게 모킹한다.
+    monkeypatch.setattr(pipe, "_get_local_git_head", lambda: head_sha)
     monkeypatch.setattr(pipe, "_get_live_contract_sha", lambda pid: new_contract_sha)
     monkeypatch.setattr(
         pipe.subprocess, "run",
@@ -784,3 +790,163 @@ def test_r5_tc52_concurrent_permit_only_one_cli_invocation(pipe, tmp_path, monke
 
     assert len(results) == 1, f"성공 횟수 1이어야 하는데 {len(results)}개"
     assert len(errors) == 1, f"차단 횟수 1이어야 하는데 {len(errors)}개"
+
+
+# ---------------------------------------------------------------------------
+# REJECT#6 회귀 테스트: TC-53~TC-63
+#   P0-1: shard aggregate ERROR가 REJECT로 오분류되지 않음(ERROR 경로)
+#   P0-2: _get_live_pr_head_sha가 GitHub PR head 사용 + _verify_permit_before_cli fail-closed 4-way
+#   P1: aggregate SHA 필드 키 존재 + 빈 값 → ERROR
+# ---------------------------------------------------------------------------
+
+
+# TC-53: aggregate ERROR → reject_count 증가 없음 (unit)
+def test_r6_tc53_aggregate_error_verdict_does_not_count_as_reject(pipe):
+    """TC-53: shard verdict=ERROR가 있으면 aggregate가 ERROR를 반환하고 REJECT로 오분류되지 않는다."""
+    result = pipe._aggregate_shard_verdicts([
+        {"verdict": "ERROR", "shard_id": "s0", "pr_head_sha": "abc123", "findings": []},
+    ])
+    assert result["verdict"] == "ERROR"
+    assert result.get("error_shards", 0) >= 1
+    assert result.get("rejected_shards", 0) == 0
+
+
+# TC-54: aggregate REJECT shard → verdict=REJECTED
+def test_r6_tc54_aggregate_rejected_maps_to_reject(pipe):
+    """TC-54: shard verdict=REJECT는 aggregate REJECTED로 분류된다."""
+    result = pipe._aggregate_shard_verdicts([
+        {"verdict": "REJECT", "shard_id": "s0", "pr_head_sha": "abc123", "findings": [{"f": 1}]},
+    ])
+    assert result["verdict"] == "REJECTED"
+
+
+# TC-55: aggregate APPROVE_TO_USER → verdict=APPROVED
+def test_r6_tc55_aggregate_approved_maps_correctly(pipe):
+    """TC-55: 모든 shard가 APPROVE_TO_USER면 aggregate APPROVED."""
+    result = pipe._aggregate_shard_verdicts([
+        {"verdict": "APPROVE_TO_USER", "shard_id": "s0", "pr_head_sha": "abc", "findings": []},
+    ])
+    assert result["verdict"] == "APPROVED"
+
+
+# TC-56: unknown verdict → aggregate ERROR (not REJECTED)
+def test_r6_tc56_unknown_verdict_in_aggregate_is_error(pipe):
+    """TC-56: unknown verdict 값은 REJECTED가 아닌 ERROR로 집계된다."""
+    result = pipe._aggregate_shard_verdicts([
+        {"verdict": "UNKNOWN_THING", "shard_id": "s0", "pr_head_sha": "abc", "findings": []},
+    ])
+    assert result["verdict"] == "ERROR"
+
+
+# TC-57: empty string verdict → aggregate ERROR
+def test_r6_tc57_empty_verdict_in_aggregate_is_error(pipe):
+    """TC-57: 빈 문자열 verdict는 ERROR로 집계된다."""
+    result = pipe._aggregate_shard_verdicts([
+        {"verdict": "", "shard_id": "s0", "pr_head_sha": "abc", "findings": []},
+    ])
+    assert result["verdict"] == "ERROR"
+
+
+# TC-58: _get_live_pr_head_sha는 gh CLI 결과를 반환
+def test_r6_tc58_get_live_pr_head_sha_uses_gh(pipe, monkeypatch):
+    """TC-58: _get_live_pr_head_sha가 gh pr view 결과를 반환한다."""
+    sha = "a" * 40
+    captured = {}
+
+    def _fake_run(cmd, *a, **kw):
+        captured["cmd"] = cmd
+        return type("R", (), {"returncode": 0, "stdout": sha + "\n", "stderr": ""})()
+
+    monkeypatch.setattr(pipe.subprocess, "run", _fake_run)
+    result = pipe._get_live_pr_head_sha()
+    assert result == sha
+    assert "gh" in captured["cmd"]
+    assert "pr" in captured["cmd"]
+    assert "view" in captured["cmd"]
+
+
+# TC-59: _get_live_pr_head_sha는 gh CLI 실패 시 빈 문자열 반환
+def test_r6_tc59_get_live_pr_head_sha_returns_empty_on_failure(pipe, monkeypatch):
+    """TC-59: gh CLI가 실패(returncode!=0)하면 _get_live_pr_head_sha가 빈 문자열을 반환한다."""
+    monkeypatch.setattr(
+        pipe.subprocess, "run",
+        lambda *a, **kw: type("R", (), {"returncode": 1, "stdout": "", "stderr": ""})(),
+    )
+    assert pipe._get_live_pr_head_sha() == ""
+
+
+def _write_frozen_and_sync_permit(pipe, tmp_path, monkeypatch, permit, frozen_plan):
+    """frozen plan 파일을 저장하고 permit의 review_plan_sha를 파일 SHA와 동기화한다."""
+    frozen_path = tmp_path / "codex_review_frozen_plan.json"
+    frozen_bytes = (
+        json.dumps(frozen_plan, sort_keys=True, ensure_ascii=False, indent=2) + "\n"
+    ).encode("utf-8")
+    frozen_path.write_bytes(frozen_bytes)
+    permit["review_plan_sha"] = hashlib.sha256(frozen_bytes).hexdigest()
+    monkeypatch.setattr(pipe, "_shard_review_frozen_plan_path", lambda: frozen_path)
+
+
+# TC-60: live_head 빈 문자열 → live_head_sha_unavailable BLOCKED (fail-closed)
+def test_r6_tc60_verify_permit_blocked_when_live_head_unavailable(pipe, tmp_path, monkeypatch):
+    """TC-60: GitHub PR head가 빈 문자열이면 live_head_sha_unavailable BLOCKED."""
+    head_sha = "head_" + "u" * 35
+    permit = {"pr_head_sha": head_sha, "contract_sha": "xyz", "review_plan_sha": "rps"}
+    frozen_plan = {"pr_head_sha": head_sha}
+
+    monkeypatch.setattr(pipe, "_get_live_pr_head_sha", lambda: "")
+    monkeypatch.setattr(pipe, "_get_live_contract_sha", lambda pid: "xyz")
+    monkeypatch.setattr(
+        pipe.subprocess, "run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+    _write_frozen_and_sync_permit(pipe, tmp_path, monkeypatch, permit, frozen_plan)
+
+    result = pipe._verify_permit_before_cli(permit, frozen_plan, "IMP-TEST")
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "live_head_sha_unavailable"
+
+
+# TC-61: 로컬 HEAD와 GitHub PR head 불일치 → local_remote_head_diverged BLOCKED
+def test_r6_tc61_verify_permit_blocked_when_local_remote_diverged(pipe, tmp_path, monkeypatch):
+    """TC-61: 로컬 HEAD와 GitHub PR head가 다르면 local_remote_head_diverged BLOCKED."""
+    sha_local = "aaa111" + "0" * 34
+    sha_github = "bbb222" + "0" * 34
+    permit = {"pr_head_sha": sha_github, "contract_sha": "xyz", "review_plan_sha": "rps"}
+    frozen_plan = {"pr_head_sha": sha_github}
+
+    monkeypatch.setattr(pipe, "_get_live_pr_head_sha", lambda: sha_github)
+    monkeypatch.setattr(pipe, "_get_local_git_head", lambda: sha_local)
+    monkeypatch.setattr(pipe, "_get_live_contract_sha", lambda pid: "xyz")
+    monkeypatch.setattr(
+        pipe.subprocess, "run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+    _write_frozen_and_sync_permit(pipe, tmp_path, monkeypatch, permit, frozen_plan)
+
+    result = pipe._verify_permit_before_cli(permit, frozen_plan, "IMP-TEST")
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "local_remote_head_diverged"
+
+
+# TC-62: review_plan_sha256 키 존재 + 빈 값 → ERROR
+def test_r6_tc62_aggregate_blocks_empty_review_plan_sha256(pipe):
+    """TC-62: shard에 review_plan_sha256 키가 있는데 값이 빈 문자열이면 ERROR."""
+    result = pipe._aggregate_shard_verdicts(
+        [{"verdict": "APPROVE_TO_USER", "shard_id": "s0", "pr_head_sha": "abc",
+          "findings": [], "review_plan_sha256": "", "contract_sha256": "xyz", "prompt_sha256": "p1"}],
+        review_plan_sha="expected_rps",
+    )
+    assert result["verdict"] == "ERROR"
+    assert "review_plan_sha256" in result.get("failure_reason", "")
+
+
+# TC-63: contract_sha256 키 존재 + 빈 값 → ERROR
+def test_r6_tc63_aggregate_blocks_empty_contract_sha256(pipe):
+    """TC-63: shard에 contract_sha256 키가 있는데 값이 빈 문자열이면 ERROR."""
+    result = pipe._aggregate_shard_verdicts(
+        [{"verdict": "APPROVE_TO_USER", "shard_id": "s0", "pr_head_sha": "abc",
+          "findings": [], "review_plan_sha256": "rps1", "contract_sha256": "", "prompt_sha256": "p1"}],
+        contract_sha="expected_contract",
+    )
+    assert result["verdict"] == "ERROR"
+    assert "contract_sha256" in result.get("failure_reason", "")

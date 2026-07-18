@@ -24461,6 +24461,21 @@ def _aggregate_shard_verdicts(
         _shard_rp_sha = str(shard.get("review_plan_sha256", "") or "")
         _shard_contract_sha = str(shard.get("contract_sha256", "") or "")
         _shard_prompt_sha = str(shard.get("prompt_sha256", "") or "")
+        # REJECT#6 P1: SHA 필드 키가 shard에 존재하는데 값이 빈 문자열이면 CLI 경로가 손상된
+        #   것으로 간주하여 ERROR(fail-closed). 빈 값을 mismatch 검사가 건너뛰는 fail-open을 차단한다.
+        if "review_plan_sha256" in shard and not _shard_rp_sha:
+            return {
+                "verdict": "ERROR",
+                "total_shards": total,
+                "approved_shards": 0,
+                "rejected_shards": 0,
+                "error_shards": total,
+                "stale_shards": 0,
+                "findings": [],
+                "missing_shard_ids": list(required_shard_ids or []),
+                "failure_reason": f"shard {shard.get('shard_id')}: review_plan_sha256 empty",
+                "aggregated_at": _now(),
+            }
         if review_plan_sha and ("review_plan_sha256" in shard) and _shard_rp_sha != review_plan_sha:
             return {
                 "verdict": "ERROR",
@@ -24471,7 +24486,20 @@ def _aggregate_shard_verdicts(
                 "stale_shards": 0,
                 "findings": [],
                 "missing_shard_ids": list(required_shard_ids or []),
-                "failure_reason": f"shard {shard.get('shard_id')}: review_plan_sha256 mismatch or missing",
+                "failure_reason": f"shard {shard.get('shard_id')}: review_plan_sha256 mismatch",
+                "aggregated_at": _now(),
+            }
+        if "contract_sha256" in shard and not _shard_contract_sha:
+            return {
+                "verdict": "ERROR",
+                "total_shards": total,
+                "approved_shards": 0,
+                "rejected_shards": 0,
+                "error_shards": total,
+                "stale_shards": 0,
+                "findings": [],
+                "missing_shard_ids": list(required_shard_ids or []),
+                "failure_reason": f"shard {shard.get('shard_id')}: contract_sha256 empty",
                 "aggregated_at": _now(),
             }
         if contract_sha and ("contract_sha256" in shard) and _shard_contract_sha != contract_sha:
@@ -24484,7 +24512,7 @@ def _aggregate_shard_verdicts(
                 "stale_shards": 0,
                 "findings": [],
                 "missing_shard_ids": list(required_shard_ids or []),
-                "failure_reason": f"shard {shard.get('shard_id')}: contract_sha256 mismatch or missing",
+                "failure_reason": f"shard {shard.get('shard_id')}: contract_sha256 mismatch",
                 "aggregated_at": _now(),
             }
         # prompt_sha256가 기록되어 있는데 빈 값이면 CLI 경로가 손상된 것으로 간주하여 ERROR.
@@ -24956,13 +24984,31 @@ def _find_codex_bin() -> Optional[str]:
 # [Vulnerability & Risks]: git 미설치/detached HEAD면 빈 문자열을 반환하고, 상위가 live 검사를 생략한다
 #            (빈 live 값은 stale 판정에서 skip — 상위 로직이 명시적으로 처리). 파일 부재도 빈 문자열.
 # [Improvement]: origin/main과의 merge-base를 추가 검증하면 rebase drift도 잡을 수 있다.
-def _get_live_pr_head_sha() -> str:
-    """현재 HEAD의 커밋 SHA를 git에서 live로 조회한다(실패 시 빈 문자열).
+def _get_local_git_head() -> str:
+    """로컬 git HEAD의 커밋 SHA를 조회한다(실패 시 빈 문자열).
 
     Returns:
         40자 16진수 SHA 또는 빈 문자열.
     """
     return _git_rev_parse_or_empty("HEAD")
+
+
+def _get_live_pr_head_sha() -> str:
+    """GitHub PR의 최신 headRefOid를 gh CLI로 조회한다(실패/PR 없음 시 빈 문자열).
+
+    Returns:
+        40자 16진수 SHA 또는 빈 문자열.
+    """
+    try:
+        _proc = subprocess.run(
+            ["gh", "pr", "view", "--json", "headRefOid", "--jq", ".headRefOid"],
+            capture_output=True, text=True, check=False, timeout=30,
+        )
+        if _proc.returncode != 0:
+            return ""
+        return _proc.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return ""
 
 
 def _get_live_contract_sha(pipeline_id: str) -> str:
@@ -25055,25 +25101,59 @@ def _verify_permit_before_cli(
     permit_contract = str(permit.get("contract_sha", "") or "")
     permit_rp_sha = str(permit.get("review_plan_sha", "") or "")
 
-    # 3자 비교
+    # 3자 비교 (permit / frozen / live)
     if permit_head != frozen_head:
         return {
             "status": "BLOCKED",
             "failure_code": "permit_frozen_head_mismatch",
             "message": f"permit head({permit_head[:12]}) != frozen plan head({frozen_head[:12]}) — --authorize-run으로 재발급.",
         }
-    if live_head and permit_head != live_head:
+
+    # REJECT#6 P0-2: fail-closed — live GitHub PR head가 빈 문자열이면 BLOCKED (gh CLI 없음 or PR 없음).
+    if not live_head:
         return {
             "status": "BLOCKED",
-            "failure_code": "permit_stale",
-            "message": f"PR head가 변경됨 — permit({permit_head[:12]}) != live({live_head[:12]}). --authorize-run으로 재발급.",
+            "failure_code": "live_head_sha_unavailable",
+            "message": "GitHub PR head SHA 조회 실패 — gh CLI 또는 PR 없음. --authorize-run을 재실행하세요.",
         }
-    if live_contract and permit_contract != live_contract:
+    if permit_head != live_head:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "permit_stale_github",
+            "message": f"GitHub PR head가 변경됨 — permit({permit_head[:12]}) != GitHub({live_head[:12]}). --authorize-run으로 재발급.",
+        }
+
+    # REJECT#6 P0-2: 4-way — 로컬 HEAD도 GitHub PR head와 일치해야 함(diverge 방지).
+    local_head = _get_local_git_head()
+    if not local_head:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "local_head_sha_unavailable",
+            "message": "로컬 git HEAD SHA 조회 실패 — git이 PATH에 없거나 오류. --authorize-run을 재실행하세요.",
+        }
+    # prefix match (7자 이상) — 로컬 HEAD와 GitHub PR head의 prefix 비교
+    _cmp_len = max(7, min(len(local_head), len(live_head)))
+    if local_head[:_cmp_len] != live_head[:_cmp_len]:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "local_remote_head_diverged",
+            "message": f"로컬 HEAD({local_head[:12]})와 GitHub PR head({live_head[:12]})가 다릅니다 — push 후 재실행하세요.",
+        }
+
+    # contract SHA: fail-closed
+    if not live_contract:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "live_contract_sha_unavailable",
+            "message": "task_contract.json SHA 조회 실패 — 파일이 없거나 읽기 오류. --authorize-run을 재실행하세요.",
+        }
+    if permit_contract != live_contract:
         return {
             "status": "BLOCKED",
             "failure_code": "permit_contract_stale",
             "message": f"contract SHA 변경 — permit({permit_contract[:12]}) != live({live_contract[:12]}). --authorize-run으로 재발급.",
         }
+
     if permit_rp_sha != live_frozen_sha:
         return {
             "status": "BLOCKED",
@@ -26068,16 +26148,46 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                     review_plan_sha=_auto_rp_sha,
                 )
                 _auto_verdict_raw = str(_auto_agg.get("verdict", "") or "")
-                # aggregate verdict를 단일 verdict로 변환(APPROVED만 승인, 그 외 전부 REJECT).
+                # REJECT#6 P0-1: aggregate verdict를 단일 verdict로 변환.
+                #   APPROVED만 승인, REJECTED는 REJECT, ERROR(또는 unknown)는 reject_count 증가 없이
+                #   cli_error_count를 +1 하는 ERROR 경로로 처리한다(오분류 차단).
                 if _auto_verdict_raw == "APPROVED":
                     args.verdict = "APPROVE_TO_USER"
-                else:
+                    _explicit_verdict = True
+                    print(
+                        f"  [SHARD REVIEW] {len(_shard_results_auto)} shards → "
+                        f"aggregate={_auto_verdict_raw} → verdict={args.verdict}"
+                    )
+                elif _auto_verdict_raw == "REJECTED":
                     args.verdict = "REJECT"
-                _explicit_verdict = True
-                print(
-                    f"  [SHARD REVIEW] {len(_shard_results_auto)} shards → "
-                    f"aggregate={_auto_verdict_raw} → verdict={args.verdict}"
-                )
+                    _explicit_verdict = True
+                    print(
+                        f"  [SHARD REVIEW] {len(_shard_results_auto)} shards → "
+                        f"aggregate={_auto_verdict_raw} → verdict={args.verdict}"
+                    )
+                else:
+                    # ERROR or unknown — reject_count 증가 없이 ERROR 경로로 처리한다.
+                    _agg_failure_reason = str(
+                        _auto_agg.get("failure_reason", "") or _auto_verdict_raw or "aggregate error"
+                    )
+                    _agg_cli_run = {
+                        "status": "ERROR",
+                        "error_type": "aggregate_shard_error",
+                        "error_retryable": True,
+                        "codex_cli_exit_code": None,
+                        "codex_cli_stdout_excerpt": "",
+                        "codex_cli_stderr_excerpt": _agg_failure_reason[:500],
+                    }
+                    print(
+                        f"  [SHARD REVIEW] {len(_shard_results_auto)} shards → "
+                        f"aggregate={_auto_verdict_raw} → ERROR 경로 (reject_count 증가 없음)"
+                    )
+                    _finish_codex_review_error(
+                        state, pipeline_id, _agg_cli_run,
+                        prev_reject_count, prev_cli_error_count,
+                        review_bundle_sha256=_review_bundle_sha256,
+                    )
+                    return  # unreachable — _finish_codex_review_error는 sys.exit 호출
             else:
                 _die(
                     "[BLOCKED] failure_code=codex_verdict_required\n"
