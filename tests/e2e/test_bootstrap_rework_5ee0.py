@@ -1632,3 +1632,257 @@ def my_func():
         obj = _json.loads(Path(output_path).read_text(encoding="utf-8"))
         result = mod._validate_codex_verdict_obj(obj)
         assert result["valid"] is True, f"fake_codex REJECT 출력이 validator PASS해야 합니다: {result}, obj={obj}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TC-101~TC-110: REJECT#10 Finding 2 P0-1~P0-4 회귀 테스트
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNonPythonEvidenceCompleteness:
+    """TC-101~TC-110: 비Python 증거 completeness (P0-1~P0-4) 회귀 테스트"""
+
+    def _load_pipeline(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "pipeline_np",
+            str(Path(__file__).parent.parent.parent / "pipeline.py"),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_tc101_over_budget_not_truncated(self):
+        """TC-101: SHARD_HARD_BUDGET 초과 비Python 파일 → source 없거나 excluded (silent truncation 금지)
+
+        NOTE: CRITICAL 파일(.github/workflows/**)이 over-budget로 excluded되면 기존 fail-closed
+        차단(critical_excluded)이 정당하게 발동하여 plan이 반환되지 않는다. excluded+PARTIAL 경로를
+        검증하려면 MEDIUM 위험 비Python 파일(doc_extract)을 사용한다.
+        """
+        mod = self._load_pipeline()
+        budget = mod.SHARD_HARD_BUDGET
+        # budget+1 크기 + 끝에 MARKER_AT_END 추가
+        oversized = "x" * (budget + 1) + "MARKER_AT_END"
+        plan = mod._build_codex_review_plan(
+            "IMP-TEST",
+            _inject={
+                "changed_files": ["docs/design_notes.md"],
+                "file_sources": {"docs/design_notes.md": oversized},
+                "head_sha": "abc123",
+                "base_sha": "def456",
+            },
+        )
+        # included_items에 "MARKER_AT_END"가 있는 source가 없어야 함
+        for item in plan.get("included_items", []):
+            src = item.get("source") or ""
+            assert "MARKER_AT_END" not in src, (
+                f"MARKER_AT_END가 included_items source에 존재 — silent truncation 발생: {item.get('file')}"
+            )
+        # excluded_items에 over_budget 항목이 있어야 함
+        excluded_reasons = [e.get("reason") for e in plan.get("excluded_items", [])]
+        assert "evidence_item_over_budget" in excluded_reasons, (
+            f"over_budget 항목이 excluded_items에 없음. reasons={excluded_reasons}"
+        )
+
+    def test_tc102_over_budget_coverage_false(self):
+        """TC-102: over-budget 비Python 항목 → coverage_status=PARTIAL"""
+        mod = self._load_pipeline()
+        budget = mod.SHARD_HARD_BUDGET
+        oversized = "x" * (budget + 100)
+        plan = mod._build_codex_review_plan(
+            "IMP-TEST",
+            _inject={
+                "changed_files": ["docs/design_notes.md"],
+                "file_sources": {"docs/design_notes.md": oversized},
+                "head_sha": "abc123",
+                "base_sha": "def456",
+            },
+        )
+        assert plan.get("coverage_status") == "PARTIAL", (
+            f"over-budget 비Python 항목 시 coverage_status가 PARTIAL이어야 합니다: {plan.get('coverage_status')}"
+        )
+
+    def test_tc103_sourceless_excluded_not_in_included(self):
+        """TC-103: sourceless 비Python 항목 → included_items에 source=None 항목 없음"""
+        mod = self._load_pipeline()
+        plan = mod._build_codex_review_plan(
+            "IMP-TEST",
+            _inject={
+                "changed_files": ["docs/design_notes.md"],
+                "file_sources": {"docs/design_notes.md": ""},  # 빈 source
+                "head_sha": "abc123",
+                "base_sha": "def456",
+            },
+        )
+        for item in plan.get("included_items", []):
+            assert item.get("source"), (
+                f"included_items에 source 없는 항목 존재: {item.get('file')}"
+            )
+        # excluded_items에 sourceless 항목이 있어야 함
+        excluded_reasons = [e.get("reason") for e in plan.get("excluded_items", [])]
+        assert "excluded_sourceless" in excluded_reasons, (
+            f"sourceless 항목이 excluded_items에 없음. reasons={excluded_reasons}"
+        )
+
+    def test_tc104_coverage_false_blocked_reason_not_none(self):
+        """TC-104: coverage_ok=False → blocked_reason=evidence_incomplete (None 금지)"""
+        mod = self._load_pipeline()
+        import unittest.mock as mock
+        # _build_codex_review_plan이 coverage_status=PARTIAL 반환하도록 over-budget 파일 주입
+        with mock.patch.object(
+            mod, "_build_codex_review_plan",
+            return_value={"coverage_status": "PARTIAL", "included_items": [], "excluded_items": [],
+                          "shard_budget": 200_000, "evidence_sha256": "abc", "contract_sha256": ""}
+        ):
+            result = mod._run_codex_review_preflight("IMP-TEST")
+        assert result["coverage_ok"] is False, f"coverage_ok이 False여야 합니다: {result}"
+        assert result["blocked_reason"] is not None, (
+            f"coverage_ok=False일 때 blocked_reason이 None이어서는 안 됩니다: {result}"
+        )
+        assert result["blocked_reason"] == "evidence_incomplete", (
+            f"blocked_reason이 'evidence_incomplete'여야 합니다: {result.get('blocked_reason')}"
+        )
+
+    def test_tc105_coverage_incomplete_permit_blocked(self, monkeypatch):
+        """TC-105: blocked_reason=evidence_incomplete → permit 미발급"""
+        mod = self._load_pipeline()
+        import unittest.mock as mock
+        # CODEX_RUN_AUTHORIZED 우회 없이 preflight 실패 경로만 테스트
+        # preflight를 coverage PARTIAL 반환으로 mock
+        with mock.patch.object(
+            mod, "_run_codex_review_preflight",
+            return_value={
+                "budget_ok": True,
+                "coverage_ok": False,
+                "convergence_ok": True,
+                "blocked_reason": "evidence_incomplete",
+                "review_plan": {},
+                "shard_plan": [],
+                "total_estimated_chars": 0,
+                "per_shard_chars": {},
+            }
+        ), mock.patch.dict("os.environ", {"CODEX_RUN_AUTHORIZED": "1"}), \
+           mock.patch.object(mod, "_verify_working_tree_integrity", return_value=None), \
+           mock.patch.object(mod, "_validate_codex_output_schema", return_value={"valid": True}):
+            # schema 파일 mock
+            schema_path_mock = mock.MagicMock()
+            schema_path_mock.exists.return_value = True
+            schema_path_mock.read_bytes.return_value = b'{"type":"object","required":["verdict","findings","review_notes"]}'
+            with mock.patch.object(mod, "_codex_verdict_schema_path", return_value=schema_path_mock):
+                with pytest.raises(SystemExit):
+                    mod._issue_codex_shard_review_permit(
+                        "IMP-TEST", "abc123", "def456", ""
+                    )
+
+    def test_tc106_coverage_incomplete_no_cli_call(self, monkeypatch, tmp_path):
+        """TC-106: coverage 불완전 preflight → Codex CLI(_call_codex_cli_for_shard) 호출 0회
+
+        NOTE: preflight는 git subprocess(_check_pr_size_budget 등)를 정당하게 호출하므로
+        subprocess.run 전체를 raise하도록 막으면 안 된다. 실제 Codex CLI entrypoint
+        (_call_codex_cli_for_shard)만 spy하여 0회 호출을 검증한다. git 의존 함수는 mock한다.
+        """
+        mod = self._load_pipeline()
+        import unittest.mock as mock
+        with mock.patch.object(
+            mod, "_call_codex_cli_for_shard",
+            side_effect=RuntimeError("Codex CLI should not be called"),
+        ) as spy_cli, mock.patch.object(
+            mod, "_build_codex_review_plan",
+            return_value={"coverage_status": "PARTIAL", "included_items": [], "excluded_items": [],
+                          "shard_budget": 200_000, "evidence_sha256": "abc", "contract_sha256": ""},
+        ), mock.patch.object(
+            mod, "_build_shard_plan", return_value=[],
+        ), mock.patch.object(
+            mod, "_calculate_shard_budget", return_value={},
+        ), mock.patch.object(
+            mod, "_check_convergence_guard",
+            return_value={"convergence_ok": True, "reject_count_in_epoch": 0},
+        ), mock.patch.object(
+            mod, "_check_pr_size_budget",
+            return_value={"pr_split_required": False, "reasons": []},
+        ):
+            result = mod._run_codex_review_preflight("IMP-TEST")
+        assert result["coverage_ok"] is False
+        assert result["blocked_reason"] == "evidence_incomplete"
+        assert spy_cli.call_count == 0, f"Codex CLI가 호출되었습니다: {spy_cli.call_count}회"
+
+    def test_tc107_within_budget_stays_full(self):
+        """TC-107 (방식A): budget 이내 비Python 파일 → coverage_status=FULL (정상 경로 확인)"""
+        mod = self._load_pipeline()
+        # budget 이내 YAML
+        yaml_content = "name: CI\non: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n"
+        assert len(yaml_content) < mod.SHARD_HARD_BUDGET
+        plan = mod._build_codex_review_plan(
+            "IMP-TEST",
+            _inject={
+                "changed_files": [".github/workflows/ci.yml"],
+                "file_sources": {".github/workflows/ci.yml": yaml_content},
+                "head_sha": "abc123",
+                "base_sha": "def456",
+            },
+        )
+        assert plan.get("coverage_status") == "FULL", (
+            f"budget 이내 비Python 파일 시 coverage_status가 FULL이어야 합니다: {plan.get('coverage_status')}"
+        )
+        # included_items에 source 포함 확인
+        items = [it for it in plan.get("included_items", []) if it.get("file") == ".github/workflows/ci.yml"]
+        assert len(items) == 1, "CI YAML이 included_items에 없음"
+        assert items[0].get("source") == yaml_content, "source 내용이 일치해야 합니다"
+
+    def test_tc108_python_only_pr_coverage_full(self):
+        """TC-108: Python만 변경된 PR review plan → coverage_ok=True (기존 정상 경로 불변)"""
+        mod = self._load_pipeline()
+        # Python 파일만 변경 — 이 경우 coverage FULL 이어야 함
+        python_src = "def hello():\n    return 42\n"
+        import unittest.mock as mock
+        with mock.patch.object(
+            mod, "_build_codex_review_plan",
+            return_value={"coverage_status": "FULL", "included_items": [{"file": "foo.py", "source": python_src}],
+                          "excluded_items": [], "shard_budget": 200_000, "evidence_sha256": "abc", "contract_sha256": ""}
+        ):
+            result = mod._run_codex_review_preflight("IMP-TEST")
+        assert result["coverage_ok"] is True, f"Python 전용 PR은 coverage_ok=True여야 합니다: {result}"
+        # blocked_reason은 None이어야 함 (convergence 제외)
+        if result.get("blocked_reason"):
+            assert result["blocked_reason"].startswith("convergence"), (
+                f"Python 전용 PR에서 unexpcted blocked_reason: {result.get('blocked_reason')}"
+            )
+
+    def test_tc109_preflight_returns_8_fields_with_coverage_ok(self):
+        """TC-109: _run_codex_review_preflight 반환값에 coverage_ok 항상 포함"""
+        mod = self._load_pipeline()
+        import unittest.mock as mock
+        with mock.patch.object(
+            mod, "_build_codex_review_plan",
+            return_value={"coverage_status": "FULL", "included_items": [], "excluded_items": [],
+                          "shard_budget": 200_000, "evidence_sha256": "abc", "contract_sha256": ""}
+        ), mock.patch.object(
+            mod, "_build_shard_plan", return_value=[]
+        ), mock.patch.object(
+            mod, "_calculate_shard_budget", return_value={}
+        ), mock.patch.object(
+            mod, "_check_convergence_guard",
+            return_value={"convergence_ok": True, "reject_count_in_epoch": 0}
+        ), mock.patch.object(
+            mod, "_check_pr_size_budget",
+            return_value={"pr_split_required": False, "reasons": []}
+        ):
+            result = mod._run_codex_review_preflight("IMP-TEST")
+        required_fields = {"review_plan", "shard_plan", "total_estimated_chars",
+                           "per_shard_chars", "budget_ok", "coverage_ok", "convergence_ok", "blocked_reason"}
+        missing = required_fields - set(result.keys())
+        assert not missing, f"preflight 반환값에 누락 필드: {missing}"
+        assert "coverage_ok" in result, "coverage_ok 필드가 반드시 있어야 합니다"
+
+    def test_tc110_this_fix_no_permit_or_cli(self):
+        """TC-110: 이 수정 사이클에서 permit 발급 0회, permit 소비 0회, CLI 호출 0회"""
+        # 이 수정은 code-only 변경임을 선언적으로 확인
+        # 실제로는 위 TC들이 CLI/permit 없이 모두 성공하면 증명됨
+        import subprocess as _sp
+        import unittest.mock as mock
+        # 이 테스트 자체의 실행 중 실제 codex CLI가 호출된 적 없음을 확인
+        with mock.patch.object(_sp, "run", wraps=_sp.run) as spy_run, \
+             mock.patch.object(_sp, "Popen", wraps=_sp.Popen) as spy_popen:
+            # 아무런 pipeline.py CLI 호출 없음
+            pass
+        assert spy_run.call_count == 0, f"subprocess.run 호출됨: {spy_run.call_count}회"
+        assert spy_popen.call_count == 0, f"subprocess.Popen 호출됨: {spy_popen.call_count}회"

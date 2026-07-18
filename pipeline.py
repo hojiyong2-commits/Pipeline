@@ -23459,36 +23459,38 @@ def _build_codex_review_plan(
                         if ev["kind"] != "fallback_syntax_error":
                             changed_symbols.append(ev["name"])
         else:
-            # inject 모드 또는 비-Python 파일: 기존 동작(파일 단위) 보존.
-            # Finding 2 fix: source_text를 포함하여 비Python 파일도 shard prompt에 등장하도록 한다.
-            # SHARD_HARD_BUDGET으로 상한을 둬 과도한 크기를 방지한다.
-            chunk = source_text[:SHARD_HARD_BUDGET] if source_text else ""
-            char_count = len(chunk)
+            # inject 모드 또는 비-Python 파일.
+            # P0-1: 조용한 truncation 금지 — budget 초과 시 excluded 처리.
+            # P0-4: sourceless 항목도 excluded 처리(included_items 포함 금지).
             item_id = f
-            included_items.append({
-                "id": item_id,
-                "file": f,
-                "risk": risk,
-                "evidence_mode": mode,
-                "char_count": char_count,
-                "source": chunk,
-                "sha256": _sha256_text(chunk) if chunk else "",
-            })
-            estimated_chars += char_count
-
-            # Python 파일은 AST 범위를 source_ranges에 기록
-            if mode in ("full_ast", "summary") and source_text:
-                for ev in _extract_evidence_ast_from_source(f, source_text):
-                    source_ranges.append({
-                        "file": f,
-                        "symbol": ev["name"],
-                        "kind": ev["kind"],
-                        "lineno": ev["lineno"],
-                        "end_lineno": ev["end_lineno"],
-                        "sha256": ev["sha256"],
-                    })
-                    if ev["kind"] != "fallback_syntax_error":
-                        changed_symbols.append(ev["name"])
+            if not source_text:
+                # P0-4: source 없는 항목 → excluded
+                excluded_items.append({
+                    "item": item_id,
+                    "risk": risk,
+                    "reason": "excluded_sourceless",
+                })
+            elif len(source_text) > SHARD_HARD_BUDGET:
+                # P0-1: budget 초과 → 조용한 truncation 금지, hard exclude
+                excluded_items.append({
+                    "item": item_id,
+                    "risk": risk,
+                    "reason": "evidence_item_over_budget",
+                    "char_count": len(source_text),
+                    "budget": SHARD_HARD_BUDGET,
+                })
+            else:
+                char_count = len(source_text)
+                included_items.append({
+                    "id": item_id,
+                    "file": f,
+                    "risk": risk,
+                    "evidence_mode": mode,
+                    "char_count": char_count,
+                    "source": source_text,
+                    "sha256": _sha256_text(source_text),
+                })
+                estimated_chars += char_count
 
     # 차단 3: CRITICAL 파일이 excluded_items에 있으면 즉시 차단
     critical_excluded = [e for e in excluded_items if e["risk"] == "CRITICAL"]
@@ -23524,9 +23526,14 @@ def _build_codex_review_plan(
 
     # coverage: content 제외(unknown/benign)만 계산. 보안 제외는 FULL 유지.
     content_excluded = [
-        e for e in excluded_items if e["reason"] in ("unknown_or_binary", "benign_skip")
+        e for e in excluded_items if e["reason"] in (
+            "unknown_or_binary",
+            "benign_skip",
+            "evidence_item_over_budget",   # P0-1: budget 초과 excluded
+            "excluded_sourceless",          # P0-4: sourceless excluded
+        )
     ]
-    # source 없는 included_items가 있으면 PARTIAL (비Python 증거가 없는 경우)
+    # P0-4 이후 included_items에 sourceless 항목 없음 (하위 호환 안전망 유지)
     _sourceless_items = [it for it in included_items if not it.get("source")]
     coverage_status = "FULL" if not content_excluded and not _sourceless_items else "PARTIAL"
     exclusion_reason = ""
@@ -24910,6 +24917,9 @@ def _run_codex_review_preflight(pipeline_id: str, skip_cli: bool = True) -> Dict
             int(s.get("prompt_chars", 0) or 0) <= SHARD_TARGET_BUDGET for s in shard_plan
         )
         coverage_ok = str(review_plan.get("coverage_status", "") or "") in ("FULL", "COMPLETE")
+        # P0-2: coverage 불완전하면 blocked_reason을 반드시 설정 (null 금지)
+        if not coverage_ok and not blocked_reason:
+            blocked_reason = "evidence_incomplete"
     except SystemExit:
         if not blocked_reason:
             blocked_reason = "preflight_plan_blocked"
@@ -25573,6 +25583,20 @@ def _issue_codex_shard_review_permit(
             "[BLOCKED] failure_code=codex_output_schema_invalid\n"
             f"  codex_verdict_schema.json OpenAI Structured Outputs 검증 실패:\n"
             f"  {_schema_check.get('reason', '(이유 없음)')}"
+        )
+
+    # P0-3: permit 발급 전 preflight 강제 검증 — coverage 불완전하면 발급 차단
+    _pf = _run_codex_review_preflight(pipeline_id)
+    if not (
+        _pf.get("budget_ok")
+        and _pf.get("coverage_ok")
+        and _pf.get("convergence_ok")
+        and _pf.get("blocked_reason") is None
+    ):
+        _pf_reason = _pf.get("blocked_reason") or "preflight_failed"
+        _die(
+            f"[BLOCKED] failure_code={_pf_reason}\n"
+            "  permit 발급 전 preflight 검증 실패 — coverage/budget/convergence 확인 후 재시도하세요."
         )
 
     from datetime import datetime, timedelta, timezone  # noqa: PLC0415
