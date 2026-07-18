@@ -960,7 +960,7 @@ class TestReject7SchemaValidator:
     """TC-64~TC-68: _validate_codex_output_schema 검증"""
 
     def _import_validator(self):
-        import importlib, sys
+        import importlib
         # 이미 로드된 경우 캐시에서 가져옴
         spec = importlib.util.spec_from_file_location(
             "pipeline_r7",
