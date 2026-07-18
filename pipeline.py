@@ -23278,6 +23278,64 @@ def _classify_codex_review_file(filepath: str) -> Tuple[str, str, Optional[str]]
     return risk, mode, reason
 
 
+def _extract_module_level_hunk_evidence(
+    filepath: str,
+    unmapped_lines: List[int],
+    source_text: str,
+    max_chars: int = 4096,
+) -> Dict[str, Any]:
+    """모듈 레벨 변경 라인의 실제 코드 행을 증거로 추출한다.
+
+    함수/클래스 밖의 import/상수 등 모듈 레벨 변경을 Codex가 볼 수 있도록
+    실제 코드 행과 전후 2줄 컨텍스트를 포함한 증거를 생성한다.
+
+    Args:
+        filepath: Python 파일의 repo-relative 경로.
+        unmapped_lines: _build_coverage_manifest의 unmapped_lines 목록.
+        source_text: 파일 전체 소스 텍스트.
+        max_chars: 증거 텍스트의 최대 문자 수(SHARD_HARD_BUDGET보다 작은 값 사용).
+    Returns:
+        {evidence_id, file, source, sha256, char_count, evidence_mode}.
+    """
+    lines = source_text.splitlines(keepends=True)
+    total_lines = len(lines)
+
+    # 연속 구간 그룹화 + 전후 2줄 컨텍스트 추가
+    sorted_ml = sorted(set(unmapped_lines))
+    groups: List[List[int]] = []
+    for ln in sorted_ml:
+        if groups and ln <= groups[-1][-1] + 1:
+            groups[-1].append(ln)
+        else:
+            groups.append([ln])
+
+    fragments: List[str] = []
+    total_chars = 0
+    for group in groups:
+        start = max(1, group[0] - 2)
+        end = min(total_lines, group[-1] + 2)
+        fragment = "".join(lines[start - 1:end])
+        if total_chars + len(fragment) > max_chars:
+            remaining = max_chars - total_chars
+            if remaining > 0:
+                fragments.append(fragment[:remaining])
+            break
+        fragments.append(fragment)
+        total_chars += len(fragment)
+
+    text = "".join(fragments)
+    h = _sha256_text(text)
+    fp_hash = _sha256_text(filepath)[:8]
+    return {
+        "evidence_id": f"ml_{fp_hash}_{h[:8]}",
+        "file": filepath,
+        "source": text,
+        "sha256": h,
+        "char_count": len(text),
+        "evidence_mode": "module_level_hunk",
+    }
+
+
 # [Purpose]: MT-1 — PR diff 분석 + evidence 후보 수립 + 사전 입력 크기 검사. codex_review_plan.json
 #            SSoT dict를 반환한다. 전체 diff/파일 원문을 prompt에 넣지 않고 AST 증거만 계획한다.
 # [Assumptions]: git이 실행 가능하고 origin/main 기준 diff가 존재한다(실 경로). 테스트는 _inject로
@@ -23422,12 +23480,26 @@ def _build_codex_review_plan(
                         })
                         changed_symbols.append(ev["symbol_name"])
                     if not cov["coverage_complete"] and cov["unmapped_lines"]:
-                        # 모듈 레벨(함수/클래스 밖) 변경 라인은 source_ranges 메타로만 관측 기록한다.
+                        # 모듈 레벨(함수/클래스 밖) 변경 라인은 실제 source를 포함한
+                        # included_item으로 추가한다(Codex가 코드를 볼 수 있어야 함).
+                        ml_ev = _extract_module_level_hunk_evidence(
+                            f, cov["unmapped_lines"], source_text
+                        )
+                        included_items.append({
+                            "id": ml_ev["evidence_id"],
+                            "file": f,
+                            "risk": risk,
+                            "evidence_mode": "module_level_hunk",
+                            "char_count": ml_ev["char_count"],
+                            "source": ml_ev["source"],
+                            "sha256": ml_ev["sha256"],
+                        })
+                        estimated_chars += ml_ev["char_count"]
                         source_ranges.append({
                             "file": f,
                             "symbol": "<module-level>",
-                            "kind": "module_level_unmapped",
-                            "unmapped_lines": cov["unmapped_lines"][:50],
+                            "kind": "module_level_hunk",
+                            "sha256": ml_ev["sha256"],
                         })
                 else:
                     # 변경 라인은 있으나 감싸는 함수/클래스가 없음(모듈 레벨) → 250k 상한 capped 조각.
@@ -24791,11 +24863,28 @@ def _collect_pr_size_metrics() -> Dict[str, Any]:
                     continue
                 ast_nodes = _map_lines_to_ast_nodes(f, ranges)
                 evs = _extract_changed_symbols_evidence(f, ast_nodes)
-                for ev in evs:
-                    cc = int(ev.get("char_count", 0) or 0)
-                    total_evidence_chars += cc
-                    if cc > max_item_chars:
-                        max_item_chars = cc
+                if evs:
+                    for ev in evs:
+                        cc = int(ev.get("char_count", 0) or 0)
+                        total_evidence_chars += cc
+                        if cc > max_item_chars:
+                            max_item_chars = cc
+                else:
+                    # module-level 전용 변경: _extract_module_level_hunk_evidence로 실제 source 추정
+                    try:
+                        source_text_ml = _read_text_fallback(BASE_DIR / f)
+                    except OSError:
+                        source_text_ml = ""
+                    if source_text_ml and ranges:
+                        ml_ev = _extract_module_level_hunk_evidence(
+                            f,
+                            [ln for start, end in ranges for ln in range(start, end + 1)],
+                            source_text_ml,
+                        )
+                        cc = ml_ev["char_count"]
+                        total_evidence_chars += cc
+                        if cc > max_item_chars:
+                            max_item_chars = cc
             except (RuntimeError, OSError):
                 continue  # 개별 파일 실패는 건너뛴다(전체 실패로 승격 금지).
         metrics["estimated_evidence_chars"] = total_evidence_chars
@@ -24982,21 +25071,17 @@ _FROZEN_PLAN_EXCLUDE_KEYS: frozenset = frozenset({"generated_at", "saved_at", "r
 
 
 # [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제4) — Codex CLI 실행 파일 경로를 탐색한다.
-# [Assumptions]: codex CLI가 PATH에 있으면 shutil.which로 찾는다.
+# [Assumptions]: codex CLI가 PATH에 있으면 shutil.which로 찾는다. CODEX_CLI_PATH 환경변수는 무시한다.
 # [Vulnerability & Risks]: 없으면 None을 반환하여 상위가 codex_cli_not_connected로 fail-closed 처리한다.
 # [Improvement]: 사용자 설정(codex.path)을 우선 조회하도록 확장할 수 있다.
 def _find_codex_bin() -> Optional[str]:
     """Codex CLI 실행 파일 경로를 반환한다(없으면 None).
 
-    테스트 격리용 CODEX_CLI_PATH 환경변수를 우선 사용한다.
+    shutil.which("codex")로만 탐색한다. 테스트 격리는 _cli_factory DI seam 또는
+    PATH 조작 방식을 사용한다(CODEX_CLI_PATH 환경변수 무시).
     Returns:
         codex 실행 파일 절대 경로 또는 None.
     """
-    _cli_override = os.environ.get("CODEX_CLI_PATH", "")
-    if _cli_override:
-        _p = Path(_cli_override)
-        if _p.exists():
-            return str(_p)
     return shutil.which("codex")
 
 

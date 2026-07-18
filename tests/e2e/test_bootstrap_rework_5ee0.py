@@ -487,10 +487,17 @@ def test_r5_tc44_authorize_then_review_separate_processes(tmp_path):
 
         time.sleep(2)  # generated_at 차이가 생길 시간(frozen SHA는 불변이어야 함)
 
-        # subprocess B: review with fake codex
+        # subprocess B: review with fake codex — PATH 조작 방식 (CODEX_CLI_PATH 사용 금지)
+        fake_bin_dir = tmp_path / "fake_codex_bin"
+        fake_bin_dir.mkdir(exist_ok=True)
+        codex_bat = fake_bin_dir / "codex.bat"
+        codex_bat.write_text(
+            f"@echo off\r\n{sys.executable} {FAKE_CODEX} %*\r\n",
+            encoding="utf-8",
+        )
         review_env = {
             **base_env,
-            "CODEX_CLI_PATH": str(FAKE_CODEX),
+            "PATH": str(fake_bin_dir) + os.pathsep + os.environ.get("PATH", ""),
             "FAKE_CODEX_ARGV_FILE": argv_file,
             "FAKE_CODEX_CALL_COUNT_FILE": count_file,
             "FAKE_CODEX_VERDICT": "APPROVE_TO_USER",
@@ -686,9 +693,6 @@ def test_r5_tc49_schema_missing_returns_error(pipe, tmp_path, monkeypatch):
         "review_plan_sha": "rp_" + "m" * 61,
         "contract_sha": "contract_" + "n" * 55,
     }
-
-    # fake codex를 CODEX_CLI_PATH에 등록 (호출되면 안 됨)
-    monkeypatch.setenv("CODEX_CLI_PATH", str(FAKE_CODEX))
 
     result = pipe._call_codex_cli_for_shard(shard, permit)
     assert result["verdict"] == "ERROR"
@@ -1886,3 +1890,195 @@ class TestNonPythonEvidenceCompleteness:
             pass
         assert spy_run.call_count == 0, f"subprocess.run 호출됨: {spy_run.call_count}회"
         assert spy_popen.call_count == 0, f"subprocess.Popen 호출됨: {spy_popen.call_count}회"
+
+
+# ---------------------------------------------------------------------------
+# TC-111: _find_codex_bin()이 CODEX_CLI_PATH 환경변수를 무시하고 shutil.which만 사용함을 검증
+# ---------------------------------------------------------------------------
+def test_tc111_find_codex_bin_ignores_codex_cli_path(tmp_path, monkeypatch):
+    """CODEX_CLI_PATH 환경변수가 설정되어도 _find_codex_bin이 이를 무시한다."""
+    import shutil as _shutil
+    mod = _get_pipeline_module()
+
+    fake_bin = tmp_path / "fake_codex_never_used.exe"
+    fake_bin.write_bytes(b"")
+
+    # CODEX_CLI_PATH에 존재하는 가짜 경로 설정
+    monkeypatch.setenv("CODEX_CLI_PATH", str(fake_bin))
+
+    result = mod._find_codex_bin()
+
+    # 결과가 CODEX_CLI_PATH 값이 아닌 shutil.which 결과여야 함
+    expected = _shutil.which("codex")  # 설치 안 됐으면 None
+    assert result == expected, (
+        f"_find_codex_bin이 CODEX_CLI_PATH({fake_bin})를 반환했습니다. "
+        f"shutil.which('codex') 결과({expected})를 반환해야 합니다."
+    )
+    assert result != str(fake_bin), (
+        "CODEX_CLI_PATH 환경변수가 _find_codex_bin()에 영향을 주면 안 됩니다."
+    )
+
+
+# ---------------------------------------------------------------------------
+# TC-112: module-level 전용 변경 시 _collect_pr_size_metrics가 max_single_evidence_chars > 0 반환
+# ---------------------------------------------------------------------------
+def test_tc112_module_level_only_size_metrics_nonzero(monkeypatch):
+    """module-level 전용 변경(AST 노드 없음) 시 max_single_evidence_chars > 0이어야 한다."""
+    import unittest.mock as mock
+
+    mod = _get_pipeline_module()
+
+    python_src = "CONSTANT_A = 42\nCONSTANT_B = 'hello'\n"
+
+    # _get_changed_line_ranges: [(1, 2)] 반환 (라인 1~2 변경)
+    # _map_lines_to_ast_nodes: [] 반환 (AST 노드 없음 — module-level 전용)
+    # _extract_changed_symbols_evidence: [] 반환 (AST 노드가 없으므로)
+    with mock.patch.object(mod, "_git_changed_files", return_value=["dummy.py"]), \
+         mock.patch.object(mod, "_get_changed_line_ranges", return_value=[(1, 2)]), \
+         mock.patch.object(mod, "_map_lines_to_ast_nodes", return_value=[]), \
+         mock.patch.object(mod, "_extract_changed_symbols_evidence", return_value=[]), \
+         mock.patch.object(mod, "_read_text_fallback", return_value=python_src):
+        metrics = mod._collect_pr_size_metrics()
+
+    assert metrics["max_single_evidence_chars"] > 0, (
+        f"module-level 전용 변경 시 max_single_evidence_chars가 0이면 "
+        f"evidence_computation_failed로 잘못 차단됩니다. 실제값: {metrics['max_single_evidence_chars']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# TC-113: module-level 변경 라인이 _build_codex_review_plan의 included_items에 source 포함
+# ---------------------------------------------------------------------------
+def test_tc113_module_level_in_included_items_with_source(tmp_path, monkeypatch):
+    """module-level(함수/클래스 밖) 변경 라인이 included_items에 module_level_hunk(source 포함)로 추가되어야 한다.
+
+    module_level_hunk 경로는 real-git 경로(_inject 없음)에서만 실행되므로 git/AST
+    헬퍼를 mock으로 대체하여 결정적으로 검증한다. inject 모드는 legacy 경로라 이 경로에
+    도달하지 않는다.
+    """
+    import unittest.mock as mock
+
+    mod = _get_pipeline_module()
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "state.json"))
+
+    # 라인 1~2: module-level(import/상수), 라인 4~5: 함수 foo()
+    python_src = "import os\nCONSTANT = 42\n\ndef foo():\n    return CONSTANT\n"
+    foo_source = "def foo():\n    return CONSTANT\n"
+    fake_ev = [{
+        "evidence_id": "dummy_ml.py::foo",
+        "filepath": "dummy_ml.py",
+        "symbol_name": "foo",
+        "source": foo_source,
+        "char_count": len(foo_source),
+        "sha256": mod._sha256_text(foo_source),
+        "lineno": 4,
+        "end_lineno": 5,
+        "reason": "changed_symbol",
+    }]
+    # 함수 foo는 심볼로 매핑됐으나 라인 1~2(module-level)는 unmapped으로 남음
+    fake_cov = {"coverage_complete": False, "unmapped_lines": [1, 2]}
+
+    with mock.patch.object(mod, "_git_changed_files", return_value=["dummy_ml.py"]), \
+         mock.patch.object(mod, "_get_changed_line_ranges", return_value=[(1, 5)]), \
+         mock.patch.object(mod, "_map_lines_to_ast_nodes",
+                           return_value=[{"name": "foo", "lineno": 4, "end_lineno": 5}]), \
+         mock.patch.object(mod, "_extract_changed_symbols_evidence", return_value=fake_ev), \
+         mock.patch.object(mod, "_build_coverage_manifest", return_value=fake_cov), \
+         mock.patch.object(mod, "_read_text_fallback", return_value=python_src):
+        plan = mod._build_codex_review_plan(
+            "IMP-TEST",
+            pr_head_sha="a" * 40,
+            base_sha="b" * 40,
+        )
+
+    items = plan.get("included_items", [])
+    ml_items = [it for it in items if it.get("evidence_mode") == "module_level_hunk"]
+
+    # module_level_hunk 항목이 있어야 함
+    assert ml_items, (
+        f"module-level 변경 라인이 included_items에 module_level_hunk로 포함되지 않음. "
+        f"included_items: {[it.get('evidence_mode') for it in items]}"
+    )
+
+    # source가 비어 있으면 안 됨
+    for it in ml_items:
+        assert it.get("source"), (
+            f"module_level_hunk 항목의 source가 비어 있습니다: {it}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TC-114: 함수 변경 + module-level 변경이 함께 있을 때 둘 다 included_items에 포함
+# ---------------------------------------------------------------------------
+def test_tc114_function_and_module_level_both_included(tmp_path, monkeypatch):
+    """함수 변경 + module-level 변경이 함께 있을 때 changed_symbol과 module_level_hunk가 모두 포함되어야 한다."""
+    import unittest.mock as mock
+
+    mod = _get_pipeline_module()
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "state.json"))
+
+    # 라인 1~2: module-level (CONSTANT/import), 라인 4~5: 함수 foo()
+    python_src = "CONSTANT = 42\nimport sys\n\ndef foo():\n    return CONSTANT\n"
+    foo_source = "def foo():\n    return CONSTANT\n"
+    fake_ev = [{
+        "evidence_id": "mixed_ml.py::foo",
+        "filepath": "mixed_ml.py",
+        "symbol_name": "foo",
+        "source": foo_source,
+        "char_count": len(foo_source),
+        "sha256": mod._sha256_text(foo_source),
+        "lineno": 4,
+        "end_lineno": 5,
+        "reason": "changed_symbol",
+    }]
+    fake_cov = {"coverage_complete": False, "unmapped_lines": [1, 2]}
+
+    with mock.patch.object(mod, "_git_changed_files", return_value=["mixed_ml.py"]), \
+         mock.patch.object(mod, "_get_changed_line_ranges", return_value=[(1, 5)]), \
+         mock.patch.object(mod, "_map_lines_to_ast_nodes",
+                           return_value=[{"name": "foo", "lineno": 4, "end_lineno": 5}]), \
+         mock.patch.object(mod, "_extract_changed_symbols_evidence", return_value=fake_ev), \
+         mock.patch.object(mod, "_build_coverage_manifest", return_value=fake_cov), \
+         mock.patch.object(mod, "_read_text_fallback", return_value=python_src):
+        plan = mod._build_codex_review_plan(
+            "IMP-TEST",
+            pr_head_sha="a" * 40,
+            base_sha="b" * 40,
+        )
+
+    items = plan.get("included_items", [])
+    modes = [it.get("evidence_mode") for it in items]
+
+    # changed_symbol(함수 foo)과 module_level_hunk(module-level 라인) 둘 다 있어야 함
+    assert "changed_symbol" in modes, f"함수 변경(changed_symbol)이 included_items에 없음. modes: {modes}"
+    assert "module_level_hunk" in modes, f"module-level 변경(module_level_hunk)이 included_items에 없음. modes: {modes}"
+
+    # 모든 항목의 source가 비어 있지 않아야 함
+    for it in items:
+        if it.get("file") == "mixed_ml.py":
+            assert it.get("source"), f"항목 source가 비어 있습니다: {it}"
+
+
+# ---------------------------------------------------------------------------
+# TC-115: _check_pr_size_budget이 module-level 전용 변경을 evidence_computation_failed로 차단하지 않음
+# ---------------------------------------------------------------------------
+def test_tc115_module_level_not_blocked_as_evidence_computation_failed(monkeypatch):
+    """module-level 전용 변경 시 _check_pr_size_budget이 evidence_computation_failed로 차단하지 않는다."""
+    import unittest.mock as mock
+
+    mod = _get_pipeline_module()
+
+    python_src = "CONSTANT_X = 100\nCONSTANT_Y = 200\n"
+
+    with mock.patch.object(mod, "_git_changed_files", return_value=["const_only.py"]), \
+         mock.patch.object(mod, "_get_changed_line_ranges", return_value=[(1, 2)]), \
+         mock.patch.object(mod, "_map_lines_to_ast_nodes", return_value=[]), \
+         mock.patch.object(mod, "_extract_changed_symbols_evidence", return_value=[]), \
+         mock.patch.object(mod, "_read_text_fallback", return_value=python_src):
+        result = mod._check_pr_size_budget("IMP-TEST")
+
+    # evidence_computation_failed로 차단되면 안 됨
+    reasons = result.get("reasons", [])
+    assert not any("evidence_computation_failed" in r for r in reasons), (
+        f"module-level 전용 변경이 evidence_computation_failed로 잘못 차단됨: {reasons}"
+    )
