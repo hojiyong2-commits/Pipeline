@@ -7898,15 +7898,17 @@ def _run_codex_preflight_checks(
         _ok = False
     _record(_ok, "reject_count_below_limit")
 
-    # 7. nonce 노출 없음 — 8자 base32(A-Z2-7) 토큰 중 알파벳을 포함한 것을 nonce 후보로 본다.
-    #    pipeline_id 날짜(예: 20260710)는 base32에 없는 0/1/8/9를 포함하므로 오탐되지 않고,
-    #    소문자 SHA hex(예: abc123, 64자 git/packet SHA)도 대문자 base32와 매칭되지 않는다.
+    # 7. 실제 승인 코드(ACCEPT-{pipeline_id}-{nonce8}) 노출 없음.
+    #    일반 대문자 식별자(PIPELINE, APPROVED, CRITICAL 등) 오탐을 방지하기 위해
+    #    실제 승인 코드 전체 패턴만 탐지한다.
+    #    패턴: ACCEPT-{TYPE}-{YYYYMMDD}-{4자리해시}-{8자 base32 nonce}
     try:
-        _nonce_hit = False
-        for _m in re.findall(r"(?<![A-Za-z0-9])[A-Z2-7]{8}(?![A-Za-z0-9=])", serialized):
-            if any(_c.isalpha() for _c in _m):
-                _nonce_hit = True
-                break
+        _nonce_hit = bool(
+            re.search(
+                r"ACCEPT-[A-Z]+-\d{8}-[A-Z0-9]{4}-[A-Z2-7]{8}",
+                serialized,
+            )
+        )
         _ok = not _nonce_hit
     except Exception:  # noqa: BLE001
         _ok = False
@@ -23458,7 +23460,10 @@ def _build_codex_review_plan(
                             changed_symbols.append(ev["name"])
         else:
             # inject 모드 또는 비-Python 파일: 기존 동작(파일 단위) 보존.
-            char_count = len(source_text)
+            # Finding 2 fix: source_text를 포함하여 비Python 파일도 shard prompt에 등장하도록 한다.
+            # SHARD_HARD_BUDGET으로 상한을 둬 과도한 크기를 방지한다.
+            chunk = source_text[:SHARD_HARD_BUDGET] if source_text else ""
+            char_count = len(chunk)
             item_id = f
             included_items.append({
                 "id": item_id,
@@ -23466,6 +23471,8 @@ def _build_codex_review_plan(
                 "risk": risk,
                 "evidence_mode": mode,
                 "char_count": char_count,
+                "source": chunk,
+                "sha256": _sha256_text(chunk) if chunk else "",
             })
             estimated_chars += char_count
 
@@ -23519,7 +23526,9 @@ def _build_codex_review_plan(
     content_excluded = [
         e for e in excluded_items if e["reason"] in ("unknown_or_binary", "benign_skip")
     ]
-    coverage_status = "FULL" if not content_excluded else "PARTIAL"
+    # source 없는 included_items가 있으면 PARTIAL (비Python 증거가 없는 경우)
+    _sourceless_items = [it for it in included_items if not it.get("source")]
+    coverage_status = "FULL" if not content_excluded and not _sourceless_items else "PARTIAL"
     exclusion_reason = ""
     if excluded_items:
         exclusion_reason = ";".join(sorted({str(e["reason"]) for e in excluded_items}))
@@ -23776,7 +23785,7 @@ def _map_lines_to_ast_nodes(
         filepath: Python 파일의 repo-relative 경로(None/비str 금지).
         changed_ranges: _get_changed_line_ranges 결과(None 금지, 빈 list 허용).
     Returns:
-        [{node_type, name, lineno, end_lineno, reason}, ...] (심볼 이름 기준 dedup).
+        [{node_type, name, lineno, end_lineno, reason}, ...] ((node_type, name, lineno) 기준 dedup).
     Raises:
         TypeError: filepath가 None/비str이거나 changed_ranges가 None/비list인 경우.
         RuntimeError: 파일 읽기/AST 파싱 실패(fail-closed).
@@ -23817,7 +23826,7 @@ def _map_lines_to_ast_nodes(
             "end_lineno": getattr(node, "end_lineno", node.lineno) or node.lineno,
         })
 
-    matched_names: Set[str] = set()
+    matched_keys: Set[Tuple[str, str, int]] = set()
     result: List[Dict[str, Any]] = []
     for start, end in changed_ranges:
         for lineno in range(start, end + 1):
@@ -23829,9 +23838,12 @@ def _map_lines_to_ast_nodes(
                     if size < best_size:
                         best_size = size
                         best = nd
-            if best is not None and best["name"] not in matched_names:
-                matched_names.add(best["name"])
-                result.append({**best, "reason": f"contains changed line {lineno}"})
+            if best is not None:
+                # (node_type, name, lineno) 조합으로 dedup: 동일 이름 메서드를 다른 클래스에서 구별
+                _key = (best["node_type"], best["name"], best["lineno"])
+                if _key not in matched_keys:
+                    matched_keys.add(_key)
+                    result.append({**best, "reason": f"contains changed line {lineno}"})
     return result
 
 

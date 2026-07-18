@@ -15,7 +15,6 @@
 import json
 import os
 import sys
-import time
 from pathlib import Path
 
 
@@ -51,15 +50,25 @@ def main() -> None:
     verdict = os.environ.get("FAKE_CODEX_VERDICT", "APPROVE_TO_USER")
 
     # 5) verdict JSON 파일 작성
-    verdict_json = {
+    # 현재 schema 계약: verdict + findings + review_notes만 (extra root key 불허)
+    verdict_json: dict = {
         "verdict": verdict,
         "findings": [],
-        "schema_version": 6,
-        "reviewed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "review_id": "fake-review-" + str(int(time.time())),
-        "model_used": "gpt-5.6-sol",
-        "pipeline_id": os.environ.get("FAKE_CODEX_PIPELINE_ID", "IMP-TEST"),
+        "review_notes": "",
     }
+    if verdict == "REJECT":
+        verdict_json["findings"] = [{
+            "scope": "fake-scope",
+            "severity": "HIGH",
+            "root_cause_category": "test_category",
+            "evidence": "fake evidence line",
+            "reproduction": "fake reproduction steps",
+            "required_fix": "fake required fix",
+            "acceptance_criteria": ["fake acceptance criterion"],
+        }]
+        verdict_json["review_notes"] = "fake rejection"
+    else:
+        verdict_json["review_notes"] = "fake approval"
     if output_path:
         try:
             Path(output_path).write_text(
