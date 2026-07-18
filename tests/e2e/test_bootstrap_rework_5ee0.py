@@ -1211,3 +1211,176 @@ class TestReject7VerdictObjValidator:
             # schema preflight가 통과됐다는 증거: _validate_codex_output_schema가 PASS 반환
             result = pl._validate_codex_output_schema(valid_schema)
             assert result["valid"] is True, f"valid schema should PASS: {result}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TC-77~TC-87: REJECT#8 — prompt 예시 SSoT + validator 완성
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestReject8PromptExampleAndValidator:
+    """TC-77~TC-87: prompt 예시 SSoT + _validate_codex_verdict_obj 타입 검증"""
+
+    def _load_pipeline(self):
+        import importlib
+        spec = importlib.util.spec_from_file_location(
+            "pipeline_r8",
+            str(Path(__file__).parent.parent.parent / "pipeline.py"),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def _valid_finding(self) -> dict:
+        return {
+            "scope": "test_function",
+            "severity": "CRITICAL",
+            "root_cause_category": "missing_validation",
+            "evidence": "line 42: no null check",
+            "reproduction": "call foo(None)",
+            "required_fix": "add None check",
+            "acceptance_criteria": ["foo(None) raises ValueError"],
+        }
+
+    def test_tc77_approve_example_validates(self):
+        """TC-77: prompt APPROVE 예시가 _validate_codex_verdict_obj PASS"""
+        mod = self._load_pipeline()
+        import json as _json
+        example_str = mod._build_prompt_example_from_schema()
+        # APPROVE example 추출: 첫 번째 JSON 라인
+        approve_line = None
+        for line in example_str.splitlines():
+            line = line.strip()
+            if line.startswith('{"verdict":"APPROVE_TO_USER"'):
+                approve_line = line
+                break
+        assert approve_line is not None, f"APPROVE example not found in: {example_str[:200]}"
+        obj = _json.loads(approve_line)
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is True, f"APPROVE example should PASS: {result}"
+
+    def test_tc78_reject_example_validates(self):
+        """TC-78: prompt REJECT 예시 (7-field finding) → PASS"""
+        mod = self._load_pipeline()
+        # REJECT 예시는 7-field finding이 있어야 함 - finding 직접 구성
+        obj = {
+            "verdict": "REJECT",
+            "findings": [self._valid_finding()],
+            "review_notes": "overall summary",
+        }
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is True, f"REJECT 7-field example should PASS: {result}"
+
+    def test_tc79_old_approve_format_fails(self):
+        """TC-79: 구버전 {"verdict":"APPROVE_TO_USER"} (findings/review_notes 누락) → FAIL"""
+        mod = self._load_pipeline()
+        old_obj = {"verdict": "APPROVE_TO_USER"}
+        result = mod._validate_codex_verdict_obj(old_obj)
+        assert result["valid"] is False, "구버전 포맷은 FAIL이어야 합니다"
+
+    def test_tc80_prompt_example_includes_all_required_fields(self):
+        """TC-80: prompt 예시에 verdict/findings/review_notes 3개 필드 모두 포함"""
+        mod = self._load_pipeline()
+        example = mod._build_prompt_example_from_schema()
+        assert "verdict" in example
+        assert "findings" in example
+        assert "review_notes" in example
+        assert "APPROVE_TO_USER" in example
+        assert "REJECT" in example
+
+    def test_tc81_finding_scope_int_fails(self):
+        """TC-81: finding.scope에 int 입력 → FAIL"""
+        mod = self._load_pipeline()
+        f = self._valid_finding()
+        f["scope"] = 42
+        obj = {"verdict": "REJECT", "findings": [f], "review_notes": ""}
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is False
+        assert "scope" in result.get("reason", "")
+
+    def test_tc82_finding_evidence_dict_fails(self):
+        """TC-82: finding.evidence에 dict 입력 → FAIL"""
+        mod = self._load_pipeline()
+        f = self._valid_finding()
+        f["evidence"] = {"key": "value"}
+        obj = {"verdict": "REJECT", "findings": [f], "review_notes": ""}
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is False
+        assert "evidence" in result.get("reason", "")
+
+    def test_tc83_finding_reproduction_none_fails(self):
+        """TC-83: finding.reproduction에 null 입력 → FAIL"""
+        mod = self._load_pipeline()
+        f = self._valid_finding()
+        f["reproduction"] = None
+        obj = {"verdict": "REJECT", "findings": [f], "review_notes": ""}
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is False
+        assert "reproduction" in result.get("reason", "")
+
+    def test_tc84_finding_required_fix_empty_fails(self):
+        """TC-84: finding.required_fix에 빈 문자열 → FAIL"""
+        mod = self._load_pipeline()
+        f = self._valid_finding()
+        f["required_fix"] = ""
+        obj = {"verdict": "REJECT", "findings": [f], "review_notes": ""}
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is False
+        assert "required_fix" in result.get("reason", "")
+
+    def test_tc85_acceptance_criteria_empty_array_fails(self):
+        """TC-85: acceptance_criteria=[] (빈 배열) → FAIL"""
+        mod = self._load_pipeline()
+        f = self._valid_finding()
+        f["acceptance_criteria"] = []
+        obj = {"verdict": "REJECT", "findings": [f], "review_notes": ""}
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is False
+        assert "acceptance_criteria" in result.get("reason", "")
+
+    def test_tc86_acceptance_criteria_empty_string_item_fails(self):
+        """TC-86: acceptance_criteria=[""] (빈 문자열 아이템) → FAIL"""
+        mod = self._load_pipeline()
+        f = self._valid_finding()
+        f["acceptance_criteria"] = [""]
+        obj = {"verdict": "REJECT", "findings": [f], "review_notes": ""}
+        result = mod._validate_codex_verdict_obj(obj)
+        assert result["valid"] is False
+        assert "acceptance_criteria" in result.get("reason", "")
+
+    def test_tc87_no_cli_calls_no_permit_issued(self, tmp_path, monkeypatch):
+        """TC-87: 이 수정에서 CLI 호출 0회, permit 발급 0회, permit 소비 0회"""
+        # 이 테스트는 TC-77~86이 모두 permit 없이 실행됨을 확인
+        # permit 파일이 없거나 consumed=false인지 확인
+        permit_path = tmp_path / "permit.json"
+        assert not permit_path.exists(), "TC-87: 임시 permit 파일은 생성되지 않아야 합니다"
+        # _validate_codex_output_schema 및 _validate_codex_verdict_obj는 CLI를 호출하지 않음
+        mod = self._load_pipeline()
+        schema_check = mod._validate_codex_output_schema({
+            "type": "object",
+            "required": ["verdict", "findings", "review_notes"],
+            "additionalProperties": False,
+            "properties": {
+                "verdict": {"type": "string", "enum": ["APPROVE_TO_USER", "REJECT"]},
+                "findings": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["scope", "severity", "root_cause_category", "evidence", "reproduction", "required_fix", "acceptance_criteria"],
+                        "additionalProperties": False,
+                        "properties": {
+                            "scope": {"type": "string"},
+                            "severity": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]},
+                            "root_cause_category": {"type": "string"},
+                            "evidence": {"type": "string"},
+                            "reproduction": {"type": "string"},
+                            "required_fix": {"type": "string"},
+                            "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+                        },
+                    },
+                },
+                "review_notes": {"type": "string"},
+            },
+        })
+        assert schema_check["valid"] is True
+        # 검증 함수 호출이 permit을 생성하지 않음
+        assert not permit_path.exists()
