@@ -23265,6 +23265,9 @@ def _classify_codex_review_file(filepath: str) -> Tuple[str, str, Optional[str]]
         mode, reason = "workflow_extract", None
     elif is_oracle_json:
         mode, reason = "oracle_extract", None
+    elif lower.endswith(".json"):
+        # non-oracle JSON 파일(config/schema 등) → doc_extract로 처리하여 evidence_incomplete 차단 방지
+        mode, reason = "doc_extract", None
     else:
         mode, reason = "excluded", "unknown_or_binary"
     return risk, mode, reason
