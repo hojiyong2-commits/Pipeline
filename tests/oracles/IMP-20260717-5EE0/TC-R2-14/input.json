@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-R2-14",
+  "case_kind": "normal",
+  "finding": "MEDIUM",
+  "description": "_collect_pr_size_metrics module-level fallback + TC-111~TC-115",
+  "size_metrics_module_level_fallback": true,
+  "new_tests_count": 5
+}

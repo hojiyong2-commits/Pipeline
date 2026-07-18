@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-R2-13",
+  "case_kind": "normal",
+  "finding": "HIGH",
+  "description": "module_level_unmapped -> module_level_hunk included_items (source 포함)",
+  "module_level_hunk_in_included_items": true,
+  "source_field_present": true
+}
