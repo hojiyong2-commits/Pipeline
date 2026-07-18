@@ -7830,7 +7830,7 @@ def _run_codex_preflight_checks(
     gates = _gates if isinstance(_gates, dict) else {}
     _loop = state.get("codex_review_loop_state")
     loop_state = _loop if isinstance(_loop, dict) else {}
-    _contract = state.get("contract")
+    _contract = state.get("contract_v2") or state.get("contract")
     contract = _contract if isinstance(_contract, dict) else {}
 
     failure_codes: List[str] = []

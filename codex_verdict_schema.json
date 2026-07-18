@@ -4,7 +4,23 @@
   "required": ["verdict"],
   "properties": {
     "verdict": {"type": "string", "enum": ["APPROVE_TO_USER", "REJECT"]},
-    "findings": {"type": "array"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["scope", "severity", "root_cause_category", "evidence", "reproduction", "required_fix", "acceptance_criteria"],
+        "properties": {
+          "scope": {"type": "string", "enum": ["IN_SCOPE", "OUT_OF_SCOPE"]},
+          "severity": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
+          "root_cause_category": {"type": "string"},
+          "evidence": {"type": "string"},
+          "reproduction": {"type": "string"},
+          "required_fix": {"type": "string"},
+          "acceptance_criteria": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    },
     "review_notes": {"type": "string"}
   },
   "additionalProperties": false
