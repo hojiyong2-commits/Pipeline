@@ -1,0 +1,12 @@
+{
+  "description": "TC-116: --start-epoch with CODEX_START_EPOCH_USER_CONFIRMED=1 resets reject_count to 0",
+  "command": ["python", "pipeline.py", "gates", "codex-review", "--start-epoch", "TC-116 epoch start"],
+  "env": {
+    "CODEX_START_EPOCH_USER_CONFIRMED": "1"
+  },
+  "prior_state": {
+    "status": "REJECTED",
+    "epoch": 1,
+    "reject_count": 1
+  }
+}

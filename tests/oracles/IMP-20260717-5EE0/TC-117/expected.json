@@ -1,0 +1,5 @@
+{
+  "exit_code": 1,
+  "failure_code": "epoch_confirmation_required",
+  "blocked": true
+}

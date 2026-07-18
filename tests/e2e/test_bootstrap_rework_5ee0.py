@@ -2082,3 +2082,112 @@ def test_tc115_module_level_not_blocked_as_evidence_computation_failed(monkeypat
     assert not any("evidence_computation_failed" in r for r in reasons), (
         f"module-level 전용 변경이 evidence_computation_failed로 잘못 차단됨: {reasons}"
     )
+
+
+# ---------------------------------------------------------------------------
+# TC-116: --start-epoch가 EPOCH_STARTED 기록, reject_count=0, epoch=2를 파일에 기록
+# ---------------------------------------------------------------------------
+def test_tc116_start_epoch_resets_reject_count(tmp_path, monkeypatch):
+    """--start-epoch 실행 시 EPOCH_STARTED 레코드가 생성되고 reject_count=0, epoch=2가 기록된다."""
+    import subprocess
+    import json
+
+    # 이전 reject_count=1 이 있는 가짜 codex_review_result.json 생성
+    pipeline_dir = tmp_path / ".pipeline"
+    pipeline_dir.mkdir()
+    state_file = tmp_path / "pipeline_state.json"
+    state_file.write_text(
+        json.dumps({"pipeline_id": "IMP-TEST-EPOCH", "current_phase": "Phase 7"}),
+        encoding="utf-8",
+    )
+    prev_result = pipeline_dir / "codex_review_result.json"
+    prev_result.write_text(
+        json.dumps({
+            "schema_version": 4,
+            "pipeline_id": "IMP-TEST-EPOCH",
+            "status": "REJECTED",
+            "epoch": 1,
+            "reject_count": 1,
+            "cli_error_count": 0,
+        }),
+        encoding="utf-8",
+    )
+
+    env = {
+        **__import__("os").environ,
+        "PIPELINE_STATE_PATH": str(state_file),
+        "CODEX_START_EPOCH_USER_CONFIRMED": "1",
+        "PYTHONIOENCODING": "utf-8",
+    }
+    result = subprocess.run(
+        ["python", str(BASE_DIR / "pipeline.py"), "gates", "codex-review",
+         "--start-epoch", "TC-116 epoch start"],
+        capture_output=True,
+        env=env,
+    )
+    stdout_text = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+    stderr_text = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+    assert result.returncode == 0, f"exit code != 0: stdout={stdout_text!r} stderr={stderr_text!r}"
+    assert "EPOCH_STARTED" in stdout_text or "epoch" in stdout_text.lower(), (
+        f"stdout에 epoch 시작 메시지 없음: {stdout_text!r}"
+    )
+
+    # 파일 확인
+    written = json.loads(prev_result.read_text(encoding="utf-8"))
+    assert written["status"] == "EPOCH_STARTED", f"status != EPOCH_STARTED: {written}"
+    assert written["reject_count"] == 0, f"reject_count != 0: {written}"
+    assert written["epoch"] == 2, f"epoch != 2: {written}"
+    assert written["previous_reject_count"] == 1, f"previous_reject_count != 1: {written}"
+    assert written["previous_epoch"] == 1, f"previous_epoch != 1: {written}"
+
+
+# ---------------------------------------------------------------------------
+# TC-117: CODEX_START_EPOCH_USER_CONFIRMED 없이 --start-epoch 실행 시 BLOCKED
+# ---------------------------------------------------------------------------
+def test_tc117_start_epoch_blocked_without_env(tmp_path, monkeypatch):
+    """CODEX_START_EPOCH_USER_CONFIRMED=1 없이 --start-epoch 실행 시 epoch_confirmation_required로 BLOCKED."""
+    import subprocess
+    import json
+
+    state_file = tmp_path / "pipeline_state.json"
+    state_file.write_text(
+        json.dumps({"pipeline_id": "IMP-TEST-EPOCH", "current_phase": "Phase 7"}),
+        encoding="utf-8",
+    )
+
+    env = {k: v for k, v in __import__("os").environ.items() if k != "CODEX_START_EPOCH_USER_CONFIRMED"}
+    env["PIPELINE_STATE_PATH"] = str(state_file)
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    result = subprocess.run(
+        ["python", str(BASE_DIR / "pipeline.py"), "gates", "codex-review",
+         "--start-epoch", "TC-117 no-confirm attempt"],
+        capture_output=True,
+        env=env,
+    )
+    stdout_text = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+    stderr_text = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+    assert result.returncode != 0, f"환경변수 없이 실행이 성공해서는 안 됨: {stdout_text!r}"
+    assert "epoch_confirmation_required" in stdout_text or "epoch_confirmation_required" in stderr_text, (
+        f"epoch_confirmation_required 메시지 없음: stdout={stdout_text!r} stderr={stderr_text!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# TC-118: epoch 시작 후 _check_codex_rate_limit(0, ...) 결과가 OK (rate-limit 해제)
+# ---------------------------------------------------------------------------
+def test_tc118_epoch_zero_reject_count_passes_rate_limit(tmp_path, monkeypatch):
+    """epoch 시작으로 reject_count=0이 되면 _check_codex_rate_limit이 OK를 반환한다."""
+    mod = _get_pipeline_module()
+
+    # reject_count=0이면 rate-limit에 걸리지 않아야 한다
+    result = mod._check_codex_rate_limit(0, 0)
+    assert result["status"] == "OK", f"reject_count=0인데 RATE_LIMITED: {result}"
+
+    # 기존 reject_count=1(RATE_LIMITED 임계값인 2 미만)도 OK여야 한다
+    result2 = mod._check_codex_rate_limit(1, 0)
+    assert result2["status"] == "OK", f"reject_count=1인데 RATE_LIMITED: {result2}"
+
+    # epoch 전 reject_count=2이면 RATE_LIMITED
+    result3 = mod._check_codex_rate_limit(2, 0)
+    assert result3["status"] == "RATE_LIMITED", f"reject_count=2인데 OK: {result3}"

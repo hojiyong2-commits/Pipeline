@@ -1,0 +1,6 @@
+{
+  "description": "TC-117: --start-epoch without CODEX_START_EPOCH_USER_CONFIRMED is BLOCKED with epoch_confirmation_required",
+  "command": ["python", "pipeline.py", "gates", "codex-review", "--start-epoch", "TC-117 no-confirm attempt"],
+  "env": {},
+  "prior_state": {}
+}

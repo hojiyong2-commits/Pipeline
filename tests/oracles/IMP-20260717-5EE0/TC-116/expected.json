@@ -1,0 +1,8 @@
+{
+  "exit_code": 0,
+  "result_status": "EPOCH_STARTED",
+  "epoch": 2,
+  "previous_epoch": 1,
+  "previous_reject_count": 1,
+  "reject_count": 0
+}

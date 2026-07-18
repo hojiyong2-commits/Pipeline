@@ -26142,6 +26142,63 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             sys.exit(1)
         sys.exit(0)
 
+    # IMP-20260717-5EE0 MT-15: --start-epoch — 새 Codex Review epoch를 시작한다.
+    #   reject_count를 0으로 초기화하여 rate-limit을 해제한다.
+    #   기존 이력은 previous_reject_count에 보존한다(감사 추적).
+    #   실제 Codex CLI 호출 없음(행정 기록만).
+    _start_epoch_reason = str(getattr(args, "start_epoch", None) or "").strip()
+    if _start_epoch_reason:
+        # CODEX_START_EPOCH_USER_CONFIRMED=1 필수 — 에이전트 자동 실행 방지
+        if os.environ.get("CODEX_START_EPOCH_USER_CONFIRMED", "") != "1":
+            _die(
+                "[BLOCKED] failure_code=epoch_confirmation_required\n"
+                "  --start-epoch는 CODEX_START_EPOCH_USER_CONFIRMED=1 환경변수가 필요합니다.\n"
+                "  사용자가 명시적으로 새 epoch를 시작한다는 의사를 확인하는 guard입니다."
+            )
+        _se_pipeline_id = str(state.get("pipeline_id", "") or "")
+        if not _se_pipeline_id:
+            _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다 (start-epoch).")
+        # 기존 epoch 정보 읽기
+        _se_result_path = _codex_review_result_path()
+        _se_old_epoch = 1
+        _se_old_reject_count = 0
+        if _se_result_path.exists():
+            try:
+                _se_old_data = json.loads(_se_result_path.read_text(encoding="utf-8"))
+                _se_old_epoch = int(_se_old_data.get("epoch", 1) or 1)
+                _se_old_reject_count = int(_se_old_data.get("reject_count", 0) or 0)
+            except (OSError, json.JSONDecodeError, ValueError, TypeError):
+                pass
+        _se_new_epoch = _se_old_epoch + 1
+        # 새 epoch 레코드 작성
+        _se_epoch_record: Dict[str, Any] = {
+            "schema_version": 4,
+            "pipeline_id": _se_pipeline_id,
+            "status": "EPOCH_STARTED",
+            "epoch": _se_new_epoch,
+            "previous_epoch": _se_old_epoch,
+            "previous_reject_count": _se_old_reject_count,
+            "reject_count": 0,
+            "cli_error_count": 0,
+            "epoch_reason": _start_epoch_reason,
+            "started_at": _now(),
+            "pr_head_sha": _get_local_git_head(),
+        }
+        try:
+            _se_result_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(_se_result_path, "w", encoding="utf-8") as _se_fh:
+                json.dump(_se_epoch_record, _se_fh, indent=2, ensure_ascii=False)
+            _se_path_str = str(_se_result_path)
+        except OSError as _se_err:
+            _die(f"[BLOCKED] failure_code=epoch_write_failed\n  {_se_err}")
+        print(
+            f"[CODEX REVIEW] 새 epoch 시작: epoch {_se_old_epoch} → {_se_new_epoch}\n"
+            f"  이전 reject_count {_se_old_reject_count} → 0 (이전 이력 보존, 새 단위 초기화)\n"
+            f"  이유: {_start_epoch_reason}\n"
+            f"  기록: {_se_path_str}"
+        )
+        sys.exit(0)
+
     pipeline_id = str(state.get("pipeline_id", "") or "")
     if not pipeline_id:
         _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다.")
@@ -32577,6 +32634,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_codex.add_argument(
         "--authorize-run", dest="authorize_run", action="store_true", default=False,
         help="사용자가 shard-review permit을 발급한다(CODEX_RUN_AUTHORIZED=1 필수, 단일 사용).",
+    )
+    # IMP-20260717-5EE0 MT-15: 새 Codex Review epoch 시작 — reject_count를 0으로 초기화한다.
+    #   CODEX_START_EPOCH_USER_CONFIRMED=1 환경변수가 없으면 즉시 BLOCKED.
+    p_gate_codex.add_argument(
+        "--start-epoch",
+        dest="start_epoch",
+        metavar="REASON",
+        default=None,
+        help=(
+            "새 Codex Review epoch를 시작한다(CODEX_START_EPOCH_USER_CONFIRMED=1 필수). "
+            "기존 reject 이력은 previous_reject_count에 보존하고, 새 epoch에서 reject_count를 0으로 초기화한다."
+        ),
     )
 
     p_gate_accept = gsub.add_parser("accept", help="Record user behavior acceptance")
