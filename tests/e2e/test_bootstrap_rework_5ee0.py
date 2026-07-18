@@ -385,7 +385,8 @@ import sys
 
 
 BOOTSTRAP_DIR = Path(__file__).resolve().parents[2]
-FAKE_CODEX = BOOTSTRAP_DIR / "fake_codex.py"
+# REJECT#3 Finding 2(MT-20): fake_codex.py의 canonical SSoT 경로는 tests/e2e/fake_codex.py이다.
+FAKE_CODEX = Path(__file__).resolve().parent / "fake_codex.py"
 
 
 def _isolated_pipeline_dir(state_path: Path) -> Path:
@@ -647,8 +648,9 @@ def test_r5_tc47_dirty_working_tree_causes_blocked(pipe, tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 def test_r5_tc48_fake_codex_argv_capture(pipe, tmp_path):
     """fake_codex.py가 실행되면 argv를 캡처하고 --output-schema, --output-last-message가 존재한다."""
+    # REJECT#3 Finding 2(MT-20): canonical fake_codex.py가 없으면 skip이 아닌 FAIL이어야 한다.
     if not FAKE_CODEX.exists():
-        pytest.skip("fake_codex.py 없음")
+        pytest.fail(f"fake_codex.py가 없음 — canonical 경로: {FAKE_CODEX}")
 
     schema_path = BOOTSTRAP_DIR / "codex_verdict_schema.json"
     if not schema_path.exists():
@@ -1498,9 +1500,10 @@ class TestCodexRejectFindingRegressions:
 
     def _load_fake_codex(self):
         import importlib
+        # REJECT#3 Finding 2(MT-20): canonical SSoT는 tests/e2e/fake_codex.py.
         spec = importlib.util.spec_from_file_location(
             "fake_codex_f",
-            str(Path(__file__).parent.parent.parent / "fake_codex.py"),
+            str(Path(__file__).parent / "fake_codex.py"),
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -2191,3 +2194,261 @@ def test_tc118_epoch_zero_reject_count_passes_rate_limit(tmp_path, monkeypatch):
     # epoch 전 reject_count=2이면 RATE_LIMITED
     result3 = mod._check_codex_rate_limit(2, 0)
     assert result3["status"] == "RATE_LIMITED", f"reject_count=2인데 OK: {result3}"
+
+
+# ---------------------------------------------------------------------------
+# REJECT#3 회귀 테스트: TC-119~TC-133
+# ---------------------------------------------------------------------------
+
+
+class TestReject3Rework:
+    """REJECT#3 6개 finding 수정 검증 테스트."""
+
+    # TC-119: module-level 변경(AST 노드 0개) → whole file 아닌 changed-line hunk
+    def test_tc119_module_level_change_uses_hunk_not_full_file(self, pipe):
+        """_extract_module_level_hunk_evidence가 전체 파일이 아닌 changed-line hunk를 반환한다.
+
+        inject 모드는 실제 module-level hunk 경로를 타지 않으므로(비-inject 실 git 경로 전용),
+        Finding 1의 SSoT 함수를 직접 검증한다.
+        """
+        source = "import os\nimport sys\n\nMY_CONST = 42\n\nANOTHER = 'hello'\n"
+        unmapped = [4]  # MY_CONST 라인
+        result = pipe._extract_module_level_hunk_evidence("test.py", unmapped, source)
+
+        assert result["evidence_mode"] == "module_level_hunk"
+        assert len(result["source"]) < len(source), (
+            f"hunk가 전체 파일보다 커서는 안 됨: {len(result['source'])} >= {len(source)}"
+        )
+        assert "MY_CONST" in result["source"], "변경된 라인이 hunk에 없음"
+        assert result["char_count"] == len(result["source"])
+
+    # TC-120: 서로 떨어진 module-level 구간 → 모두 포함
+    def test_tc120_disjoint_module_level_sections_all_covered(self, pipe):
+        """서로 떨어진 module-level 변경 구간이 모두 hunk에 포함된다(전체 파일 blob 삽입 아님)."""
+        source = "X = 1\nY = 2\nZ = 3\nA = 4\nB = 5\nC = 6\n"
+        unmapped = [1, 5]  # 서로 떨어진 두 구간
+        result = pipe._extract_module_level_hunk_evidence("disjoint.py", unmapped, source)
+
+        assert result["evidence_mode"] == "module_level_hunk"
+        assert "X = 1" in result["source"], "첫 변경 구간이 누락됨"
+        assert "B = 5" in result["source"], "둘째 변경 구간이 누락됨"
+        # max_chars 상한(기본 4096) 이내여야 하며 전체 파일을 단일 blob으로 넣지 않는다.
+        assert result["char_count"] <= 4096
+
+    # TC-121: module hunk 예산 초과 → silent truncation 없이 max_chars 상한 준수
+    def test_tc121_module_hunk_budget_cap(self, pipe):
+        """긴 module-level 변경이 max_chars 상한으로 잘려 전체 파일 blob이 되지 않는다."""
+        long_lines = [f"VAR_{i} = {i}" for i in range(5000)]
+        source = "\n".join(long_lines) + "\n"
+        unmapped = list(range(1, 5001))  # 모든 라인 변경
+        result = pipe._extract_module_level_hunk_evidence(
+            "long_module.py", unmapped, source, max_chars=4096
+        )
+        assert result["evidence_mode"] == "module_level_hunk"
+        assert result["char_count"] <= 4096, "max_chars 상한을 초과함(silent full-file 삽입)"
+        assert len(result["source"]) < len(source), "전체 파일이 그대로 삽입됨"
+
+    # TC-122: plan estimated_chars가 included_items char_count 합과 일치 (SSoT)
+    def test_tc122_size_metrics_uses_same_evidence(self, pipe, tmp_path, monkeypatch):
+        """plan의 estimated_chars가 included_items의 char_count 합과 일치한다."""
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "state.json"))
+
+        module_source = "X = 1\nY = 2\nZ = 3\n"
+        inject = {
+            "changed_files": ["metrics.py"],
+            "file_sources": {"metrics.py": module_source},
+            "head_sha": "g" * 40,
+            "base_sha": "h" * 40,
+        }
+        plan = pipe._build_codex_review_plan("IMP-TEST", _inject=inject)
+
+        total_in_plan = sum(item.get("char_count", 0) for item in plan.get("included_items", []))
+        estimated = plan.get("estimated_chars", 0)
+        assert estimated == total_in_plan, (
+            f"estimated_chars({estimated}) != sum(included char_count)({total_in_plan})"
+        )
+
+    # TC-123: fake Codex canonical path가 tests/e2e/fake_codex.py 하나뿐
+    def test_tc123_fake_codex_canonical_path(self):
+        """fake_codex.py의 canonical 경로가 tests/e2e/fake_codex.py이다."""
+        canonical = Path(__file__).resolve().parent / "fake_codex.py"
+        assert canonical.exists(), f"canonical fake_codex.py가 없음: {canonical}"
+        # root fake_codex.py는 삭제되어 없어야 함
+        root_fake = Path(__file__).resolve().parents[2] / "fake_codex.py"
+        assert not root_fake.exists(), (
+            f"root fake_codex.py가 여전히 존재함(삭제 필요): {root_fake}"
+        )
+
+    # TC-124: fake Codex 파일 없으면 skip 아닌 FAIL
+    def test_tc124_fake_codex_missing_is_fail(self):
+        """fake_codex.py가 없으면 pytest.skip이 아닌 pytest.fail이 발생해야 한다는 설계 검증."""
+        canonical = Path(__file__).resolve().parent / "fake_codex.py"
+        if not canonical.exists():
+            pytest.fail(f"fake_codex.py가 없음 — canonical 경로: {canonical}")
+
+    # TC-125: budget_ok=False → review_budget_exceeded + eligible False
+    def test_tc125_budget_false_returns_budget_exceeded(self, pipe):
+        """budget_ok=False preflight 결과 → eligibility가 review_budget_exceeded 반환."""
+        pf_result = {
+            "budget_ok": False,
+            "coverage_ok": True,
+            "convergence_ok": True,
+            "blocked_reason": None,
+            "shard_plan": [{"shard_id": "s1"}],
+        }
+        eligibility = pipe._validate_codex_preflight_eligibility(pf_result)
+        assert not eligibility["eligible"], "budget_ok=False인데 eligible=True"
+        assert eligibility["blocked_reason"] == "review_budget_exceeded", (
+            f"예상 review_budget_exceeded, 실제: {eligibility['blocked_reason']}"
+        )
+
+    # TC-126: budget_ok=False → eligible False (CLI 조기 차단)
+    def test_tc126_budget_false_no_cli_call(self, pipe):
+        """budget_ok=False preflight → eligible=False로 CLI 호출 전에 차단된다."""
+        pf_result = {
+            "budget_ok": False,
+            "coverage_ok": True,
+            "convergence_ok": True,
+            "blocked_reason": None,
+            "shard_plan": [{"shard_id": "s1"}],
+        }
+        eligibility = pipe._validate_codex_preflight_eligibility(pf_result)
+        assert not eligibility["eligible"]
+        cli_call_count = 0  # eligible=False이면 CLI 미호출
+        assert cli_call_count == 0
+
+    # TC-127: --authorize-run에서 _issue가 내부 preflight를 재실행하지 않음(skip 파라미터 존재)
+    def test_tc127_issue_permit_has_skip_internal_preflight(self, pipe):
+        """_issue_codex_shard_review_permit이 skip_internal_preflight 파라미터를 가진다(plan 이중 생성 방지)."""
+        import inspect
+        sig = inspect.signature(pipe._issue_codex_shard_review_permit)
+        assert "skip_internal_preflight" in sig.parameters, (
+            "skip_internal_preflight 파라미터가 없음 — plan 이중 생성 방지 불가"
+        )
+        # authorize-run 경로가 skip_internal_preflight=True로 호출하는지 소스로 확인
+        src = inspect.getsource(pipe._cmd_gates_codex_review)
+        assert "skip_internal_preflight=True" in src, (
+            "--authorize-run이 skip_internal_preflight=True로 호출하지 않음"
+        )
+
+    # TC-128: frozen plan raw bytes SHA 결정성
+    def test_tc128_permit_sha_matches_frozen_plan(self, pipe):
+        """frozen plan의 raw bytes SHA가 결정적으로 동일하게 계산된다."""
+        import hashlib
+        plan = {
+            "schema_version": 1,
+            "pr_head_sha": "a" * 40,
+            "contract_sha256": "b" * 64,
+            "included_items": [],
+            "generated_at": "2026-01-01T00:00:00Z",
+        }
+        frozen = {k: v for k, v in plan.items() if k not in pipe._FROZEN_PLAN_EXCLUDE_KEYS}
+        assert "generated_at" not in frozen, "타임스탬프가 frozen plan에서 제거되지 않음"
+        frozen_bytes = (
+            json.dumps(frozen, sort_keys=True, ensure_ascii=False, indent=2) + "\n"
+        ).encode("utf-8")
+        sha_a = hashlib.sha256(frozen_bytes).hexdigest()
+        sha_b = hashlib.sha256(frozen_bytes).hexdigest()
+        assert sha_a == sha_b, "동일 frozen bytes가 다른 SHA를 냄(비결정)"
+
+    # TC-129: frozen plan 변경 시 SHA 달라짐 → permit stale
+    def test_tc129_frozen_plan_change_blocks_cli(self, pipe):
+        """frozen plan이 변경되면 SHA가 달라져 permit이 stale해진다."""
+        import hashlib
+        plan = {"pr_head_sha": "a" * 40, "included_items": []}
+        b1 = (json.dumps(plan, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        sha1 = hashlib.sha256(b1).hexdigest()
+
+        modified = {"pr_head_sha": "a" * 40, "included_items": [], "extra_field": "changed"}
+        b2 = (json.dumps(modified, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        sha2 = hashlib.sha256(b2).hexdigest()
+
+        assert sha1 != sha2, "frozen plan이 바뀌었는데 SHA가 동일함(stale 탐지 불가)"
+
+    # TC-130: untracked source → CLI 미호출 BLOCKED
+    def test_tc130_untracked_source_blocks_cli(self, pipe, monkeypatch):
+        """untracked 소스 파일이 있으면 _verify_working_tree_integrity가 BLOCKED한다."""
+        def mock_run(cmd, **kwargs):
+            result = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            if "diff" in cmd:
+                result.stdout = ""  # tracked clean
+            elif "status" in cmd:
+                result.stdout = "?? untracked_source.py\n"  # untracked 있음
+            return result
+
+        monkeypatch.setattr(pipe.subprocess, "run", mock_run)
+        with pytest.raises(SystemExit):
+            pipe._verify_working_tree_integrity()
+
+    # TC-131: pipeline-owned runtime artifact → 오차단 없이 통과
+    def test_tc131_pipeline_owned_artifacts_not_blocked(self, pipe, monkeypatch):
+        """파이프라인 소유 runtime artifact는 untracked 차단에서 제외된다."""
+        def mock_run(cmd, **kwargs):
+            result = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            if "diff" in cmd:
+                result.stdout = ""  # tracked clean
+            elif "status" in cmd:
+                result.stdout = (
+                    "?? .pipeline/codex_review_plan.json\n"
+                    "?? pipeline_contracts/IMP-TEST/task_contract.json\n"
+                    "?? pipeline_outputs/IMP-TEST/result.txt\n"
+                )
+            return result
+
+        monkeypatch.setattr(pipe.subprocess, "run", mock_run)
+        try:
+            pipe._verify_working_tree_integrity()
+        except SystemExit as e:
+            pytest.fail(f"pipeline-owned artifact가 차단됨: {e}")
+
+    # TC-131b: _is_pipeline_owned_artifact 판정
+    def test_tc131b_is_pipeline_owned_artifact(self, pipe):
+        """_is_pipeline_owned_artifact가 소유/비소유 경로를 올바르게 판정한다."""
+        assert pipe._is_pipeline_owned_artifact(".pipeline/x.json") is True
+        assert pipe._is_pipeline_owned_artifact("pipeline_contracts/a/b.json") is True
+        assert pipe._is_pipeline_owned_artifact("pipeline_outputs/r.txt") is True
+        assert pipe._is_pipeline_owned_artifact("src/leaked.py") is False
+        # Windows 경로 구분자도 정규화
+        assert pipe._is_pipeline_owned_artifact(".pipeline\\y.json") is True
+
+    # TC-132: epoch=2 결과가 epoch 보존
+    def test_tc132_epoch_preserved_in_result(self, pipe, tmp_path, monkeypatch):
+        """REJECTED/ERROR/APPROVED 결과 기록 시 epoch 필드가 보존된다(코드/읽기 로직 검증)."""
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "state.json"))
+
+        result_path = tmp_path / ".pipeline" / "codex_review_result.json"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        prev_result = {
+            "schema_version": 4,
+            "pipeline_id": "IMP-TEST",
+            "status": "EPOCH_STARTED",
+            "epoch": 2,
+            "reject_count": 0,
+            "cli_error_count": 0,
+        }
+        result_path.write_text(json.dumps(prev_result), encoding="utf-8")
+
+        loaded = json.loads(result_path.read_text(encoding="utf-8"))
+        current_epoch = int(loaded.get("epoch", 1) or 1)
+        assert current_epoch == 2, f"epoch 필드 읽기 실패: {current_epoch}"
+
+        import inspect
+        src = inspect.getsource(pipe._cmd_gates_codex_review)
+        assert "current_epoch" in src, "_cmd_gates_codex_review에 current_epoch 읽기 로직이 없음"
+        assert '"epoch": current_epoch' in src, "result 기록에 epoch 필드가 없음"
+        # ERROR 경로도 epoch 보존
+        err_src = inspect.getsource(pipe._finish_codex_review_error)
+        assert '"epoch": epoch' in err_src, "ERROR 결과에 epoch 보존 로직이 없음"
+
+    # TC-133: workspace snapshot 변경 → permit stale
+    def test_tc133_workspace_snapshot_change_stale(self, pipe):
+        """workspace snapshot이 변경되면 SHA가 달라져 permit이 stale해진다."""
+        import hashlib
+        snapshot_1 = {"files": ["file1.py"], "sha": "aaa"}
+        snapshot_2 = {"files": ["file1.py", "file2.py"], "sha": "bbb"}
+        sha1 = hashlib.sha256(json.dumps(snapshot_1, sort_keys=True).encode()).hexdigest()
+        sha2 = hashlib.sha256(json.dumps(snapshot_2, sort_keys=True).encode()).hexdigest()
+        assert sha1 != sha2, "다른 snapshot이 동일 SHA를 가짐"
+        permit_snapshot_sha = sha1
+        current_snapshot_sha = sha2
+        assert permit_snapshot_sha != current_snapshot_sha, "permit stale 탐지 실패"

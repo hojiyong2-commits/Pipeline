@@ -23502,15 +23502,30 @@ def _build_codex_review_plan(
                             "sha256": ml_ev["sha256"],
                         })
                 else:
-                    # 변경 라인은 있으나 감싸는 함수/클래스가 없음(모듈 레벨) → 250k 상한 capped 조각.
-                    chunk = source_text[:SHARD_HARD_BUDGET]
+                    # REJECT#3 Finding 1(MT-16): AST 노드 없음(순수 모듈 레벨 변경)이어도 전체 파일을
+                    #   삽입하지 않는다. 변경된 라인만 hunk 증거로 포함한다(전체 파일 삽입 금지).
+                    all_changed_lines = [
+                        ln for start, end in changed_ranges for ln in range(start, end + 1)
+                    ]
+                    ml_ev = _extract_module_level_hunk_evidence(
+                        f, all_changed_lines, source_text
+                    )
                     included_items.append({
-                        "id": f, "file": f, "risk": risk,
-                        "evidence_mode": "module_level_capped",
-                        "char_count": len(chunk), "source": chunk,
-                        "sha256": _sha256_text(chunk),
+                        "id": ml_ev["evidence_id"],
+                        "file": f,
+                        "risk": risk,
+                        "evidence_mode": "module_level_hunk",
+                        "char_count": ml_ev["char_count"],
+                        "source": ml_ev["source"],
+                        "sha256": ml_ev["sha256"],
                     })
-                    estimated_chars += len(chunk)
+                    estimated_chars += ml_ev["char_count"]
+                    source_ranges.append({
+                        "file": f,
+                        "symbol": "<module-level-only>",
+                        "kind": "module_level_hunk",
+                        "sha256": ml_ev["sha256"],
+                    })
             else:
                 # 신규 파일/diff 없음 → 파일 전체이되 250k 상한으로 capped(초과 금지).
                 chunk = source_text[:SHARD_HARD_BUDGET]
@@ -25037,6 +25052,63 @@ def _run_codex_review_preflight(pipeline_id: str, skip_cli: bool = True) -> Dict
     }
 
 
+# [Purpose]: IMP-20260717-5EE0 REJECT#3 Finding 3(MT-17) — preflight 결과의 단일 eligibility 판정기.
+#            budget/coverage/convergence/shard_plan/blocked_reason을 일관되게 검사하여 --preflight-only
+#            경로와 permit 발급 경로가 동일한 기준으로 차단하도록 통일한다(중복/드리프트 제거).
+# [Assumptions]: preflight_result는 _run_codex_review_preflight가 반환하는 dict(또는 동등 seam).
+# [Vulnerability & Risks]: dict가 아니면 즉시 blocked. blocked_reason이 None이어도 budget/coverage/
+#            convergence/shard_plan 중 하나라도 False/빈값이면 구체 사유를 채워 fail-closed 처리한다.
+# [Improvement]: 각 하위 검사에 심각도 등급을 부여하면 진단 메시지를 더 세분화할 수 있다.
+def _validate_codex_preflight_eligibility(preflight_result: Dict[str, Any]) -> Dict[str, Any]:
+    """preflight 결과의 단일 eligibility 판정기.
+
+    모든 차단 조건을 일관되게 검사하여 eligible/blocked_reason을 반환한다.
+    budget_ok/coverage_ok/convergence_ok가 False이거나 blocked_reason이 있거나
+    shard_plan이 비어있으면 eligible=False를 반환한다.
+
+    Args:
+        preflight_result: _run_codex_review_preflight가 반환하는 dict.
+    Returns:
+        {"eligible": bool, "blocked_reason": str|None, "details": dict}.
+    """
+    if not isinstance(preflight_result, dict):
+        return {"eligible": False, "blocked_reason": "invalid_preflight_result", "details": {}}
+
+    blocked_reason = preflight_result.get("blocked_reason") or None
+    budget_ok = bool(preflight_result.get("budget_ok"))
+    coverage_ok = bool(preflight_result.get("coverage_ok"))
+    convergence_ok = bool(preflight_result.get("convergence_ok"))
+    shard_plan = preflight_result.get("shard_plan") or []
+
+    if not budget_ok:
+        blocked_reason = blocked_reason or "review_budget_exceeded"
+    elif not coverage_ok:
+        blocked_reason = blocked_reason or "evidence_incomplete"
+    elif not convergence_ok:
+        blocked_reason = blocked_reason or "convergence_limit_reached"
+    elif not shard_plan:
+        blocked_reason = blocked_reason or "shard_plan_empty"
+
+    eligible = (
+        budget_ok
+        and coverage_ok
+        and convergence_ok
+        and bool(shard_plan)
+        and blocked_reason is None
+    )
+
+    return {
+        "eligible": eligible,
+        "blocked_reason": blocked_reason,
+        "details": {
+            "budget_ok": budget_ok,
+            "coverage_ok": coverage_ok,
+            "convergence_ok": convergence_ok,
+            "shard_plan_count": len(shard_plan) if isinstance(shard_plan, list) else 0,
+        },
+    }
+
+
 # [Purpose]: IMP-20260717-5EE0 MT-10 — shard 단위 Codex 검토 permit 경로(SSoT). PIPELINE_STATE_PATH
 #            격리를 그대로 따르며 codex_review_plan.json과 같은 디렉토리에 위치한다.
 # [Assumptions]: _codex_review_plan_path()가 격리 규칙을 이미 캡슐화한다.
@@ -25561,13 +25633,48 @@ def _codex_authorize_cmd_hint() -> str:
 # [Assumptions]: git이 PATH에 있고 현재 디렉토리가 git 워킹트리다.
 # [Vulnerability & Risks]: git 미설치/타임아웃/비정상 종료/dirty는 모두 working_tree_dirty로 fail-closed _die.
 # [Improvement]: 특정 경로만 검사하도록 pathspec를 인자로 받을 수 있다.
+# [Purpose]: IMP-20260717-5EE0 REJECT#3 Finding 5(MT-19) — pipeline이 직접 생성하는 runtime artifact
+#            경로이면 True를 반환하여 untracked 차단에서 제외한다.
+# [Assumptions]: 입력은 repo-relative 경로 문자열이다(git status --porcelain 출력 파생).
+# [Vulnerability & Risks]: prefix 목록에 없는 경로는 모두 untracked로 간주되어 fail-closed 차단된다.
+# [Improvement]: prefix 목록을 SSoT 상수로 승격하면 hygiene 규칙과 공유할 수 있다.
+def _is_pipeline_owned_artifact(filepath: str) -> bool:
+    """pipeline이 소유한 runtime artifact이면 True를 반환한다.
+
+    이 파일들은 파이프라인이 직접 생성하므로 untracked 차단에서 제외한다.
+
+    Args:
+        filepath: 검사할 repo-relative 경로 문자열.
+    Returns:
+        pipeline 소유 runtime artifact이면 True.
+    Raises:
+        TypeError: filepath가 None이거나 str이 아닌 경우.
+    """
+    if filepath is None:
+        raise TypeError("filepath must not be None")
+    if not isinstance(filepath, str):
+        raise TypeError(f"filepath must be str, got {type(filepath).__name__}")
+    _pipeline_owned_prefixes = (
+        ".pipeline/",
+        "pipeline_contracts/",
+        "pipeline_outputs/",
+    )
+    normalized = filepath.replace("\\", "/").lstrip("/")
+    for prefix in _pipeline_owned_prefixes:
+        if normalized.startswith(prefix):
+            return True
+    return False
+
+
 def _verify_working_tree_integrity() -> None:
     """permit 발급 전 tracked source 파일의 working-tree가 HEAD와 일치하는지 검증한다.
+    untracked 파일도 검사하여 입력 closure를 보장한다(REJECT#3 Finding 5).
 
     Raises:
-        SystemExit: git 실행 불가/타임아웃/비정상 종료 또는 working tree가 dirty한 경우.
+        SystemExit: git 실행 불가/타임아웃/비정상 종료 또는 working tree가 dirty/untracked인 경우.
     """
     try:
+        # 1) tracked 변경 검사
         result = subprocess.run(
             ["git", "diff", "--name-only", "HEAD"],
             capture_output=True, text=True, check=False, timeout=30,
@@ -25584,6 +25691,34 @@ def _verify_working_tree_integrity() -> None:
                 f"  tracked 소스 파일이 HEAD와 다릅니다: {changed}\n"
                 "  git add와 commit 후 재시도하세요."
             )
+
+        # 2) untracked 파일 검사 (REJECT#3 Finding 5) — 입력 closure 오염 차단
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+            capture_output=True, text=True, check=False, timeout=30,
+        )
+        if status_result.returncode != 0:
+            _die(
+                "[BLOCKED] failure_code=working_tree_dirty\n"
+                f"  git status 실행 오류: {status_result.stderr.strip()}"
+            )
+
+        # ?? 접두사 = untracked 파일
+        untracked = []
+        for line in status_result.stdout.splitlines():
+            if line.startswith("?? "):
+                fname = line[3:].strip()
+                # 파이프라인 소유 runtime artifact는 허용(오차단 방지)
+                if fname and not _is_pipeline_owned_artifact(fname):
+                    untracked.append(fname)
+
+        if untracked:
+            _die(
+                "[BLOCKED] failure_code=working_tree_untracked\n"
+                f"  untracked 파일이 있습니다 (입력 closure 오염): {untracked[:10]}\n"
+                "  git add 또는 .gitignore 추가 후 재시도하세요."
+            )
+
     except FileNotFoundError:
         _die("[BLOCKED] failure_code=working_tree_dirty\n  git 실행 파일을 찾을 수 없습니다.")
     except subprocess.TimeoutExpired:
@@ -25603,6 +25738,8 @@ def _issue_codex_shard_review_permit(
     review_plan_sha: str,
     contract_sha: str = "",
     expiry_seconds: int = 3600,
+    *,
+    skip_internal_preflight: bool = False,
 ) -> Dict[str, Any]:
     """단일 사용 permit을 발급한다(CODEX_RUN_AUTHORIZED=1 필수).
 
@@ -25612,6 +25749,9 @@ def _issue_codex_shard_review_permit(
         review_plan_sha: review_plan SHA(None/비str 금지).
         contract_sha: 검토 대상 contract SHA(None/비str 금지; 빈 문자열 허용 — 하위 호환).
         expiry_seconds: 만료 초(양수만 허용; 0/음수 금지).
+        skip_internal_preflight: True이면 내부 preflight 재실행을 건너뛴다(REJECT#3 Finding 4).
+            --authorize-run 경로가 이미 plan을 1회 생성하고 eligibility를 검증했을 때 plan 이중
+            생성을 방지하기 위해 사용한다. 기본 False(기존 동작 보존).
     Returns:
         발급된 permit dict.
     Raises:
@@ -25670,19 +25810,18 @@ def _issue_codex_shard_review_permit(
             f"  {_schema_check.get('reason', '(이유 없음)')}"
         )
 
-    # P0-3: permit 발급 전 preflight 강제 검증 — coverage 불완전하면 발급 차단
-    _pf = _run_codex_review_preflight(pipeline_id)
-    if not (
-        _pf.get("budget_ok")
-        and _pf.get("coverage_ok")
-        and _pf.get("convergence_ok")
-        and _pf.get("blocked_reason") is None
-    ):
-        _pf_reason = _pf.get("blocked_reason") or "preflight_failed"
-        _die(
-            f"[BLOCKED] failure_code={_pf_reason}\n"
-            "  permit 발급 전 preflight 검증 실패 — coverage/budget/convergence 확인 후 재시도하세요."
-        )
+    # P0-3: permit 발급 전 preflight 강제 검증 — coverage 불완전하면 발급 차단.
+    #   REJECT#3 Finding 3(MT-17): 단일 판정기 _validate_codex_preflight_eligibility로 통일.
+    #   REJECT#3 Finding 4(MT-18): skip_internal_preflight=True이면 재실행 생략(plan 이중 생성 방지).
+    if not skip_internal_preflight:
+        _pf = _run_codex_review_preflight(pipeline_id)
+        _pf_eligibility = _validate_codex_preflight_eligibility(_pf)
+        if not _pf_eligibility["eligible"]:
+            _pf_reason = _pf_eligibility["blocked_reason"] or "preflight_failed"
+            _die(
+                f"[BLOCKED] failure_code={_pf_reason}\n"
+                "  permit 발급 전 preflight 검증 실패 — coverage/budget/convergence 확인 후 재시도하세요."
+            )
 
     from datetime import datetime, timedelta, timezone  # noqa: PLC0415
     now = datetime.now(timezone.utc)
@@ -26117,8 +26256,24 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             if _ar_shards
             else str(_ar_plan_frozen.get("contract_sha256", "") or "")
         )
+        # REJECT#3 Finding 4(MT-18): plan은 위에서 이미 1회 생성했다. permit 발급 시 내부 preflight
+        #   재실행(=plan 재생성)을 막기 위해 여기서 eligibility를 단일 판정기로 검증하고,
+        #   _issue_...를 skip_internal_preflight=True로 호출한다(plan 이중 생성 방지).
+        _ar_conv = _check_convergence_guard(_ar_pid)
+        _ar_pf_check = _validate_codex_preflight_eligibility({
+            "budget_ok": True,  # plan/shard 생성이 _build/_build_shard_plan으로 성공했으므로
+            "coverage_ok": str(_ar_plan_frozen.get("coverage_status", "") or "") in ("FULL", "COMPLETE"),
+            "convergence_ok": bool(_ar_conv.get("convergence_ok", False)),
+            "blocked_reason": None,
+            "shard_plan": _ar_shards,
+        })
+        if not _ar_pf_check["eligible"]:
+            _die(
+                f"[BLOCKED] failure_code={_ar_pf_check['blocked_reason']}\n"
+                "  permit 발급 전 preflight 검증 실패 — coverage/budget/convergence 확인 후 재시도하세요."
+            )
         _issued = _issue_codex_shard_review_permit(
-            _ar_pid, _ar_head, _ar_rp_sha, _ar_contract_sha
+            _ar_pid, _ar_head, _ar_rp_sha, _ar_contract_sha, skip_internal_preflight=True
         )
         print(json.dumps({
             "status": "PERMIT_ISSUED",
@@ -26138,7 +26293,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         print(json.dumps(_pf_result, ensure_ascii=False, indent=2))
         # IMP-20260717-5EE0 MT-10(REJECT#2 문제3): blocked_reason이 있으면 exit 1로 종료한다.
         #   (기존: 항상 exit 0 → preflight가 차단 사유를 무시하고 통과하던 문제 제거)
-        if _pf_result.get("blocked_reason"):
+        # REJECT#3 Finding 3(MT-17): budget_ok=False인데 blocked_reason이 None인 케이스도
+        #   단일 판정기로 차단한다(blocked_reason만 보던 누락 제거).
+        _pf_eligibility = _validate_codex_preflight_eligibility(_pf_result)
+        if not _pf_eligibility["eligible"]:
             sys.exit(1)
         sys.exit(0)
 
@@ -26210,6 +26368,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     prev_reject_count = 0
     prev_cli_error_count = 0
     prev_status = ""
+    # REJECT#3 Finding 6(MT-21): 직전 결과의 epoch를 읽어 이번 결과 기록 시 보존한다(EPOCH_STARTED
+    #   이후 REJECTED/APPROVED/ERROR 결과에서 epoch가 1로 리셋되던 누락 제거).
+    current_epoch = 1
     _prev: Dict[str, Any] = {}
     _prev_result_path = _codex_review_result_path()
     if _prev_result_path.exists():
@@ -26221,11 +26382,13 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 prev_reject_count = int(_prev.get("reject_count", 0) or 0)
                 prev_cli_error_count = int(_prev.get("cli_error_count", 0) or 0)
                 prev_status = str(_prev.get("status", "") or "")
+                current_epoch = int(_prev.get("epoch", 1) or 1)
         except (OSError, json.JSONDecodeError, ValueError, TypeError):
             _prev = {}
             prev_reject_count = 0
             prev_cli_error_count = 0
             prev_status = ""
+            current_epoch = 1
 
     # IMP-20260717-5EE0 MT-9: AST 기반 sharding 항상 활성화(CODEX_REVIEW_SHARDING guard 제거).
     #   shard loop가 참조할 수 있도록 결과 변수를 먼저 초기화한다.
@@ -26473,6 +26636,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                         state, pipeline_id, _agg_cli_run,
                         prev_reject_count, prev_cli_error_count,
                         review_bundle_sha256=_review_bundle_sha256,
+                        epoch=current_epoch,
                     )
                     return  # unreachable — _finish_codex_review_error는 sys.exit 호출
             else:
@@ -26577,6 +26741,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 prev_reject_count, prev_cli_error_count,
                 attempt_id=attempt_id,
                 review_bundle_sha256=_review_bundle_sha256,
+                epoch=current_epoch,
             )
             return  # unreachable (_finish_codex_review_error가 sys.exit)
         # ERROR가 아니면 verdict를 CLI 결과에서 도출하여 아래 정상 기록 경로로 이어간다.
@@ -26841,6 +27006,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "attempt_id": attempt_id,
         "effective": True,  # 이 result가 현재 유효(effective current) attempt임을 표시
         "status": review_status,
+        "epoch": current_epoch,  # REJECT#3 Finding 6(MT-21): epoch 보존
         "error_type": None,
         "error_retryable": False,
         "reject_count": new_reject_count,
@@ -27264,6 +27430,7 @@ def _finish_codex_review_error(
     attempt_id: Optional[str] = None,
     snapshot_identity: Optional[Dict[str, Any]] = None,
     review_bundle_sha256: str = "",
+    epoch: int = 1,
 ) -> NoReturn:
     """Codex CLI ERROR 결과를 기록하고 이력에 남긴 뒤 non-zero exit한다.
 
@@ -27303,6 +27470,7 @@ def _finish_codex_review_error(
         "attempt_id": attempt_id,
         "effective": True,  # 이 ERROR result가 현재 유효(effective current) attempt임을 표시
         "status": "ERROR",
+        "epoch": epoch,  # REJECT#3 Finding 6(MT-21): epoch 보존
         "error_type": error_type,
         "error_retryable": bool(cli_run.get("error_retryable", False)),
         "reject_count": prev_reject_count,  # ERROR는 reject_count 증가 없음
