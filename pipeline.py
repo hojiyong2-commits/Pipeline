@@ -24862,6 +24862,25 @@ def _shard_review_permit_path() -> Path:
     return _codex_review_plan_path().parent / "shard_review_permit.json"
 
 
+# [Purpose]: IMP-20260717-5EE0 REJECT#4 P0-1 — frozen plan artifact 경로를 반환한다.
+#   --authorize-run이 생성한 타임스탬프-제거 plan을 재사용하여 review_plan_sha 비결정성을 제거한다.
+# [Assumptions]: permit_path와 동일 디렉토리에 저장된다.
+# [Vulnerability & Risks]: 파일 없으면 _build_codex_review_plan fallback 사용.
+# [Improvement]: pipeline_id별 다중 frozen plan을 지원할 수 있다.
+def _shard_review_frozen_plan_path() -> Path:
+    """frozen review plan artifact 경로를 반환한다(PIPELINE_STATE_PATH 격리 지원).
+
+    Returns:
+        codex_review_frozen_plan.json 절대 경로.
+    """
+    return _codex_review_plan_path().parent / "codex_review_frozen_plan.json"
+
+
+# 타임스탬프 등 plan identity에 영향 없는 필드 집합(SSoT).
+# plan identity = pr_head_sha + contract_sha + shard_content + evidence_shas만 포함.
+_FROZEN_PLAN_EXCLUDE_KEYS: frozenset = frozenset({"generated_at", "saved_at", "run_at"})
+
+
 # [Purpose]: IMP-20260717-5EE0 MT-10(REJECT#2 문제4) — Codex CLI 실행 파일 경로를 탐색한다.
 # [Assumptions]: codex CLI가 PATH에 있으면 shutil.which로 찾는다.
 # [Vulnerability & Risks]: 없으면 None을 반환하여 상위가 codex_cli_not_connected로 fail-closed 처리한다.
@@ -25230,38 +25249,87 @@ def _check_and_consume_permit(
             "  shard review permit이 없습니다. 사용자가 다음으로 발급해야 합니다:\n"
             f"  {_codex_authorize_cmd_hint()}"
         )
+
+    # 1차 permit 읽기 — permit_id 추출용(claim 전 race-safe 읽기).
     try:
-        permit = json.loads(permit_path.read_text(encoding="utf-8"))
+        _permit_raw = permit_path.read_bytes()
+        permit = json.loads(_permit_raw)
         if not isinstance(permit, dict):
             raise ValueError("permit is not a dict")
     except (json.JSONDecodeError, OSError, ValueError) as exc:
         _die(f"[BLOCKED] failure_code=permit_read_error\n  permit 파일 읽기 실패: {exc}")
 
+    permit_id = str(permit.get("permit_id", "") or "")
+
+    # REJECT#4 P0-2: OS 원자 claim 획득(O_CREAT|O_EXCL) — 동시 소비 차단.
+    #   claim 파일이 이미 존재하면 다른 프로세스가 먼저 claim을 획득한 것이므로 BLOCKED.
+    #   claim 파일은 소비 완료 표시로 유지하며, hygiene이 나중에 정리한다.
+    claim_path = permit_path.parent / f"permit_{permit_id}.claim"
+    claim_acquired = False
+    try:
+        _claim_fd = os.open(str(claim_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(_claim_fd)
+        claim_acquired = True
+    except FileExistsError:
+        _die(
+            "[BLOCKED] failure_code=permit_already_claimed\n"
+            "  다른 프로세스가 이미 이 permit을 소비 중입니다. --authorize-run으로 재발급하세요."
+        )
+    except OSError as _claim_exc:
+        _die(
+            f"[BLOCKED] failure_code=permit_claim_failed\n"
+            f"  claim 파일 생성 실패: {_claim_exc}"
+        )
+
+    # claim 획득 후 permit 재읽기(race window 최소화).
+    try:
+        _permit_raw2 = permit_path.read_bytes()
+        permit = json.loads(_permit_raw2)
+        if not isinstance(permit, dict):
+            raise ValueError("permit is not a dict")
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
+        if claim_acquired:
+            try:
+                claim_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        _die(f"[BLOCKED] failure_code=permit_read_error\n  permit 파일 재읽기 실패: {exc}")
+
+    def _release_claim() -> None:
+        """claim 파일 해제(검증 실패 시 호출)."""
+        try:
+            claim_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
     if permit.get("consumed"):
+        _release_claim()
         _die(
             "[BLOCKED] failure_code=permit_consumed\n"
             "  이미 소비된 permit입니다. --authorize-run으로 재발급하세요."
         )
     if permit.get("pipeline_id") != pipeline_id:
+        _release_claim()
         _die(
             "[BLOCKED] failure_code=permit_pipeline_mismatch\n"
             f"  permit의 pipeline_id({permit.get('pipeline_id')})가 현재({pipeline_id})와 다릅니다."
         )
     if permit.get("pr_head_sha") != pr_head_sha:
+        _release_claim()
         _die(
             "[BLOCKED] failure_code=permit_stale\n"
             "  PR head SHA가 변경되었습니다. --authorize-run으로 재발급하세요."
         )
-    # REJECT#3 P0-1: review_plan_sha 불일치 → 검토 계획이 달라짐(stale). fail-closed 차단.
-    #   None/누락은 ""로 정규화(legacy permit 하위 호환); 실제 값 drift는 여전히 차단된다.
+    # REJECT#3 P0-1(유지): review_plan_sha 불일치 → stale. REJECT#4 P0-1: frozen plan SHA 사용.
     if str(permit.get("review_plan_sha") or "") != review_plan_sha:
+        _release_claim()
         _die(
             "[BLOCKED] failure_code=permit_review_plan_stale\n"
             "  review_plan SHA가 변경되었습니다. --authorize-run으로 재발급하세요."
         )
-    # REJECT#3 P0-1: contract_sha 불일치 → 검토 대상 계약이 달라짐(stale). fail-closed 차단.
-    #   None/누락은 ""로 정규화(legacy permit 하위 호환); 실제 값 drift는 여전히 차단된다.
+    # REJECT#3 P0-1(유지): contract_sha 불일치 → stale.
     if str(permit.get("contract_sha") or "") != current_contract_sha:
+        _release_claim()
         _die(
             "[BLOCKED] failure_code=permit_contract_stale\n"
             "  contract SHA가 변경되었습니다. --authorize-run으로 재발급하세요."
@@ -25273,17 +25341,20 @@ def _check_and_consume_permit(
             str(permit["expires_at"]), "%Y-%m-%dT%H:%M:%SZ"
         ).replace(tzinfo=timezone.utc)
     except (KeyError, ValueError, TypeError):
+        _release_claim()
         _die("[BLOCKED] failure_code=permit_invalid\n  permit 형식이 잘못되었습니다(expires_at).")
     if datetime.now(timezone.utc) > expiry:
+        _release_claim()
         _die(
             "[BLOCKED] failure_code=permit_expired\n"
             "  permit이 만료되었습니다. --authorize-run으로 재발급하세요."
         )
 
-    # 원자적 소비: consumed=True로 표시하여 재사용을 차단한다.
+    # 모든 검증 통과 — consumed=True로 원자 저장(_write_json은 tmpfile→rename 원자 쓰기).
     permit["consumed"] = True
     permit["consumed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     _write_json(permit_path, permit)
+    # claim 파일은 소비 완료 표시로 유지(hygiene이 정리).
     return permit
 
 
@@ -25369,8 +25440,13 @@ def _call_codex_cli_for_shard(
     )
     os.close(result_fd)  # subprocess가 직접 파일에 기록하므로 fd는 즉시 닫는다.
     try:
-        cmd = [
-            codex_bin, "exec", "--json",
+        # REJECT#4 P1: --output-schema로 verdict JSON schema를 Codex에 전달한다.
+        #   schema 파일이 없으면 schema 인수 없이 실행한다(하위 호환 — 미설치 환경 지원).
+        _schema_path = BASE_DIR / "codex_verdict_schema.json"
+        cmd = [codex_bin, "exec", "--json"]
+        if _schema_path.exists():
+            cmd += ["--output-schema", str(_schema_path)]
+        cmd += [
             "--output-last-message", result_file,
             "--ephemeral",
             "--sandbox", "read-only",
@@ -25469,18 +25545,23 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다 (authorize-run).")
         _ar_plan = _build_codex_review_plan(_ar_pid)
         _ar_budgets = _calculate_shard_budget(_ar_plan)
-        _ar_shards = _build_shard_plan(_ar_plan, _ar_budgets)
-        _ar_head = str(_ar_plan.get("pr_head_sha", "") or "")
-        _ar_rp_sha = (
-            str(_ar_shards[0].get("review_plan_sha256", "") or "")
-            if _ar_shards
-            else _sha256_text(json.dumps(_ar_plan, sort_keys=True, ensure_ascii=False, default=str))
-        )
-        # REJECT#3 P0-1: contract_sha를 permit에 봉인한다(shard에 기록된 값 우선, 없으면 plan에서).
+        # REJECT#4 P0-1: plan identity에 영향 없는 타임스탬프 필드를 제거한 frozen plan 생성.
+        #   frozen plan을 파일로 저장하고 raw-byte SHA를 permit에 봉인하여 비결정성 제거.
+        _ar_plan_frozen = {k: v for k, v in _ar_plan.items() if k not in _FROZEN_PLAN_EXCLUDE_KEYS}
+        _ar_frozen_bytes = (
+            json.dumps(_ar_plan_frozen, sort_keys=True, ensure_ascii=False, indent=2) + "\n"
+        ).encode("utf-8")
+        _ar_frozen_path = _shard_review_frozen_plan_path()
+        _ar_frozen_path.parent.mkdir(parents=True, exist_ok=True)
+        _ar_frozen_path.write_bytes(_ar_frozen_bytes)
+        _ar_rp_sha = hashlib.sha256(_ar_frozen_bytes).hexdigest()
+        # frozen plan 기반으로 shard plan 생성(타임스탬프 없으므로 SHA 안정).
+        _ar_shards = _build_shard_plan(_ar_plan_frozen, _ar_budgets)
+        _ar_head = str(_ar_plan_frozen.get("pr_head_sha", "") or "")
         _ar_contract_sha = (
             str(_ar_shards[0].get("contract_sha256", "") or "")
             if _ar_shards
-            else str(_ar_plan.get("contract_sha256", "") or "")
+            else str(_ar_plan_frozen.get("contract_sha256", "") or "")
         )
         _issued = _issue_codex_shard_review_permit(
             _ar_pid, _ar_head, _ar_rp_sha, _ar_contract_sha
@@ -25557,12 +25638,23 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   (bootstrap chicken-and-egg 회피). _shard_plan은 비어 있고, 아래 cache-miss 경로가
     #   기존 codex_verdict_required 차단을 그대로 유지한다.
     try:
-        _review_plan = _build_codex_review_plan(pipeline_id)
+        # REJECT#4 P0-1: --authorize-run이 저장한 frozen plan 파일이 있으면 재사용한다.
+        #   frozen plan은 타임스탬프가 제거되어 review_plan_sha가 안정적이다.
+        #   파일이 없으면 _build_codex_review_plan fallback으로 동적 생성한다.
+        _frozen_path = _shard_review_frozen_plan_path()
+        if _frozen_path.exists():
+            _frozen_bytes_runtime = _frozen_path.read_bytes()
+            _review_plan = json.loads(_frozen_bytes_runtime)
+            _auto_frozen_sha = hashlib.sha256(_frozen_bytes_runtime).hexdigest()
+        else:
+            _review_plan = _build_codex_review_plan(pipeline_id)
+            _auto_frozen_sha = ""
         _shard_budgets = _calculate_shard_budget(_review_plan)
         _shard_plan = _build_shard_plan(_review_plan, _shard_budgets)
         _log_event(state, f"codex sharding plan: {len(_shard_plan)} shards")
     except SystemExit:
         _shard_plan = []
+        _auto_frozen_sha = ""
         _log_event(state, "codex sharding skipped: review item exceeds shard budget (self-review)")
 
     # convergence guard 확인 — 초과 시 hard 차단.
@@ -25710,7 +25802,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             #   fail-closed로 검증·소비한 뒤에만 CLI를 호출한다(mock/미승인 우회 차단).
             if _shard_plan and _shard_review_permit_path().exists():
                 _auto_head = str(_shard_plan[0].get("pr_head_sha", "") or "")
-                _auto_rp_sha = str(_shard_plan[0].get("review_plan_sha256", "") or "")
+                # REJECT#4 P0-1: frozen plan의 raw-byte SHA를 review_plan_sha로 사용한다.
+                #   permit 발급 시와 동일한 방법으로 계산하여 비결정성을 제거한다.
+                _auto_rp_sha = _auto_frozen_sha or str(_shard_plan[0].get("review_plan_sha256", "") or "")
                 _auto_contract_sha = str(_shard_plan[0].get("contract_sha256", "") or "")
                 # REJECT#3 P0-1: contract_sha도 permit 검증에 전달한다(stale drift fail-closed).
                 _permit = _check_and_consume_permit(
