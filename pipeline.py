@@ -25221,52 +25221,124 @@ def _codex_verdict_schema_path() -> Path:
     return BASE_DIR / "codex_verdict_schema.json"
 
 
+# [Purpose]: IMP-20260717-5EE0 REJECT#7 P0-2 — OpenAI Structured Outputs 스키마 적합성 검증.
+# [Assumptions]: schema는 json.loads로 파싱된 dict다.
+# [Vulnerability & Risks]: 재귀 검증. object type이 아닌 nested 타입은 검사하지 않는다.
+# [Improvement]: 더 깊은 재귀 깊이 제한을 추가할 수 있다.
+def _validate_codex_output_schema(schema: dict) -> dict:
+    """OpenAI Structured Outputs 스키마 적합성 재귀 검증.
+
+    Args:
+        schema: json.loads로 파싱된 schema dict.
+    Returns:
+        {"valid": True} 또는 {"valid": False, "failure_code": "codex_output_schema_invalid", "reason": "..."}
+    """
+    def _check_object(obj: dict, path: str = "root") -> Optional[str]:
+        if obj.get("type") != "object":
+            return f"{path}: type must be 'object', got {obj.get('type')}"
+        props = obj.get("properties", {})
+        required = set(obj.get("required", []))
+        prop_keys = set(props.keys())
+        if required != prop_keys:
+            missing = prop_keys - required
+            return f"{path}: required != properties keys, missing in required: {missing}"
+        if obj.get("additionalProperties") is not False:
+            return f"{path}: additionalProperties must be false"
+        for k, v in props.items():
+            if v.get("type") == "object":
+                err = _check_object(v, f"{path}.{k}")
+                if err:
+                    return err
+            elif v.get("type") == "array":
+                if "items" not in v:
+                    return f"{path}.{k}: array missing items"
+                if v["items"].get("type") == "object":
+                    err = _check_object(v["items"], f"{path}.{k}.items")
+                    if err:
+                        return err
+        return None
+
+    if not isinstance(schema, dict):
+        return {"valid": False, "failure_code": "codex_output_schema_invalid", "reason": "schema must be a dict"}
+
+    err = _check_object(schema)
+    if err:
+        return {"valid": False, "failure_code": "codex_output_schema_invalid", "reason": err}
+
+    verdict_prop = schema.get("properties", {}).get("verdict", {})
+    allowed_verdicts = {"APPROVE_TO_USER", "REJECT"}
+    if set(verdict_prop.get("enum", [])) != allowed_verdicts:
+        return {"valid": False, "failure_code": "codex_output_schema_invalid", "reason": f"verdict enum must be {allowed_verdicts}"}
+
+    findings_items = schema.get("properties", {}).get("findings", {}).get("items", {})
+    expected_finding_fields = {"scope", "severity", "root_cause_category", "evidence", "reproduction", "required_fix", "acceptance_criteria"}
+    actual_fields = set(findings_items.get("properties", {}).keys())
+    if actual_fields != expected_finding_fields:
+        return {"valid": False, "failure_code": "codex_output_schema_invalid", "reason": f"finding fields mismatch: {actual_fields} vs {expected_finding_fields}"}
+
+    return {"valid": True}
+
+
 # [Purpose]: IMP-20260717-5EE0 MT-11(REJECT#3 P0-2) — Codex verdict 객체를 strict schema로 검증한다.
 # [Assumptions]: obj는 json.loads로 파싱된 dict다(호출자가 dict 여부를 이미 확인).
 # [Vulnerability & Risks]: schema 위반/enum 위반/추가 필드는 모두 False로 fail-closed 처리한다.
 #            jsonschema 미설치 환경(신규 의존성 회피)에서도 동일 규칙을 수동 검증한다.
 # [Improvement]: findings 항목의 세부 스키마(scope/severity)까지 검증하도록 확장할 수 있다.
-def _validate_codex_verdict_obj(obj: Any) -> bool:
-    """Codex verdict dict가 codex_verdict_schema.json 계약을 만족하는지 검증한다.
-
-    스키마는 _codex_verdict_schema_path()로 로드한다. 파일 로드 실패 시
-    내장 fallback 규칙(동일 계약 기준)으로 검증을 계속한다(fail-closed).
+def _validate_codex_verdict_obj(obj: Any) -> dict:
+    """Codex verdict dict를 스키마 계약에 따라 fail-closed 검증한다.
 
     Args:
-        obj: 검증 대상(dict가 아니면 즉시 False).
+        obj: 검증 대상(dict가 아니면 즉시 실패).
     Returns:
-        스키마를 만족하면 True, 아니면 False(fail-closed).
+        {"valid": True} 또는 {"valid": False, "reason": "..."}.
     """
     if not isinstance(obj, dict):
-        return False
-    # 스키마 파일에서 allowed_keys와 verdict enum을 로드 (SSoT: codex_verdict_schema.json)
-    allowed_keys: set = {"verdict", "findings", "review_notes"}
-    valid_verdicts: tuple = ("APPROVE_TO_USER", "REJECT")
-    try:
-        schema_path = _codex_verdict_schema_path()
-        if schema_path.exists():
-            import json as _json
-            schema = _json.loads(schema_path.read_text(encoding="utf-8"))
-            props = schema.get("properties", {})
-            if props:
-                allowed_keys = set(props.keys())
-            verdict_enum = props.get("verdict", {}).get("enum")
-            if isinstance(verdict_enum, list) and verdict_enum:
-                valid_verdicts = tuple(verdict_enum)
-    except Exception:
-        pass  # fallback to hardcoded values above
-    # 계약 검증
-    if set(obj.keys()) - allowed_keys:
-        return False  # additionalProperties=False
-    if "verdict" not in obj:
-        return False
-    if obj.get("verdict") not in valid_verdicts:
-        return False
-    if "findings" in obj and not isinstance(obj["findings"], list):
-        return False
-    if "review_notes" in obj and not isinstance(obj["review_notes"], str):
-        return False
-    return True
+        return {"valid": False, "reason": "not a dict"}
+
+    verdict = obj.get("verdict")
+    if verdict not in ("APPROVE_TO_USER", "REJECT"):
+        return {"valid": False, "reason": f"invalid verdict: {verdict}"}
+
+    findings = obj.get("findings")
+    if not isinstance(findings, list):
+        return {"valid": False, "reason": "findings must be array"}
+
+    review_notes = obj.get("review_notes")
+    if not isinstance(review_notes, str):
+        return {"valid": False, "reason": "review_notes must be string"}
+
+    # 추가/누락 필드 금지 (additionalProperties=false)
+    allowed_root = {"verdict", "findings", "review_notes"}
+    extra = set(obj.keys()) - allowed_root
+    if extra:
+        return {"valid": False, "reason": f"extra root keys: {extra}"}
+
+    # REJECT는 findings 1개 이상
+    if verdict == "REJECT" and len(findings) == 0:
+        return {"valid": False, "reason": "REJECT must have at least 1 finding"}
+
+    # APPROVE_TO_USER는 findings 비어야 함
+    if verdict == "APPROVE_TO_USER" and len(findings) > 0:
+        return {"valid": False, "reason": "APPROVE_TO_USER must have empty findings"}
+
+    # finding 각 항목 검증
+    required_finding_fields = {"scope", "severity", "root_cause_category", "evidence", "reproduction", "required_fix", "acceptance_criteria"}
+    valid_severities = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
+
+    for i, f in enumerate(findings):
+        if not isinstance(f, dict):
+            return {"valid": False, "reason": f"finding[{i}] not a dict"}
+        actual = set(f.keys())
+        if actual != required_finding_fields:
+            return {"valid": False, "reason": f"finding[{i}] fields: {actual} vs {required_finding_fields}"}
+        if f.get("severity") not in valid_severities:
+            return {"valid": False, "reason": f"finding[{i}] severity invalid: {f.get('severity')}"}
+        if not isinstance(f.get("acceptance_criteria"), list):
+            return {"valid": False, "reason": f"finding[{i}] acceptance_criteria must be array"}
+        if not all(isinstance(s, str) for s in f.get("acceptance_criteria", [])):
+            return {"valid": False, "reason": f"finding[{i}] acceptance_criteria items must be strings"}
+
+    return {"valid": True}
 
 
 # [Purpose]: IMP-20260717-5EE0 MT-11(REJECT#3 P0-2) — Codex CLI --output-last-message 결과 파일을
@@ -25321,17 +25393,19 @@ def _parse_codex_cli_shard_output(
         obj = json.loads(raw)
     except json.JSONDecodeError:
         return _parse_error()
-    if not _validate_codex_verdict_obj(obj):
+    if not _validate_codex_verdict_obj(obj).get("valid"):
         return _parse_error()  # schema 위반 → fail-closed
 
     verdict = str(obj.get("verdict", "") or "")
     findings = obj.get("findings", [])
+    # REJECT#7 P0-4: 아래 3개 체크는 _validate_codex_verdict_obj 내에서 이미 처리됨(중복).
+    #   방어적으로 유지하되 계약 검증의 SSoT는 _validate_codex_verdict_obj다.
     if not isinstance(findings, list):
         return _parse_error()
-    # REJECT는 최소 1개 finding이 있어야 유효하다(빈 REJECT는 계약 위반).
+    # (중복) REJECT는 최소 1개 finding이 있어야 유효하다(빈 REJECT는 계약 위반).
     if verdict == "REJECT" and len(findings) == 0:
         return _parse_error()
-    # APPROVE_TO_USER는 findings가 비어 있어야 유효하다(승인인데 finding 존재 = 모순).
+    # (중복) APPROVE_TO_USER는 findings가 비어 있어야 유효하다(승인인데 finding 존재 = 모순).
     if verdict == "APPROVE_TO_USER" and len(findings) != 0:
         return _parse_error()
     return {
@@ -25453,6 +25527,29 @@ def _issue_codex_shard_review_permit(
 
     # REJECT#3 P0-5: permit 발급 전 working tree 정합성 검증(dirty면 fail-closed 차단).
     _verify_working_tree_integrity()
+
+    # REJECT#7 P0-3: schema 파일 로드 + OpenAI Structured Outputs 검증 (permit 발급 전 차단).
+    _schema_path = _codex_verdict_schema_path()
+    if not _schema_path.exists():
+        _die(
+            "[BLOCKED] failure_code=schema_file_missing\n"
+            f"  codex_verdict_schema.json이 없습니다: {_schema_path}"
+        )
+    try:
+        _schema_raw = _schema_path.read_bytes()
+        _schema_obj = json.loads(_schema_raw)
+    except json.JSONDecodeError as _schema_err:
+        _die(
+            "[BLOCKED] failure_code=schema_json_invalid\n"
+            f"  codex_verdict_schema.json JSON 파싱 실패: {_schema_err}"
+        )
+    _schema_check = _validate_codex_output_schema(_schema_obj)
+    if not _schema_check.get("valid"):
+        _die(
+            "[BLOCKED] failure_code=codex_output_schema_invalid\n"
+            f"  codex_verdict_schema.json OpenAI Structured Outputs 검증 실패:\n"
+            f"  {_schema_check.get('reason', '(이유 없음)')}"
+        )
 
     from datetime import datetime, timedelta, timezone  # noqa: PLC0415
     now = datetime.now(timezone.utc)
