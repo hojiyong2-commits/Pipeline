@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <verdict>PASS</verdict>
+  <pipeline_id>IMP-20260711-F5D7</pipeline_id>
+  <phase>qa</phase>
+  <agent>qa-agent</agent>
+  <run_id>qa-bd1a7fe58c571c78</run_id>
+  <round>2</round>
+  <rework_target>rework3 — ACCEPTANCE_STATE_TRANSITION_RULES 회귀 수정 검증</rework_target>
+
+  <handover_check>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_writer_ownership_f5d7.py</evidence>
+    <ui_tag_present>false — dev-agent handover 단독 수락 (UI 미포함 태스크)</ui_tag_present>
+    <verdict>ACCEPTED</verdict>
+  </handover_check>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 변경 없음</wa>
+    <ui>N-A — GUI 위젯 변경 없음</ui>
+    <fs>N-A — 파일 인코딩/원자적 쓰기 로직 변경 없음 (테스트는 tempfile 격리 인프라)</fs>
+    <pd>PASS — ACCEPTANCE_STATE_TRANSITION_RULES는 단일 SSoT 상수, 유일 소비자 _validate_pr_body_write_permission()로 분리. Dict[Tuple[str,str],Set[str]] 타입 계약 명시</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점</sec>
+    <al>PASS — 상태 전이 엣지케이스 전량 방어: 초기상태(NONE/NOT_REQUESTED/UNKNOWN)→PENDING 허용, 역전이(ACCEPTED→PENDING) set() 차단 유지, idempotent(ACCEPTED→ACCEPTED) 보존. .get(key,set()) 안전 기본값. bare except 없음(명시적 failure_code 반환)</al>
+    <build>N-A — pipeline.py 내부 로직 수정, EXE 빌드 대상 아님 (meta-task)</build>
+    <vsce>N-A — VSCE 카테고리 미포함</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <wa max="20">N/A — 미해당(감점 없음)</wa>
+    <ui max="20">N/A — 미해당(감점 없음)</ui>
+    <fs max="20">N/A — 미해당(감점 없음)</fs>
+    <pd max="10">모듈분리 5/5 (SSoT 단일 상수 + 유일 소비자), 인터페이스계약 5/5 (typed Dict 계약)</pd>
+    <al max="20">0나눗셈 N/A, 상태전이 범위검증 5/5, 타입가드 5/5, 초기/역전이/idempotent 엣지 5/5, fail-closed 5/5</al>
+    <build max="10">N/A — 미해당(감점 없음)</build>
+  </numeric_score_detail>
+
+  <numeric_score>112</numeric_score>
+  <numeric_verdict>PASS</numeric_verdict>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover self_check.execution_check = PASS (py_compile + pytest + ruff + mypy 실제 Bash 실행)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — ACCEPTANCE_STATE_TRANSITION_RULES(pipeline.py:6489)가 실제로 _validate_pr_body_write_permission(pipeline.py:17233)에서 소비되고, 이 함수는 _cmd_report_update_pr_body(report update-pr-body)에서 호출됨. 정의만이 아닌 실제 호출 경로 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <verification_evidence>
+    <pytest>17 passed (TC-1~TC-17) — tests/e2e/test_writer_ownership_f5d7.py, 10.76s</pytest>
+    <tc17>PASS — manual_report_writer + UNKNOWN body → exit 0, transition_not_allowed 미출력 (회귀 해소 검증)</tc17>
+    <tc14>PASS — manual_report_writer가 ACCEPTED→PENDING 역전이 시도 시 allowed=False + graceful skip(exit 0), write 미발생 (역전이 차단 유지)</tc14>
+    <py_compile>PASS — pipeline.py + test 파일</py_compile>
+    <ruff>PASS — All checks passed! (exit 0)</ruff>
+    <mypy>PASS — Success: no issues found (exit 0)</mypy>
+    <code_review>PASS — diff 검토: NONE/NOT_REQUESTED/UNKNOWN→PENDING 3항목 추가(post_accept_writer 제외 정확), PENDING→PENDING에 manual_report_writer 추가, ACCEPTED→PENDING set() 유지, ACCEPTED→ACCEPTED idempotent 보존. Round 1 signature AL:e500ba5e 근본 원인 해소</code_review>
+  </verification_evidence>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — rework3 커밋(3653c107) 변경 파일 = pipeline.py(+11) + tests/e2e/test_writer_ownership_f5d7.py(+44), scope/evidence와 정확히 일치. 상수 소비처 Grep 전수 확인(유일 소비자)</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan_F5D7.xml에 decomposition_audit 블록 존재 (11 MT, grep_executions=11)</decomposition_audit_present>
+    <grep_evidence_present>PASS — micro_task별 executed=true 16건 확인</grep_evidence_present>
+    <declared_functions>1 (ACCEPTANCE_STATE_TRANSITION_RULES 상수) + 1 신규 테스트 함수</declared_functions>
+    <actual_modified_functions>1 상수 + 1 테스트 함수 (일치)</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <anti_gaming_note>step_plan은 pm-planner-agent 아키텍처 산출물로 decomposition_audit + grep_evidence(16 executed)를 anti-gaming 증거로 포함. PM done hard gate 통과 완료. (legacy pm-agent anti_gaming_read 태그는 planner 아키텍처 비적용)</anti_gaming_note>
+
+  <ac_verification_all>
+    <mt id="MT-1">
+      <ac_verification>
+        <covers_ac>AC-1</covers_ac>
+        <ac_status>PASS</ac_status>
+      </ac_verification>
+    </mt>
+    <mt id="MT-2-3">
+      <ac_verification>
+        <covers_ac>AC-2, AC-3, AC-4</covers_ac>
+        <ac_status>PASS</ac_status>
+      </ac_verification>
+    </mt>
+    <mt id="MT-4-5">
+      <ac_verification>
+        <covers_ac>AC-5, AC-6</covers_ac>
+        <ac_status>PASS</ac_status>
+      </ac_verification>
+    </mt>
+    <mt id="MT-6">
+      <ac_verification>
+        <covers_ac>AC-3</covers_ac>
+        <ac_status>PASS</ac_status>
+      </ac_verification>
+    </mt>
+    <mt id="MT-7">
+      <ac_verification>
+        <covers_ac>AC-6, AC-7, AC-8</covers_ac>
+        <ac_status>PASS</ac_status>
+      </ac_verification>
+    </mt>
+    <mt id="MT-8-9">
+      <ac_verification>
+        <covers_ac>AC-9</covers_ac>
+        <ac_status>PASS</ac_status>
+      </ac_verification>
+    </mt>
+    <mt id="MT-10">
+      <ac_verification>
+        <covers_ac>AC-9, AC-10</covers_ac>
+        <ac_status>PASS</ac_status>
+      </ac_verification>
+    </mt>
+    <mt id="MT-11">
+      <ac_verification>
+        <covers_ac>AC-11, AC-12</covers_ac>
+        <ac_status>PASS</ac_status>
+      </ac_verification>
+    </mt>
+  </ac_verification_all>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="PR_BODY_WRITER_ROLES + ACCEPTANCE_STATE_TRANSITION_RULES SSoT 상수 정의, TC-1/TC-2 통과"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="단방향 전이 규칙 — TC-3(역전이 차단), TC-4(정상 승격) 통과"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="_validate_pr_body_write_permission 상태 검증 + report update-pr-body wiring, TC-13/TC-17 통과"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="_extract_pr_body_acceptance_metadata ACCEPTED/PENDING 추출 TC-6/TC-7 통과"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="_build_final_packet_content writer 메타데이터 기록 TC-15 통과"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="_materialize_acceptance_snapshot writer 파라미터 전달 wiring TC-15 통과"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="_finalize_post_accept post_accept_writer 경로 통합 유지"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="fail-closed(fetch 실패 시 write 차단) TC-5/TC-13 통과"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="ci.yml ACCEPTED 감지 skip + PR body writer-meta 기준 TC-16 통과"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="E2E 테스트 스위트 17개 통과 (TC-1~TC-17)"/>
+    <criterion ac_id="AC-11" status="PASS" evidence="oracle 파일 정상/엣지 케이스 커버 (MT-11 integration PASS)"/>
+    <criterion ac_id="AC-12" status="PASS" evidence="oracle 정합성 — 회귀(reverse transition) + 정상(initial transition) 케이스 모두 검증"/>
+  </criteria_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — Round 1 FAIL(AL:e500ba5e) 근본 원인(초기 상태→PENDING 전이 누락)이 rework3에서 정확히 해소됨. 17/17 테스트 통과, 정적 검사 전량 PASS, scope 완전 준수.
+  </critical_issues>
+
+  <improvement_suggestions>
+    없음. 수정이 최소 침습적(상수 dict 항목 추가만)이고 역전이 차단 정책을 보존하며 positive-path 회귀 테스트(TC-17)로 재발을 방지함. HIGH_RISK 프로필(pipeline.py trust-root 수정)에 부합하는 보수적 변경.
+  </improvement_suggestions>
+</qa_report>
