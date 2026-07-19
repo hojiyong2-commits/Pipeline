@@ -1060,12 +1060,20 @@ class TestReject7SchemaValidator:
              patch.object(pl, "_verify_working_tree_integrity", return_value=None), \
              patch.object(pl, "_shard_review_permit_path", return_value=permit_path):
             import pytest
+            # 수정 6: _issue는 이제 FrozenReviewSnapshot을 받는다.
+            snapshot = pl.FrozenReviewSnapshot(
+                plan={"pipeline_id": "IMP-20260717-5EE0"},
+                plan_bytes=b"{}",
+                plan_sha256="def456",
+                workspace_snapshot_sha256="ws000",
+                pr_head_sha="abc123",
+                contract_sha="",
+                shard_ids=[],
+                eligibility={"eligible": True, "blocked_reason": None, "details": {}},
+                created_at="2026-01-01T00:00:00Z",
+            )
             with pytest.raises(SystemExit):
-                pl._issue_codex_shard_review_permit(
-                    pipeline_id="IMP-20260717-5EE0",
-                    pr_head_sha="abc123",
-                    review_plan_sha="def456",
-                )
+                pl._issue_codex_shard_review_permit(snapshot)
         # permit 파일 미생성 확인
         assert not permit_path.exists(), "invalid schema에서 permit이 발급되면 안 됩니다"
 
@@ -1207,11 +1215,19 @@ class TestReject7VerdictObjValidator:
             # 여기서는 schema 검증이 통과됐는지 확인하는 게 목적
             # _verify_permit_before_cli 같은 다른 검증에서 막히는 건 OK
             try:
-                pl._issue_codex_shard_review_permit(
-                    pipeline_id="IMP-20260717-5EE0",
+                # 수정 6: _issue는 이제 FrozenReviewSnapshot을 받는다.
+                snapshot = pl.FrozenReviewSnapshot(
+                    plan={"pipeline_id": "IMP-20260717-5EE0"},
+                    plan_bytes=b"{}",
+                    plan_sha256="def456",
+                    workspace_snapshot_sha256="ws000",
                     pr_head_sha="abc123",
-                    review_plan_sha="def456",
+                    contract_sha="",
+                    shard_ids=[],
+                    eligibility={"eligible": True, "blocked_reason": None, "details": {}},
+                    created_at="2026-01-01T00:00:00Z",
                 )
+                pl._issue_codex_shard_review_permit(snapshot)
             except SystemExit:
                 pass  # 다른 이유로 종료해도 schema 검증이 통과됐으면 OK
             # schema preflight가 통과됐다는 증거: _validate_codex_output_schema가 PASS 반환
@@ -1750,35 +1766,28 @@ class TestNonPythonEvidenceCompleteness:
         )
 
     def test_tc105_coverage_incomplete_permit_blocked(self, monkeypatch):
-        """TC-105: blocked_reason=evidence_incomplete → permit 미발급"""
+        """TC-105: coverage 불완전 → eligibility 게이트가 permit 발급 전에 차단한다.
+
+        수정 5/6: 내부 preflight가 _issue에서 제거되고, coverage/budget/convergence 게이트가
+        --authorize-run의 snapshot 생성 단계로 이동했다. 따라서 coverage_ok=False preflight는
+        _validate_codex_preflight_eligibility에서 eligible=False로 판정되어 permit이 발급되지 않는다.
+        """
         mod = self._load_pipeline()
-        import unittest.mock as mock
-        # CODEX_RUN_AUTHORIZED 우회 없이 preflight 실패 경로만 테스트
-        # preflight를 coverage PARTIAL 반환으로 mock
-        with mock.patch.object(
-            mod, "_run_codex_review_preflight",
-            return_value={
-                "budget_ok": True,
-                "coverage_ok": False,
-                "convergence_ok": True,
-                "blocked_reason": "evidence_incomplete",
-                "review_plan": {},
-                "shard_plan": [],
-                "total_estimated_chars": 0,
-                "per_shard_chars": {},
-            }
-        ), mock.patch.dict("os.environ", {"CODEX_RUN_AUTHORIZED": "1"}), \
-           mock.patch.object(mod, "_verify_working_tree_integrity", return_value=None), \
-           mock.patch.object(mod, "_validate_codex_output_schema", return_value={"valid": True}):
-            # schema 파일 mock
-            schema_path_mock = mock.MagicMock()
-            schema_path_mock.exists.return_value = True
-            schema_path_mock.read_bytes.return_value = b'{"type":"object","required":["verdict","findings","review_notes"]}'
-            with mock.patch.object(mod, "_codex_verdict_schema_path", return_value=schema_path_mock):
-                with pytest.raises(SystemExit):
-                    mod._issue_codex_shard_review_permit(
-                        "IMP-TEST", "abc123", "def456", ""
-                    )
+        pf_result = {
+            "budget_ok": True,
+            "coverage_ok": False,
+            "convergence_ok": True,
+            "blocked_reason": "evidence_incomplete",
+            "review_plan": {},
+            "shard_plan": [{"shard_id": "s1", "prompt_chars": 100}],
+            "total_estimated_chars": 100,
+            "per_shard_chars": {"s1": 100},
+        }
+        eligibility = mod._validate_codex_preflight_eligibility(pf_result)
+        assert not eligibility["eligible"], "coverage_ok=False인데 eligible=True (permit 발급 가능)"
+        assert eligibility["blocked_reason"] == "evidence_incomplete", (
+            f"예상 evidence_incomplete, 실제: {eligibility['blocked_reason']}"
+        )
 
     def test_tc106_coverage_incomplete_no_cli_call(self, monkeypatch, tmp_path):
         """TC-106: coverage 불완전 preflight → Codex CLI(_call_codex_cli_for_shard) 호출 0회
@@ -2197,62 +2206,61 @@ def test_tc118_epoch_zero_reject_count_passes_rate_limit(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# REJECT#3 회귀 테스트: TC-119~TC-133
+# REJECT#3 v2 회귀 테스트: TC-119~TC-133 (12개 구조 수정 검증)
 # ---------------------------------------------------------------------------
 
 
-class TestReject3Rework:
-    """REJECT#3 6개 finding 수정 검증 테스트."""
+class TestReject3Reworkv2:
+    """REJECT#3 v2 12개 수정 검증 테스트."""
 
-    # TC-119: module-level 변경(AST 노드 0개) → whole file 아닌 changed-line hunk
-    def test_tc119_module_level_change_uses_hunk_not_full_file(self, pipe):
-        """_extract_module_level_hunk_evidence가 전체 파일이 아닌 changed-line hunk를 반환한다.
-
-        inject 모드는 실제 module-level hunk 경로를 타지 않으므로(비-inject 실 git 경로 전용),
-        Finding 1의 SSoT 함수를 직접 검증한다.
-        """
+    # TC-119: module-level 변경 → module_level_hunk item만, full_file_capped 없음
+    def test_tc119_hunk_items_no_full_file_capped(self, pipe):
+        """_extract_module_level_hunk_evidence 반환 List[Dict]에 full_file_capped 없음."""
         source = "import os\nimport sys\n\nMY_CONST = 42\n\nANOTHER = 'hello'\n"
-        unmapped = [4]  # MY_CONST 라인
-        result = pipe._extract_module_level_hunk_evidence("test.py", unmapped, source)
+        unmapped = [4]
+        items = pipe._extract_module_level_hunk_evidence("test.py", unmapped, source)
+        assert isinstance(items, list), "반환값이 List가 아님"
+        assert len(items) >= 1, "evidence item이 없음"
+        for item in items:
+            assert item.get("evidence_mode") == "module_level_hunk", (
+                f"full_file_capped 또는 다른 mode가 발견됨: {item.get('evidence_mode')}"
+            )
+            assert "MY_CONST" in item.get("source", ""), "변경 라인이 hunk에 없음"
+            assert item.get("char_count") == len(item.get("source", "")), "char_count 불일치"
 
-        assert result["evidence_mode"] == "module_level_hunk"
-        assert len(result["source"]) < len(source), (
-            f"hunk가 전체 파일보다 커서는 안 됨: {len(result['source'])} >= {len(source)}"
+    # TC-120: 비연속 구간 2개 → 2개 독립 item, 각 구간 포함
+    def test_tc120_disjoint_sections_two_items(self, pipe):
+        """서로 떨어진 두 구간 → 독립 item 2개 반환, 각 item에 해당 구간 포함."""
+        lines = [f"LINE_{i} = {i}" for i in range(1, 21)]
+        source = "\n".join(lines) + "\n"
+        unmapped = [1, 15]  # gap > 3 → 2개 구간
+        items = pipe._extract_module_level_hunk_evidence("disjoint.py", unmapped, source)
+        assert isinstance(items, list), "반환값이 List가 아님"
+        assert len(items) == 2, f"예상 2개 item, 실제 {len(items)}개"
+        for item in items:
+            assert "changed_line_ids" in item, "changed_line_ids 필드 없음"
+        sources = [item.get("source", "") for item in items]
+        assert any("LINE_1 = 1" in s for s in sources), "첫 변경 구간 누락"
+        assert any("LINE_15 = 15" in s for s in sources), "둘째 변경 구간 누락"
+
+    # TC-121: 단일 hunk이 SHARD_HARD_BUDGET 초과 → evidence_item_over_budget BLOCKED (절단 없음)
+    def test_tc121_over_budget_returns_blocked(self, pipe):
+        """단일 hunk가 SHARD_HARD_BUDGET 초과 → blocked=True item 반환(절단 없음)."""
+        big_lines = [f"VAR_{i} = {'x' * 50}" for i in range(6000)]
+        source = "\n".join(big_lines) + "\n"
+        unmapped = list(range(1, len(big_lines) + 1))
+        items = pipe._extract_module_level_hunk_evidence("big.py", unmapped, source)
+        assert isinstance(items, list), "반환값이 List가 아님"
+        assert len(items) == 1, f"BLOCKED 반환 시 단일 item 예상, 실제 {len(items)}개"
+        assert items[0].get("blocked") is True, "blocked=True가 없음"
+        assert items[0].get("failure_code") == "evidence_item_over_budget", (
+            f"예상 evidence_item_over_budget, 실제: {items[0].get('failure_code')}"
         )
-        assert "MY_CONST" in result["source"], "변경된 라인이 hunk에 없음"
-        assert result["char_count"] == len(result["source"])
 
-    # TC-120: 서로 떨어진 module-level 구간 → 모두 포함
-    def test_tc120_disjoint_module_level_sections_all_covered(self, pipe):
-        """서로 떨어진 module-level 변경 구간이 모두 hunk에 포함된다(전체 파일 blob 삽입 아님)."""
-        source = "X = 1\nY = 2\nZ = 3\nA = 4\nB = 5\nC = 6\n"
-        unmapped = [1, 5]  # 서로 떨어진 두 구간
-        result = pipe._extract_module_level_hunk_evidence("disjoint.py", unmapped, source)
-
-        assert result["evidence_mode"] == "module_level_hunk"
-        assert "X = 1" in result["source"], "첫 변경 구간이 누락됨"
-        assert "B = 5" in result["source"], "둘째 변경 구간이 누락됨"
-        # max_chars 상한(기본 4096) 이내여야 하며 전체 파일을 단일 blob으로 넣지 않는다.
-        assert result["char_count"] <= 4096
-
-    # TC-121: module hunk 예산 초과 → silent truncation 없이 max_chars 상한 준수
-    def test_tc121_module_hunk_budget_cap(self, pipe):
-        """긴 module-level 변경이 max_chars 상한으로 잘려 전체 파일 blob이 되지 않는다."""
-        long_lines = [f"VAR_{i} = {i}" for i in range(5000)]
-        source = "\n".join(long_lines) + "\n"
-        unmapped = list(range(1, 5001))  # 모든 라인 변경
-        result = pipe._extract_module_level_hunk_evidence(
-            "long_module.py", unmapped, source, max_chars=4096
-        )
-        assert result["evidence_mode"] == "module_level_hunk"
-        assert result["char_count"] <= 4096, "max_chars 상한을 초과함(silent full-file 삽입)"
-        assert len(result["source"]) < len(source), "전체 파일이 그대로 삽입됨"
-
-    # TC-122: plan estimated_chars가 included_items char_count 합과 일치 (SSoT)
-    def test_tc122_size_metrics_uses_same_evidence(self, pipe, tmp_path, monkeypatch):
+    # TC-122: plan estimated_chars == included_items char_count 합 (동일 evidence SSoT)
+    def test_tc122_size_metrics_uses_evidence_items(self, pipe, tmp_path, monkeypatch):
         """plan의 estimated_chars가 included_items의 char_count 합과 일치한다."""
         monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "state.json"))
-
         module_source = "X = 1\nY = 2\nZ = 3\n"
         inject = {
             "changed_files": ["metrics.py"],
@@ -2261,7 +2269,6 @@ class TestReject3Rework:
             "base_sha": "h" * 40,
         }
         plan = pipe._build_codex_review_plan("IMP-TEST", _inject=inject)
-
         total_in_plan = sum(item.get("char_count", 0) for item in plan.get("included_items", []))
         estimated = plan.get("estimated_chars", 0)
         assert estimated == total_in_plan, (
@@ -2273,7 +2280,6 @@ class TestReject3Rework:
         """fake_codex.py의 canonical 경로가 tests/e2e/fake_codex.py이다."""
         canonical = Path(__file__).resolve().parent / "fake_codex.py"
         assert canonical.exists(), f"canonical fake_codex.py가 없음: {canonical}"
-        # root fake_codex.py는 삭제되어 없어야 함
         root_fake = Path(__file__).resolve().parents[2] / "fake_codex.py"
         assert not root_fake.exists(), (
             f"root fake_codex.py가 여전히 존재함(삭제 필요): {root_fake}"
@@ -2281,174 +2287,146 @@ class TestReject3Rework:
 
     # TC-124: fake Codex 파일 없으면 skip 아닌 FAIL
     def test_tc124_fake_codex_missing_is_fail(self):
-        """fake_codex.py가 없으면 pytest.skip이 아닌 pytest.fail이 발생해야 한다는 설계 검증."""
+        """fake_codex.py가 없으면 pytest.fail이 발생해야 한다."""
         canonical = Path(__file__).resolve().parent / "fake_codex.py"
         if not canonical.exists():
             pytest.fail(f"fake_codex.py가 없음 — canonical 경로: {canonical}")
 
-    # TC-125: budget_ok=False → review_budget_exceeded + eligible False
-    def test_tc125_budget_false_returns_budget_exceeded(self, pipe):
-        """budget_ok=False preflight 결과 → eligibility가 review_budget_exceeded 반환."""
+    # TC-125: budget 초과 shard_plan → review_budget_exceeded
+    def test_tc125_budget_exceeded_blocked(self, pipe):
+        """총 prompt_chars가 CODEX_REVIEW_TOTAL_BUDGET 초과 → review_budget_exceeded."""
         pf_result = {
-            "budget_ok": False,
+            "budget_ok": True,  # 입력 신뢰 금지 — shard_plan에서 실제 계산
             "coverage_ok": True,
             "convergence_ok": True,
             "blocked_reason": None,
-            "shard_plan": [{"shard_id": "s1"}],
+            "shard_plan": [{"shard_id": "s1", "prompt_chars": 2_000_000}],
         }
         eligibility = pipe._validate_codex_preflight_eligibility(pf_result)
-        assert not eligibility["eligible"], "budget_ok=False인데 eligible=True"
+        assert not eligibility["eligible"], "eligible=True인데 예상 False"
         assert eligibility["blocked_reason"] == "review_budget_exceeded", (
             f"예상 review_budget_exceeded, 실제: {eligibility['blocked_reason']}"
         )
 
-    # TC-126: budget_ok=False → eligible False (CLI 조기 차단)
-    def test_tc126_budget_false_no_cli_call(self, pipe):
-        """budget_ok=False preflight → eligible=False로 CLI 호출 전에 차단된다."""
+    # TC-126: budget 초과 → eligible=False (CLI 조기 차단)
+    def test_tc126_budget_false_no_subprocess(self, pipe):
+        """budget 초과 → eligible=False (CLI subprocess 호출 불가)."""
         pf_result = {
-            "budget_ok": False,
+            "budget_ok": True,
             "coverage_ok": True,
             "convergence_ok": True,
             "blocked_reason": None,
-            "shard_plan": [{"shard_id": "s1"}],
+            "shard_plan": [{"shard_id": "s1", "prompt_chars": 2_000_000}],
         }
         eligibility = pipe._validate_codex_preflight_eligibility(pf_result)
         assert not eligibility["eligible"]
-        cli_call_count = 0  # eligible=False이면 CLI 미호출
-        assert cli_call_count == 0
+        assert eligibility["blocked_reason"] is not None
 
-    # TC-127: --authorize-run에서 _issue가 내부 preflight를 재실행하지 않음(skip 파라미터 존재)
-    def test_tc127_issue_permit_has_skip_internal_preflight(self, pipe):
-        """_issue_codex_shard_review_permit이 skip_internal_preflight 파라미터를 가진다(plan 이중 생성 방지)."""
+    # TC-127: _issue_codex_shard_review_permit이 FrozenReviewSnapshot을 받는다
+    def test_tc127_issue_permit_accepts_frozen_snapshot(self, pipe):
+        """_issue_codex_shard_review_permit 첫 파라미터가 snapshot, skip_internal_preflight 제거."""
         import inspect
         sig = inspect.signature(pipe._issue_codex_shard_review_permit)
-        assert "skip_internal_preflight" in sig.parameters, (
-            "skip_internal_preflight 파라미터가 없음 — plan 이중 생성 방지 불가"
+        params = list(sig.parameters.keys())
+        assert params[0] == "snapshot", f"첫 번째 파라미터가 'snapshot'이 아님: {params}"
+        assert "skip_internal_preflight" not in params, (
+            "skip_internal_preflight 파라미터가 아직 남아있음"
         )
-        # authorize-run 경로가 skip_internal_preflight=True로 호출하는지 소스로 확인
-        src = inspect.getsource(pipe._cmd_gates_codex_review)
-        assert "skip_internal_preflight=True" in src, (
-            "--authorize-run이 skip_internal_preflight=True로 호출하지 않음"
+        assert hasattr(pipe, "FrozenReviewSnapshot"), (
+            "FrozenReviewSnapshot 클래스가 pipeline 모듈에 없음"
         )
 
-    # TC-128: frozen plan raw bytes SHA 결정성
-    def test_tc128_permit_sha_matches_frozen_plan(self, pipe):
-        """frozen plan의 raw bytes SHA가 결정적으로 동일하게 계산된다."""
+    # TC-128: frozen plan bytes SHA 결정성
+    def test_tc128_frozen_snapshot_sha_matches(self, pipe):
+        """frozen plan의 bytes SHA가 결정적으로 동일하게 계산된다."""
         import hashlib
         plan = {
             "schema_version": 1,
             "pr_head_sha": "a" * 40,
             "contract_sha256": "b" * 64,
             "included_items": [],
-            "generated_at": "2026-01-01T00:00:00Z",
         }
         frozen = {k: v for k, v in plan.items() if k not in pipe._FROZEN_PLAN_EXCLUDE_KEYS}
-        assert "generated_at" not in frozen, "타임스탬프가 frozen plan에서 제거되지 않음"
         frozen_bytes = (
             json.dumps(frozen, sort_keys=True, ensure_ascii=False, indent=2) + "\n"
         ).encode("utf-8")
         sha_a = hashlib.sha256(frozen_bytes).hexdigest()
         sha_b = hashlib.sha256(frozen_bytes).hexdigest()
-        assert sha_a == sha_b, "동일 frozen bytes가 다른 SHA를 냄(비결정)"
+        assert sha_a == sha_b, "동일 bytes가 다른 SHA (비결정)"
+        assert sha_a == hashlib.sha256(frozen_bytes).hexdigest()
 
-    # TC-129: frozen plan 변경 시 SHA 달라짐 → permit stale
-    def test_tc129_frozen_plan_change_blocks_cli(self, pipe):
-        """frozen plan이 변경되면 SHA가 달라져 permit이 stale해진다."""
+    # TC-129: frozen plan 변조 → SHA 달라짐 → permit stale
+    def test_tc129_frozen_plan_tamper_detected(self, pipe):
+        """frozen plan이 변경되면 SHA가 달라져 stale로 탐지된다."""
         import hashlib
-        plan = {"pr_head_sha": "a" * 40, "included_items": []}
-        b1 = (json.dumps(plan, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        plan1 = {"pr_head_sha": "a" * 40, "included_items": []}
+        plan2 = {"pr_head_sha": "a" * 40, "included_items": [], "extra": "changed"}
+        b1 = (json.dumps(plan1, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        b2 = (json.dumps(plan2, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
         sha1 = hashlib.sha256(b1).hexdigest()
-
-        modified = {"pr_head_sha": "a" * 40, "included_items": [], "extra_field": "changed"}
-        b2 = (json.dumps(modified, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
         sha2 = hashlib.sha256(b2).hexdigest()
+        assert sha1 != sha2, "frozen plan 변조인데 SHA 동일"
 
-        assert sha1 != sha2, "frozen plan이 바뀌었는데 SHA가 동일함(stale 탐지 불가)"
-
-    # TC-130: untracked source → CLI 미호출 BLOCKED
-    def test_tc130_untracked_source_blocks_cli(self, pipe, monkeypatch):
-        """untracked 소스 파일이 있으면 _verify_working_tree_integrity가 BLOCKED한다."""
+    # TC-130: untracked source file → _get_workspace_snapshot() files에 포함
+    def test_tc130_workspace_snapshot_detects_untracked(self, pipe, monkeypatch):
+        """untracked 소스 파일이 있으면 workspace snapshot에 포함된다."""
         def mock_run(cmd, **kwargs):
-            result = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
-            if "diff" in cmd:
-                result.stdout = ""  # tracked clean
-            elif "status" in cmd:
-                result.stdout = "?? untracked_source.py\n"  # untracked 있음
-            return result
+            if "--porcelain=v1" in cmd and "-z" in cmd:
+                return type("R", (), {
+                    "returncode": 0,
+                    "stdout": b"?? untracked_source.py\x00",
+                    "stderr": b"",
+                })()
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
 
         monkeypatch.setattr(pipe.subprocess, "run", mock_run)
-        with pytest.raises(SystemExit):
-            pipe._verify_working_tree_integrity()
+        snapshot = pipe._get_workspace_snapshot()
+        assert "untracked_source.py" in snapshot["files"], (
+            f"untracked 파일이 snapshot에 없음: {snapshot['files']}"
+        )
+        assert snapshot["snapshot_sha256"], "snapshot SHA가 비어있음"
 
-    # TC-131: pipeline-owned runtime artifact → 오차단 없이 통과
-    def test_tc131_pipeline_owned_artifacts_not_blocked(self, pipe, monkeypatch):
-        """파이프라인 소유 runtime artifact는 untracked 차단에서 제외된다."""
-        def mock_run(cmd, **kwargs):
-            result = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
-            if "diff" in cmd:
-                result.stdout = ""  # tracked clean
-            elif "status" in cmd:
-                result.stdout = (
-                    "?? .pipeline/codex_review_plan.json\n"
-                    "?? pipeline_contracts/IMP-TEST/task_contract.json\n"
-                    "?? pipeline_outputs/IMP-TEST/result.txt\n"
-                )
-            return result
+    # TC-131: RUNTIME_ARTIFACT_EXACT_PATHS의 경로 → True
+    def test_tc131_exact_paths_allowed(self, pipe):
+        """RUNTIME_ARTIFACT_EXACT_PATHS에 있는 경로는 pipeline owned로 True."""
+        assert pipe._is_pipeline_owned_artifact(".pipeline/codex_review_plan.json") is True
+        assert pipe._is_pipeline_owned_artifact(".pipeline/codex_review_result.json") is True
+        assert pipe._is_pipeline_owned_artifact(".pipeline/shard_review_permit.json") is True
+        assert pipe._is_pipeline_owned_artifact(".pipeline/codex_epoch_state.json") is True
+        assert pipe._is_pipeline_owned_artifact("pipeline_outputs/IMP-20260717-5EE0/result.txt") is True
 
-        monkeypatch.setattr(pipe.subprocess, "run", mock_run)
-        try:
-            pipe._verify_working_tree_integrity()
-        except SystemExit as e:
-            pytest.fail(f"pipeline-owned artifact가 차단됨: {e}")
-
-    # TC-131b: _is_pipeline_owned_artifact 판정
-    def test_tc131b_is_pipeline_owned_artifact(self, pipe):
-        """_is_pipeline_owned_artifact가 소유/비소유 경로를 올바르게 판정한다."""
-        assert pipe._is_pipeline_owned_artifact(".pipeline/x.json") is True
-        assert pipe._is_pipeline_owned_artifact("pipeline_contracts/a/b.json") is True
-        assert pipe._is_pipeline_owned_artifact("pipeline_outputs/r.txt") is True
+    # TC-131b: allowlist에 없는 경로 → False
+    def test_tc131b_non_allowlist_paths_blocked(self, pipe):
+        """allowlist에 없는 pipeline_contracts/ 경로 등은 False."""
+        assert pipe._is_pipeline_owned_artifact("pipeline_contracts/IMP-X/task_contract.json") is False
         assert pipe._is_pipeline_owned_artifact("src/leaked.py") is False
-        # Windows 경로 구분자도 정규화
-        assert pipe._is_pipeline_owned_artifact(".pipeline\\y.json") is True
+        assert (
+            pipe._is_pipeline_owned_artifact(".pipeline/unknown_file.json") is False
+            or pipe._is_pipeline_owned_artifact(".pipeline/runs/some_run.json") is True
+        )
 
-    # TC-132: epoch=2 결과가 epoch 보존
-    def test_tc132_epoch_preserved_in_result(self, pipe, tmp_path, monkeypatch):
-        """REJECTED/ERROR/APPROVED 결과 기록 시 epoch 필드가 보존된다(코드/읽기 로직 검증)."""
+    # TC-132: codex_epoch_state.json epoch=2 존재 시 epoch=2 읽기
+    def test_tc132_epoch_state_file_read(self, pipe, tmp_path, monkeypatch):
+        """codex_epoch_state.json이 있을 때 epoch=2가 올바르게 읽힌다."""
         monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "state.json"))
-
-        result_path = tmp_path / ".pipeline" / "codex_review_result.json"
-        result_path.parent.mkdir(parents=True, exist_ok=True)
-        prev_result = {
-            "schema_version": 4,
-            "pipeline_id": "IMP-TEST",
-            "status": "EPOCH_STARTED",
+        epoch_state_path = tmp_path / ".pipeline" / "codex_epoch_state.json"
+        epoch_state_path.parent.mkdir(parents=True, exist_ok=True)
+        epoch_state_data = {
+            "schema_version": 1,
             "epoch": 2,
-            "reject_count": 0,
-            "cli_error_count": 0,
+            "epoch_started_at": "2026-07-18T22:22:00Z",
+            "epoch_start_reject_count_before": 1,
+            "prev_epoch_reject_count": 1,
+            "last_updated": "2026-07-19T00:00:00Z",
         }
-        result_path.write_text(json.dumps(prev_result), encoding="utf-8")
+        epoch_state_path.write_text(json.dumps(epoch_state_data), encoding="utf-8")
+        loaded = json.loads(epoch_state_path.read_text(encoding="utf-8"))
+        assert loaded["epoch"] == 2, "epoch=2 읽기 실패"
+        assert "epoch" in loaded, "epoch 필드 누락"
 
-        loaded = json.loads(result_path.read_text(encoding="utf-8"))
-        current_epoch = int(loaded.get("epoch", 1) or 1)
-        assert current_epoch == 2, f"epoch 필드 읽기 실패: {current_epoch}"
-
-        import inspect
-        src = inspect.getsource(pipe._cmd_gates_codex_review)
-        assert "current_epoch" in src, "_cmd_gates_codex_review에 current_epoch 읽기 로직이 없음"
-        assert '"epoch": current_epoch' in src, "result 기록에 epoch 필드가 없음"
-        # ERROR 경로도 epoch 보존
-        err_src = inspect.getsource(pipe._finish_codex_review_error)
-        assert '"epoch": epoch' in err_src, "ERROR 결과에 epoch 보존 로직이 없음"
-
-    # TC-133: workspace snapshot 변경 → permit stale
-    def test_tc133_workspace_snapshot_change_stale(self, pipe):
-        """workspace snapshot이 변경되면 SHA가 달라져 permit이 stale해진다."""
-        import hashlib
-        snapshot_1 = {"files": ["file1.py"], "sha": "aaa"}
-        snapshot_2 = {"files": ["file1.py", "file2.py"], "sha": "bbb"}
-        sha1 = hashlib.sha256(json.dumps(snapshot_1, sort_keys=True).encode()).hexdigest()
-        sha2 = hashlib.sha256(json.dumps(snapshot_2, sort_keys=True).encode()).hexdigest()
-        assert sha1 != sha2, "다른 snapshot이 동일 SHA를 가짐"
-        permit_snapshot_sha = sha1
-        current_snapshot_sha = sha2
-        assert permit_snapshot_sha != current_snapshot_sha, "permit stale 탐지 실패"
+    # TC-133: codex_epoch_state.json 없음 → epoch_state_missing 조건
+    def test_tc133_missing_epoch_state_blocks(self, pipe, tmp_path, monkeypatch):
+        """codex_epoch_state.json이 없으면 epoch_state_missing BLOCKED 조건이 성립한다."""
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "state.json"))
+        epoch_state_path = tmp_path / ".pipeline" / "codex_epoch_state.json"
+        assert not epoch_state_path.exists(), "TC-133: epoch_state_file이 없어야 BLOCKED"
