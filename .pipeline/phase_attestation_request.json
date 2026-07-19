@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-09T10:59:50Z",
+  "pipeline_id": "IMP-20260703-B985",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "effea3dbd7723fcc50772802cdb929788c7b9741",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-07-09T10:52:57Z",
+    "report_file": "dev_handover_b985_r2.xml",
+    "evidence": ".claude/agents/pipeline-manager-agent.md,.claude/settings.json,.gitignore,.github/workflows/ci.yml,.github/workflows/final_check.yml,pipeline.py,tests/e2e/test_codex_cost_optimization_9f5e.py,tests/e2e/test_evidence_deployable_ce06.py,tests/e2e/test_pr_body_readiness_a716.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,tests/e2e/test_request_accept_snapshot_8c3b.py,tests/e2e/test_workspace_hygiene_2821.py,tests/oracles/IMP-20260703-B985/TC-RT-gate/expected_blocked.json,tests/oracles/IMP-20260703-B985/TC-RT-gate/expected_ok.json,tests/test_acceptance_request_format_069a.py,tests/test_acceptance_request_verification_json.py,tests/test_acceptance_snapshot_b985.py,tests/test_approval_output_channel_b985.py,tests/test_canonical_pr_body_sha256_b985.py,tests/test_codex_review_hook_cd3c.py,tests/test_codex_review_loop_4121.py,tests/test_evidence_inventory_82ed.py,tests/test_final_user_message_validator_b985.py,tests/test_pr_body_sha_invariant_b985.py,tests/test_pr_runtime_artifact_gate_b985.py"
+  },
+  "agent_run": {
+    "run_id": "dev-228b7906bf0e5ed3",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_b985_r2.xml",
+    "output_sha256": "9817150d0c97db568e868987860e7b5447b8540518ced261371b23466dd613cd",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/agent_receipt_dev-228b7906bf0e5ed3.json",
+    "receipt_sha256": "13908b2d4bcdc3e465e7c5bcc94fe3d5eb68c849b9f099dd840b68a39b8d81a3",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260703-B985\\dev\\dev-228b7906bf0e5ed3.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260703-B985\\dev\\dev-228b7906bf0e5ed3.json",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/agent_receipt_dev-228b7906bf0e5ed3.json",
+      "sha256": "13908b2d4bcdc3e465e7c5bcc94fe3d5eb68c849b9f099dd840b68a39b8d81a3",
+      "size_bytes": 510,
+      "requires_force_add": false
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_b985_r2.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/report_dev_handover_b985_r2.xml",
+      "sha256": "9817150d0c97db568e868987860e7b5447b8540518ced261371b23466dd613cd",
+      "size_bytes": 2587,
+      "requires_force_add": false
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_final_r2.json",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/scope_manifest_scope_manifest_final_r2.json",
+      "sha256": "a420e8c1d8742c0dd878f5eaf08b4f745d9e3b62ba804d23e06aedf71e3e0167",
+      "size_bytes": 17519,
+      "requires_force_add": false
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": ".claude/agents/pipeline-manager-agent.md",
+      "sha256": "9ebafa2107aa78c24bc62104f71496dfee52b2bd5acb5ebd53e40c8f828d8170",
+      "size_bytes": 16964
+    },
+    {
+      "path": ".claude/settings.json",
+      "sha256": "bca935b7addae97ee61ef69a1b4dd71389e55c6a7ee3e56b5ea7b9a6ce05aca9",
+      "size_bytes": 621
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "c75a93bb0164116770f86249917b60591c77a22553c61ed338640ef0b220eed7",
+      "size_bytes": 2196
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "8a65817710dbcb7395c8375a9638219cb912fab92d3478855930e7fd66aba422",
+      "size_bytes": 33543
+    },
+    {
+      "path": "pipeline.py",
+      "sha256": "107f15f4d698bc7beb198e608f4997afae2a02a194d121476b1eac1a03939ba1",
+      "size_bytes": 1325636
+    },
+    {
+      "path": "tests/e2e/test_codex_cost_optimization_9f5e.py",
+      "sha256": "9f1da03608199e5780f5da56c653b93cdf5b0691af75aa45d12897d0163802da",
+      "size_bytes": 40508
+    },
+    {
+      "path": "tests/e2e/test_evidence_deployable_ce06.py",
+      "sha256": "ac38bdd705cc331780144580112b4d5e2c5825130f0d165c572b129570e1fb5a",
+      "size_bytes": 21423
+    },
+    {
+      "path": "tests/e2e/test_pr_body_readiness_a716.py",
+      "sha256": "5b8595242aa809808b6cf555c923d6a8bed85bee7432165909260720b2981f65",
+      "size_bytes": 34923
+    },
+    {
+      "path": "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+      "sha256": "dcd1fb20074461aa7535d33bad84879c944db2aa955f9704f068dd80a7424dd6",
+      "size_bytes": 35586
+    },
+    {
+      "path": "tests/e2e/test_request_accept_snapshot_8c3b.py",
+      "sha256": "5f2d4dbf26673c916996982cdb5533832aac4d90d862d2351bc4137995dea45f",
+      "size_bytes": 37186
+    },
+    {
+      "path": "tests/e2e/test_workspace_hygiene_2821.py",
+      "sha256": "046b71ddaf368309621887e63cc3c95c02e4edd0d34a90b3f076f16d5ba51493",
+      "size_bytes": 37257
+    },
+    {
+      "path": "tests/test_acceptance_request_format_069a.py",
+      "sha256": "0b2e0ceaf5aa31e0b224e5a9b8dd4ac5ee18ab8e02cfaa485d7bc506dd69cb34",
+      "size_bytes": 21531
+    },
+    {
+      "path": "tests/test_acceptance_request_verification_json.py",
+      "sha256": "7f924f5ff343cbffe205800a6a2cdf5a4b43b7a7e7a1af262e58c1fb5e23fd92",
+      "size_bytes": 13595
+    },
+    {
+      "path": "tests/test_canonical_pr_body_sha256_b985.py",
+      "sha256": "ffd8e8447b542f2e8971cb9b8203465860d638ea5fea167bbd40eaac4039ab67",
+      "size_bytes": 15423
+    },
+    {
+      "path": "tests/test_codex_review_hook_cd3c.py",
+      "sha256": "1996b0bd4911206947773d7586fdf614996a11c8c8c9b68e122e2fecdffa2471",
+      "size_bytes": 11474
+    },
+    {
+      "path": "tests/test_codex_review_loop_4121.py",
+      "sha256": "d54be91df355001c43f58fa02a4244f3e2da548ca43a201f7df7220f95a6abf7",
+      "size_bytes": 23910
+    },
+    {
+      "path": "tests/test_evidence_inventory_82ed.py",
+      "sha256": "6c26afac27efb9166f466aff6ed1cb84967f7d7b049e1265fc1a7c4013d2397a",
+      "size_bytes": 88763
+    }
+  ],
+  "local_only_files": []
+}
