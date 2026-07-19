@@ -1,0 +1,210 @@
+{
+  "pipeline_id": "IMP-20260711-F5D7",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_SSoT_constants_section"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2"
+          ],
+          "implementation_evidence": "PR_BODY_WRITER_ROLES + ACCEPTANCE_STATE_TRANSITION_RULES"
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_validate_pr_body_write_permission"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [
+            "AC-3",
+            "AC-4"
+          ],
+          "implementation_evidence": "_validate_pr_body_write_permission 함수 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_extract_pr_body_acceptance_metadata"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [
+            "AC-5"
+          ],
+          "implementation_evidence": "_extract_pr_body_acceptance_metadata 함수 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_build_final_packet_content"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [
+            "AC-5"
+          ],
+          "implementation_evidence": "writer_role/epoch/snapshot_id 파라미터 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_materialize_acceptance_snapshot"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-8"
+          ],
+          "implementation_evidence": "writer_epoch SSoT 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_report_update_pr_body"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": [
+            "AC-3",
+            "AC-4"
+          ],
+          "implementation_evidence": "_validate_pr_body_write_permission 호출 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_finalize_post_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": [
+            "AC-6",
+            "AC-7"
+          ],
+          "implementation_evidence": "ACCEPTED 재조회 검증 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        ".github/workflows/ci.yml"
+      ],
+      "affected_functions": [
+        "ci.yml \"최종 확인 안내 만들기\" step"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8",
+          "implemented_ac": [
+            "AC-9"
+          ],
+          "implementation_evidence": "CI ACCEPTED skip 로직 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [
+        ".github/workflows/ci.yml"
+      ],
+      "affected_functions": [
+        "ci.yml \"PR에 최종 확인 안내 남기기\" step"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-9",
+          "implemented_ac": [
+            "AC-10"
+          ],
+          "implementation_evidence": "CI skip comment 기록 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-10",
+      "files": [
+        "tests/e2e/test_writer_ownership_f5d7.py"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_writer_ownership_f5d7.py"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-10",
+          "implemented_ac": [
+            "AC-11"
+          ],
+          "implementation_evidence": "TC-1~TC-12 E2E 테스트"
+        }
+      ]
+    },
+    {
+      "id": "MT-11",
+      "files": [
+        "tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/input.json",
+        "tests/oracles/IMP-20260711-F5D7/case_normal_pending_to_accepted/expected.json",
+        "tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/input.json",
+        "tests/oracles/IMP-20260711-F5D7/case_edge_accepted_to_pending_blocked/expected.json"
+      ],
+      "affected_functions": [
+        "tests/oracles/IMP-20260711-F5D7/**"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-11",
+          "implemented_ac": [
+            "AC-12"
+          ],
+          "implementation_evidence": "oracle 파일 생성"
+        }
+      ]
+    }
+  ]
+}

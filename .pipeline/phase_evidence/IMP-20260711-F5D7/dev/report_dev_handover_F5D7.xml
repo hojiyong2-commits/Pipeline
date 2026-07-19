@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <pipeline_id>IMP-20260711-F5D7</pipeline_id>
+  <phase>dev</phase>
+  <agent>dev-agent</agent>
+  <run_id>dev-9e2c07bc1eb662cb</run_id>
+  <rework_round>3</rework_round>
+
+  <scope_declaration>
+    <files_to_create>없음</files_to_create>
+    <files_to_modify>
+      pipeline.py (ACCEPTANCE_STATE_TRANSITION_RULES 상수, 줄 6489~6494 → 초기 상태 전이 3항목 + PENDING→PENDING에 manual_report_writer 추가);
+      tests/e2e/test_writer_ownership_f5d7.py (TC-17 positive-path 테스트 추가 + SELF-VERIFY 호출 추가)
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>Grep "_validate_pr_body_write_permission|PIPELINE_FAKE_PR_BODY|_gh_available|manual_report_writer" — 기존 검증 함수/테스트 훅/gh 헬퍼 전량 재사용 확인</searched>
+      <decision>EXTEND — 신규 함수 생성 없이 기존 SSoT 상수(ACCEPTANCE_STATE_TRANSITION_RULES) 항목 확장 + 기존 tempfile 테스트 패턴(TC-14 모델) 재사용</decision>
+    </reuse_search>
+    <out_of_scope>ci.yml 및 다른 MT 파일 — 이번 rework는 상수 회귀 수정 + 회귀 테스트만 대상</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>pipeline.ACCEPTANCE_STATE_TRANSITION_RULES (module-level constant)</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:17224">_validate_pr_body_write_permission() — ACCEPTANCE_STATE_TRANSITION_RULES.get(key, set())로 소비</caller>
+      <caller location="pipeline.py:17309">_cmd_report_update_pr_body() — manual_report_writer로 검증 호출</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>없음 — 순수 상수 dict, 함수 호출 없음</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — module-level immutable-intent constant, 런타임 변경 없음</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 상수 타입 시그니처(Dict[Tuple[str,str], Set[str]]) 불변, 키 항목만 추가</signature_change>
+      <breaking_change>NO — 기존 4개 전이 규칙 보존, 초기 상태 3항목 추가 + PENDING→PENDING에 manual_report_writer 추가만. ACCEPTED→PENDING 역전이 차단(set())은 그대로 유지</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-17 (UNKNOWN→PENDING positive path). 수정 전 exit 1(transition_not_allowed) FAIL → 수정 후 exit 0 통과 검증 완료</test_coverage>
+      <rollback_strategy>ACCEPTANCE_STATE_TRANSITION_RULES 상수를 이전 4항목으로 되돌리면 즉시 원복 (단일 상수 블록)</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-10</micro_task_id>
+    <target_function>tests.e2e.test_writer_ownership_f5d7.test_tc17_manual_report_writer_unknown_body_success (신규)</target_function>
+    <upstream_callers>
+      <caller location="test_writer_ownership_f5d7.py:__main__">SELF-VERIFY 블록에서 호출 추가</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>subprocess → pipeline.py report update-pr-body (Real CLI Path)</dep>
+      <dep>PIPELINE_STATE_PATH / PIPELINE_FAKE_PR_BODY / PIPELINE_GH_EXECUTABLE 격리 훅</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>tempfile.TemporaryDirectory 내 human_acceptance_packet.md, fake_pr_body.txt, isolated_state.json — 테스트 종료 시 자동 정리. 전역 pipeline_state.json 미변경(격리)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 신규 테스트 함수 추가만</signature_change>
+      <breaking_change>NO — 기존 TC-1~TC-16 무변경</breaking_change>
+      <test_coverage>NEW_TEST_ADDED</test_coverage>
+      <rollback_strategy>추가된 test_tc17 함수 + SELF-VERIFY 호출 라인 제거</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <pre_fix_snapshot>
+    <function name="ACCEPTANCE_STATE_TRANSITION_RULES" file="pipeline.py:6489">
+      <current_signature>Dict[Tuple[str, str], Set[str]] — 4개 키: (PENDING,ACCEPTED),(PENDING,PENDING),(ACCEPTED,ACCEPTED),(ACCEPTED,PENDING)</current_signature>
+      <current_callers>1 consumer — _validate_pr_body_write_permission() (pipeline.py:17224)</current_callers>
+      <current_behavior>초기/미발급 상태(NONE/NOT_REQUESTED/UNKNOWN)에서 PENDING으로의 전이 키가 없어 기본값 set()으로 모든 writer가 transition_not_allowed 차단됨. PENDING→PENDING에 manual_report_writer 부재로 수동 report update-pr-body도 차단됨.</current_behavior>
+    </function>
+  </pre_fix_snapshot>
+
+  <post_fix_diff>
+    <function name="ACCEPTANCE_STATE_TRANSITION_RULES" file="pipeline.py:6489">
+      <signature_after>Dict[Tuple[str, str], Set[str]] — 7개 키 (초기상태 3항목 신규 + 기존 4항목)</signature_after>
+      <callers_after>1 consumer 동일 — _validate_pr_body_write_permission() (라인 이동 없음)</callers_after>
+      <behavior_after>NONE/NOT_REQUESTED/UNKNOWN → PENDING 전이가 pending_acceptance_writer/manual_report_writer/final_check_writer에 허용됨. PENDING→PENDING에 manual_report_writer 추가. ACCEPTED→PENDING 역전이는 set()으로 계속 차단. post_accept_writer는 초기→PENDING 허용 집합에서 제외(ACCEPTED 전용 유지).</behavior_after>
+    </function>
+    <side_effect_audit>
+      Grep으로 ACCEPTANCE_STATE_TRANSITION_RULES 소비처 전수 확인 — 유일 소비자 _validate_pr_body_write_permission()은 .get(key, set()) 패턴으로 신규 키를 안전 흡수. 시그니처/호출자 영향 0건. TC-2(역전이 차단), TC-3/TC-4/TC-5/TC-14(기존 규칙) 전부 통과 유지.
+    </side_effect_audit>
+  </post_fix_diff>
+
+  <mt_summary>
+    <mt id="MT-1">pipeline.py ACCEPTANCE_STATE_TRANSITION_RULES에 초기 상태(NONE/NOT_REQUESTED/UNKNOWN)→PENDING 전이 3항목 추가 + PENDING→PENDING에 manual_report_writer 추가. Round 1 FAIL(signature=AL:e500ba5e) 근본 원인 해소.</mt>
+    <mt id="MT-10">tests/e2e/test_writer_ownership_f5d7.py에 TC-17(manual_report_writer + UNKNOWN body → exit 0 positive path) 추가. 회귀 검증: 수정 전 exit 1 FAIL, 수정 후 exit 0 PASS.</mt>
+  </mt_summary>
+
+  <self_check>
+    <python_version_syntax>PASS — typing 모듈(Dict/Tuple/Set) 유지, 3.9 호환</python_version_syntax>
+    <type_hinting>PASS — 상수 타입 어노테이션 불변, 테스트 함수 반환 None 명시적</type_hinting>
+    <error_handling>PASS — 기존 fail-closed/BLOCKED 경로 무변경, 신규 예외 경로 없음</error_handling>
+    <path_safety>PASS — 테스트는 tempfile.TemporaryDirectory + PIPELINE_STATE_PATH 격리</path_safety>
+    <security>PASS — 하드코딩 secret 없음, 신규 입력 처리 없음</security>
+    <al_edge_cases>PASS — 상수 dict 항목 추가, 신규 함수 없음. 소비 함수 _validate_pr_body_write_permission의 기존 None/타입 방어 유지</al_edge_cases>
+    <pd_policy>PASS — ACCEPTED→PENDING 역전이 차단(set()) 정책 보존, 신규 전이 규칙은 명시적 화이트리스트</pd_policy>
+    <fs_encoding_fallback>N/A — 파일 인코딩 신규 read_text 없음(테스트는 utf-8 명시)</fs_encoding_fallback>
+    <docstring>PASS — TC-17 docstring 포함</docstring>
+    <execution_check>PASS — (1) py_compile pipeline.py + 테스트 파일 PASS (2) pytest 17 passed (TC-1~TC-17) (3) ruff 양쪽 All checks passed (4) mypy Success no issues. 모두 Bash 실제 실행.</execution_check>
+    <impact_analysis_check>PASS — MT-1/MT-10 각각 impact_analysis 출력, upstream_callers Grep 조사, state_mutations 명시(MT-1 none/MT-10 tempfile), risk_assessment 4필드 완비</impact_analysis_check>
+    <frozen_codebase_check>PASS — (1) Frozen: scope 외 파일 미수정 (2) Minimal: 상수 항목 추가만, 무관 리팩토링 0건 (3) OAR 미발생 (4) Pre-Fix Snapshot + Post-Fix Diff 출력 (5) Side-Effect Audit로 유일 소비자 확인 (6) Multi-location: ACCEPTANCE_STATE_TRANSITION_RULES는 단일 SSoT 위치</frozen_codebase_check>
+    <loop_ceiling_check>N/A — while True 루프 없음</loop_ceiling_check>
+  </self_check>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_writer_ownership_f5d7.py</git_diff_files>
+    <manifest_files>MT-1: pipeline.py / MT-10: tests/e2e/test_writer_ownership_f5d7.py (scope_manifest.json 기존 매핑과 일치)</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <evidence>
+    <changed_files>pipeline.py,tests/e2e/test_writer_ownership_f5d7.py</changed_files>
+    <tests>17 passed (TC-1~TC-17)</tests>
+    <regression_proof>수정 전 상태 임시 재현 시 TC-17 exit 1(writer_role=manual_report_writer는 UNKNOWN→PENDING 전이 불허) FAIL 확인 → 수정 복원 후 exit 0 PASS 확인. 테스트가 실제 회귀를 검증함을 증명.</regression_proof>
+    <verification>py_compile PASS / ruff PASS(양쪽) / mypy PASS(no issues) / pytest 17 passed</verification>
+  </evidence>
+
+  <dev_output>
+    <files>
+      pipeline.py — ACCEPTANCE_STATE_TRANSITION_RULES 상수 확장(초기상태→PENDING 전이 허용);
+      tests/e2e/test_writer_ownership_f5d7.py — TC-17 positive-path 회귀 테스트 추가
+    </files>
+    <reference_applied>N/A</reference_applied>
+    <dependencies>표준 라이브러리만 (pytest, subprocess, tempfile) — 신규 의존성 없음</dependencies>
+    <entry_point>python pipeline.py report update-pr-body</entry_point>
+    <env_vars>운영 무영향. 테스트 훅: PIPELINE_STATE_PATH, PIPELINE_FAKE_PR_BODY, PIPELINE_GH_EXECUTABLE</env_vars>
+    <known_constraints>ACCEPTED→PENDING 역전이 차단은 의도적으로 유지. post_accept_writer는 초기 상태→PENDING 전이에서 제외(ACCEPTED 승격 전용).</known_constraints>
+  </dev_output>
+</handover>
