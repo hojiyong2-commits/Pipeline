@@ -1,0 +1,118 @@
+{
+  "pipeline_id": "IMP-20260710-DB54",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_run_codex_preflight_checks"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_preflight"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_build_codex_review_bundle"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_check_codex_cache"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_review"
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/test_codex_preflight_db54.py"
+      ],
+      "affected_functions": [
+        "tests/test_codex_preflight_db54.py"
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "tests/test_codex_bundle_db54.py"
+      ],
+      "affected_functions": [
+        "tests/test_codex_bundle_db54.py"
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        "tests/test_codex_cache_db54.py"
+      ],
+      "affected_functions": [
+        "tests/test_codex_cache_db54.py"
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [
+        "tests/test_codex_rate_limit_db54.py"
+      ],
+      "affected_functions": [
+        "tests/test_codex_rate_limit_db54.py"
+      ]
+    },
+    {
+      "id": "MT-10",
+      "files": [
+        "codex_review_optimization_report.md"
+      ],
+      "affected_functions": [
+        "codex_review_optimization_report.md"
+      ]
+    },
+    {
+      "id": "MT-11",
+      "files": [
+        "tests/e2e/test_codex_control_flow_db54.py",
+        "tests/e2e/test_codex_cost_optimization_9f5e.py",
+        "tests/e2e/test_codex_snapshot_sync_f52c.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "test_codex_control_flow_db54"
+      ]
+    },
+    {
+      "id": "MT-12",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_codex_control_flow_db54.py"
+      ],
+      "affected_functions": [
+        "_build_codex_review_bundle",
+        "_cmd_gates_codex_review"
+      ]
+    }
+  ]
+}
