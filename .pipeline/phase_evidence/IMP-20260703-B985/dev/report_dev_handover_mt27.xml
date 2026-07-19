@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <phase>dev</phase>
+  <mt_id>MT-27</mt_id>
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+  </implemented_files>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_create_acceptance_snapshot,_cmd_gates_request_accept,_check_approval_sha_invariants,_build_approval_request_output</target_function>
+    <blast_radius>pipeline.py + tests/test_canonical_pr_body_sha256_b985.py only</blast_radius>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <self_check>
+    <syntax_ok>true</syntax_ok>
+    <tests_pass>155 passed</tests_pass>
+    <scope_lock>PASS</scope_lock>
+  </self_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+  </evidence>
+  <change_summary>
+    REJECT #20: approval_message_sha256 + pending_comment_sha256 staged snapshot 포함,
+    codex_review_result.json에 두 필드 기록, _check_approval_sha_invariants publish 불변식 검증,
+    test_approval_message_no_extra_text 추가 문구 차단 테스트 구현.
+  </change_summary>
+</handover>
