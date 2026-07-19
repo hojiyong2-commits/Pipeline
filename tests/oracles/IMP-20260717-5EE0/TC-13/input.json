@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-13",
+  "case_kind": "normal",
+  "description": "unchanged shard SHA — 캐시 재사용(무효화 안 함)",
+  "trigger_reason": "unchanged"
+}

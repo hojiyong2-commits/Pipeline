@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-6",
+  "status": "BLOCKED",
+  "failure_code": "critical_symbol_missing",
+  "missing_symbols": ["_cmd_gates_accept"]
+}

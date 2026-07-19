@@ -1,0 +1,5 @@
+{
+  "case_id": "TC-19",
+  "pr_head_sha_present": true,
+  "contract_sha_field_present": true
+}

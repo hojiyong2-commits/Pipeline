@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-3",
+  "no_global_dedup": true,
+  "each_function_preserves_line": true,
+  "min_symbols": 2
+}

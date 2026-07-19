@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-R2-12",
+  "case_kind": "normal",
+  "finding": "CRITICAL",
+  "description": "_find_codex_bin CODEX_CLI_PATH 제거 + _extract_module_level_hunk_evidence 헬퍼 추가",
+  "codex_cli_path_removed": true,
+  "extract_module_level_hunk_evidence_added": true
+}

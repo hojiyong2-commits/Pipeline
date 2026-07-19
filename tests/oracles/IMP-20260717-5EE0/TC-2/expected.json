@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-2",
+  "full_file_in_evidence": false,
+  "contains_test_names": true,
+  "contains_assertion_summary": true,
+  "contains_fixture_sha": true,
+  "evidence_chars_max": 30000
+}

@@ -1,0 +1,5 @@
+{
+  "case_id": "TC-7",
+  "case_kind": "normal",
+  "description": "shard budget — 모든 shard 250000자 이하"
+}

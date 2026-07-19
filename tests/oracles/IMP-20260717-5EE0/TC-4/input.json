@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-4",
+  "case_kind": "normal",
+  "description": "AST boundary — 실제 def/class lineno/end_lineno 정확",
+  "symbols": [
+    "alpha",
+    "Beta"
+  ]
+}

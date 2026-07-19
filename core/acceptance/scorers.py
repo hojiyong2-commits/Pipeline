@@ -296,6 +296,7 @@ def _build_command_check_env(
     if when is None:
         when = {}
     env = dict(os.environ)
+    env.setdefault("PYTHONUTF8", "1")  # subprocess Python이 UTF-8로 파일을 열도록 강제 (cp949 UnicodeDecodeError 방지)
     tmp_dir: str | None = None
 
     isolation = given.get("isolation")

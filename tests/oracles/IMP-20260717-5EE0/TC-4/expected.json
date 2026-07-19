@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-4",
+  "boundary_exact": true,
+  "uses_ast": true,
+  "no_regex_hunk": true
+}

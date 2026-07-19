@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-117",
+  "case_kind": "error",
+  "feature": "--start-epoch",
+  "description": "CODEX_START_EPOCH_USER_CONFIRMED 없이 --start-epoch 실행 시 epoch_confirmation_required로 BLOCKED",
+  "expected_failure_code": "epoch_confirmation_required",
+  "expected_blocked": true,
+  "expected_exit_code": 1
+}

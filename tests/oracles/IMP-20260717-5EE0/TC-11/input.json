@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-11",
+  "case_kind": "normal",
+  "description": "head 변경 시 캐시 무효화",
+  "trigger_reason": "pr_head_changed"
+}

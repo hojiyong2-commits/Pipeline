@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-3",
+  "case_kind": "normal",
+  "description": "여러 함수에 동일 라인 존재 — 전역 dedup 없이 각 함수에서 보존",
+  "shared_line": "    return x"
+}

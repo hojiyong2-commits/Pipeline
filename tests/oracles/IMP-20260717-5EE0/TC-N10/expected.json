@@ -1,0 +1,15 @@
+﻿{
+  "test_name": "MT-10: AST-based PR size budget check (no raw-line-count block)",
+  "scenario": "PR with 2213 changed product lines but max_single_evidence_chars=168000 (< SHARD_HARD_BUDGET=250000)",
+  "result": {
+    "budget_ok": true,
+    "blocked_reason": null,
+    "enforcement": "only max_single_evidence_chars > 250000 triggers evidence_item_too_large"
+  },
+  "removed_checks": [
+    "product_code_lines_exceeded",
+    "critical_symbol_count_exceeded",
+    "evidence_chars_exceeded",
+    "test_file_lines_exceeded"
+  ]
+}

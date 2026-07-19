@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-9",
+  "aggregate_verdict": "BLOCKED",
+  "aggregate_approved": false,
+  "reason": "not_all_shards_approved"
+}

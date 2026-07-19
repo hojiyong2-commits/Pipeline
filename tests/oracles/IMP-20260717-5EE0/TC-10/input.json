@@ -1,0 +1,17 @@
+{
+  "case_id": "TC-10",
+  "case_kind": "edge",
+  "description": "stale shard — head_sha 불일치 시 aggregate 비승인",
+  "shards": [
+    {
+      "shard_id": "a",
+      "verdict": "APPROVE_TO_USER",
+      "pr_head_sha": "aaa"
+    },
+    {
+      "shard_id": "b",
+      "verdict": "APPROVE_TO_USER",
+      "pr_head_sha": "bbb"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-14",
+  "case_kind": "normal",
+  "description": "plan coverage 100% — changed_files 전부 포함",
+  "changed_files": [
+    "pipeline.py",
+    "tests/e2e/test_x.py"
+  ]
+}

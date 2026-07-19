@@ -1,0 +1,6 @@
+{
+  "case_id": "TC-18",
+  "case_kind": "edge",
+  "description": "raw ACCEPT not in bundle — excluded_items에 포함",
+  "raw_accept": "ACCEPT-IMP-20260717-5EE0-DEADBEEF"
+}

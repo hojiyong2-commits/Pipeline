@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-116",
+  "case_kind": "normal",
+  "feature": "--start-epoch",
+  "description": "CODEX_START_EPOCH_USER_CONFIRMED=1과 함께 --start-epoch 실행 시 EPOCH_STARTED 기록, reject_count=0 초기화",
+  "expected_status": "EPOCH_STARTED",
+  "expected_reject_count": 0,
+  "expected_exit_code": 0
+}

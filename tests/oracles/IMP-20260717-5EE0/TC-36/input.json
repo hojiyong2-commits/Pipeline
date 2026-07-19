@@ -1,0 +1,12 @@
+{
+  "case_id": "TC-36",
+  "case_kind": "error",
+  "results": [
+    {"name": "missing_file", "verdict": "ERROR", "error_reason": "verdict_parse_failure"},
+    {"name": "reject_empty_findings", "verdict": "ERROR", "error_reason": "verdict_parse_failure"},
+    {"name": "approve_with_findings", "verdict": "ERROR", "error_reason": "verdict_parse_failure"},
+    {"name": "extra_field", "verdict": "ERROR", "error_reason": "verdict_parse_failure"},
+    {"name": "bad_enum", "verdict": "ERROR", "error_reason": "verdict_parse_failure"},
+    {"name": "valid_reject", "verdict": "REJECT", "findings_count": 1}
+  ]
+}
