@@ -23296,6 +23296,9 @@ def _classify_codex_review_file(filepath: str) -> Tuple[str, str, Optional[str]]
     elif name in ("setup.cfg", "setup.py", "pyproject.toml", "manifest.in") or lower.endswith((".cfg", ".ini", ".toml")):
         # config/packaging 파일: 알려진 텍스트 파일이므로 excluded_config으로 처리(unknown_or_binary 아님)
         mode, reason = "excluded", "config_packaging"
+    elif lower.endswith(".xml"):
+        # XML 파일(PM evidence, 설정 등): 알려진 텍스트 파일 → evidence_incomplete 차단 방지
+        mode, reason = "excluded", "xml_document"
     else:
         mode, reason = "excluded", "unknown_or_binary"
     return risk, mode, reason
