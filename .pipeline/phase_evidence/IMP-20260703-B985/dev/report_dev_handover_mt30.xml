@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <agent_id>dev-agent</agent_id>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <mt_id>MT-30</mt_id>
+  <phase>dev</phase>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_final_user_message_validator_b985.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_cmd_gates_validate_user_approval_message</target_function>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/test_final_user_message_validator_b985.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+    </target_files>
+    <affected_call_sites>
+      <site>cmd_gates (라우팅 — validate-user-approval-message 액션)</site>
+    </affected_call_sites>
+    <change_summary>gates validate-user-approval-message CLI 신규 추가 — final_user_message.txt 고정 양식 검증 하드 게이트. 이중 출력 구조 차단.</change_summary>
+    <blast_radius>LOW — 신규 CLI 서브커맨드 추가, 기존 기능 변경 없음</blast_radius>
+  </impact_analysis>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_final_user_message_validator_b985.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+  </evidence>
+  <summary>
+    MT-30 구현 완료: gates validate-user-approval-message CLI 게이트 신규 추가.
+    이중 출력 차단: Pipeline Manager task result에 approval 블록 포함 시 하드 차단.
+    10개 테스트 PASS.
+  </summary>
+  <scope_lock_check>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
