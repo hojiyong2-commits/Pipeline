@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <mt_id>MT-2</mt_id>
+  <pipeline_id>IMP-20260711-86DD</pipeline_id>
+  <description>
+    pipeline.py 승인 출력 SSoT 정리:
+    (1) _build_approval_request_output 반환 dict의 approval_display 필드에 DEPRECATED 주석 추가(use approval_request_message).
+    (2) _cmd_gates_request_accept의 --machine-readable 분기에 이중 출력 방지 불변식 주석 명시 —
+        machine-readable stdout은 JSON 한 줄 전용, approval 텍스트는 JSON 필드로만 전달.
+        (모든 human print는 이미 선행 MT에서 if not _machine_readable 가드로 억제되어 stdout JSON 전용 상태였음. 불변식 고정.)
+  </description>
+  <implemented_files>
+    <file>pipeline.py</file>
+  </implemented_files>
+  <self_check>
+    <syntax>PASS — python -m py_compile pipeline.py OK</syntax>
+    <import>PASS — importlib exec_module OK</import>
+    <deprecated_marker>PASS — approval_display에 'DEPRECATED: use approval_request_message' 존재</deprecated_marker>
+    <field_retained>PASS — machine-readable JSON에 approval_request_message 필드 유지</field_retained>
+    <tests>PASS(regression) — test_approval_output_channel_b985 / test_final_user_message_validator_b985 통과. test_acceptance_request_format_069a 5건 FAIL은 codex_preflight_failed(contract_not_frozen 등) 환경 게이트로, 변경 전 HEAD에서도 동일 재현 → 본 변경과 무관</tests>
+    <scope>PASS — pipeline.py만 변경</scope>
+  </self_check>
+</module_handover>
